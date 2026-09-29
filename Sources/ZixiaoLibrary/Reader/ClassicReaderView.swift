@@ -82,9 +82,14 @@ public struct ClassicReaderView: View {
     private let onLocationChange: ((ReaderLocation) -> Void)?
     private let onChapterFinished: ((Chapter) -> Void)?
     private let onExcerpt: ((ReaderSelection) -> Void)?
+    /// App 持有的章与横竖排 (可选)。给了就读写它, 没给用下面的内部状态 —— 旧调用方行为不变。
+    private let chapterBinding: Binding<String>?
+    private let orientationBinding: Binding<ReaderOrientation>?
+    /// false: 不画自带的顶栏 (章名 / 横竖切换) 与底栏 (上一章 / 页码 / 下一章), 由 App 自己的导航栏承担。
+    private let showsChrome: Bool
 
-    @State private var chapterId: String
-    @State private var orientation: ReaderOrientation
+    @State private var ownChapterId: String
+    @State private var ownOrientation: ReaderOrientation
     /// 当前位置落在哪一段: 竖排是本页第一段, 横排是视口第一段。切换横竖、旋转屏幕都按它复位。
     @State private var anchorPassageId: String?
     @State private var showsChapterList = false
@@ -103,6 +108,10 @@ public struct ClassicReaderView: View {
     ///   - onLocationChange: 翻页 / 滚动 / 换章后报告位置 (同一位置不重复报)。
     ///   - onChapterFinished: 翻到章末 (一页就完的章摊开即算)。
     ///   - onExcerpt: 长按一段。
+    ///   - chapterBinding: App 持有当前章 (跳章、标题显示章名)。给了就忽略 `chapterId`;
+    ///     阅读器内部换章 (底栏、章目) 也写回它。id 不在书里时按第一章显示。
+    ///   - orientationBinding: App 持有横竖排。给了就忽略 `orientation`。
+    ///   - showsChrome: 是否画自带的顶栏与底栏; false 时只剩书页与翻页。
     public init(
         book: Book,
         chapterId: String? = nil,
@@ -112,7 +121,10 @@ public struct ClassicReaderView: View {
         finishedChapterIds: Set<String> = [],
         onLocationChange: ((ReaderLocation) -> Void)? = nil,
         onChapterFinished: ((Chapter) -> Void)? = nil,
-        onExcerpt: ((ReaderSelection) -> Void)? = nil
+        onExcerpt: ((ReaderSelection) -> Void)? = nil,
+        chapterBinding: Binding<String>? = nil,
+        orientationBinding: Binding<ReaderOrientation>? = nil,
+        showsChrome: Bool = true
     ) {
         self.book = book
         self.fontSize = fontSize
@@ -120,20 +132,43 @@ public struct ClassicReaderView: View {
         self.onLocationChange = onLocationChange
         self.onChapterFinished = onChapterFinished
         self.onExcerpt = onExcerpt
+        self.chapterBinding = chapterBinding
+        self.orientationBinding = orientationBinding
+        self.showsChrome = showsChrome
         let start = chapterId.flatMap { book.chapter(id: $0) } ?? book.chapters.first
-        _chapterId = State(initialValue: start?.id ?? "")
-        _orientation = State(initialValue: orientation)
+        _ownChapterId = State(initialValue: start?.id ?? "")
+        _ownOrientation = State(initialValue: orientation)
         _anchorPassageId = State(initialValue: initialPassageId)
     }
 
     private var style: ZXReaderStyle { ZXReaderStyle(theme: theme, legibilityWeight: legibilityWeight) }
 
-    private var chapterIndex: Int? { book.chapters.firstIndex { $0.id == chapterId } }
+    /// 当前章: 外部绑定优先, 否则内部状态。写入同理。
+    private var chapterId: String {
+        get { chapterBinding?.wrappedValue ?? ownChapterId }
+        nonmutating set {
+            if let chapterBinding { chapterBinding.wrappedValue = newValue } else { ownChapterId = newValue }
+        }
+    }
+
+    private var orientation: ReaderOrientation {
+        get { orientationBinding?.wrappedValue ?? ownOrientation }
+        nonmutating set {
+            if let orientationBinding { orientationBinding.wrappedValue = newValue } else { ownOrientation = newValue }
+        }
+    }
+
+    private var chapterIndex: Int? { Self.chapterIndex(of: chapterId, in: book) }
+
+    /// 章 id → 下标; 不在书里 (外部绑定给了错的 id) 时退回第一章, 书没有章时为 nil。
+    static func chapterIndex(of id: String, in book: Book) -> Int? {
+        book.chapters.firstIndex { $0.id == id } ?? (book.chapters.isEmpty ? nil : 0)
+    }
     private var chapter: Chapter? { chapterIndex.map { book.chapters[$0] } }
 
     public var body: some View {
         VStack(spacing: 0) {
-            topBar
+            if showsChrome { topBar }
             if let chapter {
                 frame {
                     switch orientation {
@@ -156,7 +191,7 @@ public struct ClassicReaderView: View {
                     }
                 }
                 .id("\(chapter.id)|\(orientation.rawValue)|\(fontSize)")
-                bottomBar
+                if showsChrome { bottomBar } else { Spacer().frame(height: 12) }
             } else {
                 Spacer()
                 Text("这本书没有正文。").font(style.serif(15)).foregroundStyle(style.ink(0.5))
@@ -165,6 +200,15 @@ public struct ClassicReaderView: View {
         }
         .background(style.paper.ignoresSafeArea())
         .sheet(isPresented: $showsChapterList) { chapterList }
+        .onChange(of: chapterId) { _, _ in
+            // 外部绑定换了章 (App 的章目): 锚点若不在新章里就从章首读, 并报一次位置。
+            // 内部 `go` 已先清了锚点、报过位置, 这里因去重不会重复回调。
+            guard let chapter else { return }
+            if let anchor = anchorPassageId, !chapter.passages.contains(where: { $0.id == anchor }) {
+                anchorPassageId = nil
+            }
+            report(chapter: chapter, passageId: anchorPassageId ?? chapter.passages.first?.id)
+        }
     }
 
     // MARK: 版框与栏
