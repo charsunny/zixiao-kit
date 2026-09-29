@@ -14,6 +14,13 @@ public struct ReaderLocation: Sendable, Hashable {
     public var bookId: String
     public var chapterId: String
     public var passageId: String?
+
+    /// 公开构造: App 恢复「上次读到」与测试都要能造一个位置。
+    public init(bookId: String, chapterId: String, passageId: String? = nil) {
+        self.bookId = bookId
+        self.chapterId = chapterId
+        self.passageId = passageId
+    }
 }
 
 /// 长按选中的一段。App 决定是弹摘抄面板还是直接收进摘抄本。
@@ -22,6 +29,13 @@ public struct ReaderSelection: Sendable, Hashable {
     public var bookTitle: String
     public var chapter: Chapter
     public var passage: Passage
+
+    public init(bookId: String, bookTitle: String, chapter: Chapter, passage: Passage) {
+        self.bookId = bookId
+        self.bookTitle = bookTitle
+        self.chapter = chapter
+        self.passage = passage
+    }
 
     public func makeExcerpt(at date: Date = Date()) -> Excerpt {
         Excerpt(bookId: bookId, bookTitle: bookTitle, chapterId: chapter.id, chapterTitle: chapter.title,
