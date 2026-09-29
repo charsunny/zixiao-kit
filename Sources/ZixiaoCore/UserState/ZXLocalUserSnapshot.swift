@@ -4,7 +4,7 @@ import Foundation
 ///
 /// 两类作用域:
 /// - `.user`: 跟着账号走 (存在该 userId 的文件里), 换人即换一套, 删号时随账号清掉;
-/// - `.device`: 跟着这台设备走 (存在 `device` 文件的 `deviceFlags` 里), 不论谁登录都一样,
+/// - `.device`: 跟着这台设备走 (存在 `device` 文件的 `deviceFlags` / `deviceSettings` 里), 不论谁登录都一样,
 ///   退出、删号、找回旧账号都不清理。显示类偏好属于这一类: 它描述的是「这台设备上怎么看」, 不是「这个人的数据」。
 /// 字符串字面量默认 `.user`; 设备级的键要显式写 `ZXPreferenceKey("…", scope: .device)`。
 public struct ZXPreferenceKey: Hashable, Sendable, ExpressibleByStringLiteral {
@@ -71,11 +71,14 @@ public struct ZXLocalUserSnapshot: Codable, Sendable, Hashable {
     public var settings: [String: String]
     /// 设备级开关 (`.device` 作用域的键)。只在 `device` 文件里有意义; 账号文件里恒为空。
     public var deviceFlags: [String: Bool]
+    /// 设备级小设置 (字符串值; 数字由调用方转成字符串), 如阅读器排版方向、字号、晚省提醒时刻。
+    /// 与 `deviceFlags` 同理: 只在 `device` 文件里有意义, 不随账号合并、清理。
+    public var deviceSettings: [String: String]
 
     public init(schema: Int = 1, firstOpenedDay: String? = nil, lastOpenedAt: Date? = nil,
                 lastOpenedDay: String? = nil, streak: Int = 0, longestStreak: Int = 0, totalDays: Int = 0,
                 recent: [ZXRecentItem] = [], flags: [String: Bool] = [:], settings: [String: String] = [:],
-                deviceFlags: [String: Bool] = [:]) {
+                deviceFlags: [String: Bool] = [:], deviceSettings: [String: String] = [:]) {
         self.schema = schema
         self.firstOpenedDay = firstOpenedDay
         self.lastOpenedAt = lastOpenedAt
@@ -87,6 +90,7 @@ public struct ZXLocalUserSnapshot: Codable, Sendable, Hashable {
         self.flags = flags
         self.settings = settings
         self.deviceFlags = deviceFlags
+        self.deviceSettings = deviceSettings
     }
 
     /// 宽松解码: 缺字段按默认值。以后加字段时, 旧文件照样读得出来, 不会因一个新键整份作废。
@@ -103,7 +107,8 @@ public struct ZXLocalUserSnapshot: Codable, Sendable, Hashable {
             recent: try c.decodeIfPresent([ZXRecentItem].self, forKey: .recent) ?? [],
             flags: try c.decodeIfPresent([String: Bool].self, forKey: .flags) ?? [:],
             settings: try c.decodeIfPresent([String: String].self, forKey: .settings) ?? [:],
-            deviceFlags: try c.decodeIfPresent([String: Bool].self, forKey: .deviceFlags) ?? [:]
+            deviceFlags: try c.decodeIfPresent([String: Bool].self, forKey: .deviceFlags) ?? [:],
+            deviceSettings: try c.decodeIfPresent([String: String].self, forKey: .deviceSettings) ?? [:]
         )
     }
 
@@ -171,15 +176,32 @@ public struct ZXLocalUserSnapshot: Codable, Sendable, Hashable {
         }
     }
 
+    /// 按键的作用域读小设置: `.user` 读 `settings`, `.device` 读 `deviceSettings`。
+    public func setting(_ key: ZXPreferenceKey) -> String? {
+        switch key.scope {
+        case .user: return settings[key.rawValue]
+        case .device: return deviceSettings[key.rawValue]
+        }
+    }
+
+    /// 按键的作用域写小设置; `nil` 删除该项 (回到调用方的默认值)。
+    public mutating func setSetting(_ key: ZXPreferenceKey, _ value: String?) {
+        switch key.scope {
+        case .user: settings[key.rawValue] = value
+        case .device: deviceSettings[key.rawValue] = value
+        }
+    }
+
     /// 只保留设备级部分 (把设备名下的账号级态交出去、或清掉之后, 设备偏好要留下)。
     public var devicePortion: ZXLocalUserSnapshot {
-        ZXLocalUserSnapshot(deviceFlags: deviceFlags)
+        ZXLocalUserSnapshot(deviceFlags: deviceFlags, deviceSettings: deviceSettings)
     }
 
     // MARK: - 合并
 
     /// 把 `other` (通常是首启离线时记在设备名下的) 的**账号级**部分并进来。本账号已有的值优先, 对方只补空缺;
-    /// 连续天数取最后打开更晚的那一方, 最近打开按时间合并。设备级开关不并 —— 它们留在设备文件里。
+    /// 连续天数取最后打开更晚的那一方, 最近打开按时间合并。设备级开关与设置 (`deviceFlags` / `deviceSettings`)
+    /// 不并 —— 它们留在设备文件里 (`result` 从 `self` 起步, 保留的是本方的, 账号文件里恒为空)。
     public func merged(with other: ZXLocalUserSnapshot) -> ZXLocalUserSnapshot {
         var result = self
         result.firstOpenedDay = [firstOpenedDay, other.firstOpenedDay].compactMap { $0 }.min()

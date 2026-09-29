@@ -7,8 +7,9 @@ import Foundation
 ///   `ReadingHistoryCache` 按 owner 分键也是为此;
 /// - 删号时 `remove(for:)` 删一个文件即可, 不用读改写一份大字典;
 /// - 没有用户时 (首启离线) 记在 `device` 名下, 有了账号后 `adoptDeviceState(into:)` 并过去。
-/// - 设备级偏好 (`ZXPreferenceKey.Scope.device`, 如「历注」) 永远存在 `device` 文件的 `deviceFlags` 里,
-///   与 userId 无关; `flag` / `setFlag` 按键的作用域自动路由, 调用方照常传当前 userId 即可。
+/// - 设备级偏好 (`ZXPreferenceKey.Scope.device`, 如「历注」、阅读器排版、晚省提醒时刻) 永远存在 `device`
+///   文件的 `deviceFlags` / `deviceSettings` 里, 与 userId 无关; `flag` / `setFlag` / `setting` / `setSetting`
+///   按键的作用域自动路由, 调用方照常传当前 userId 即可。
 ///   `adoptDeviceState` 与 `remove` 都不碰它 —— 退出、删号、找回旧账号后「历注」开关保持原样。
 ///
 /// 为什么是 actor 而不是 @MainActor: 启动时记「今天打开」发生在 bootstrap 的后台步骤里, 不该占主线程;
@@ -90,6 +91,29 @@ public actor ZXLocalUserState {
         try update(for: Self.owner(of: key, userId: userId)) { $0.setFlag(key, value) }
     }
 
+    /// 读小设置。`.device` 作用域的键忽略 `userId`, 读设备文件的 `deviceSettings`;
+    /// `.user` 作用域读该用户文件的 `settings`。
+    public func setting(_ key: ZXPreferenceKey, for userId: String?) -> String? {
+        snapshot(for: Self.owner(of: key, userId: userId)).setting(key)
+    }
+
+    /// 写小设置, 路由同 `setting(_:for:)`。`nil` 删除该项。
+    public func setSetting(_ key: ZXPreferenceKey, _ value: String?, for userId: String?) throws {
+        try update(for: Self.owner(of: key, userId: userId)) { $0.setSetting(key, value) }
+    }
+
+    /// 只读设备级设置的便捷入口。
+    public func deviceSetting(_ key: ZXPreferenceKey) -> String? {
+        precondition(key.scope == .device, "\(key.rawValue) 不是设备级的键")
+        return snapshot(for: nil).setting(key)
+    }
+
+    /// 只写设备级设置的便捷入口。`nil` 删除该项。
+    public func setDeviceSetting(_ key: ZXPreferenceKey, _ value: String?) throws {
+        precondition(key.scope == .device, "\(key.rawValue) 不是设备级的键")
+        try update(for: nil) { $0.setSetting(key, value) }
+    }
+
     /// 只读设备级开关的便捷入口。
     public func deviceFlag(_ key: ZXPreferenceKey, default defaultValue: Bool = false) -> Bool {
         precondition(key.scope == .device, "\(key.rawValue) 不是设备级的键")
@@ -112,7 +136,7 @@ public actor ZXLocalUserState {
         let key = Self.key(for: userId)
         if userId == nil || key == Self.deviceKey {
             let kept = snapshot(for: nil).devicePortion
-            if kept.deviceFlags.isEmpty {
+            if kept == .empty {
                 try deleteFile(forKey: key)
             } else {
                 try save(kept, for: nil)

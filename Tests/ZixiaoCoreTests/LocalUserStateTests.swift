@@ -203,6 +203,112 @@ final class LocalUserStateTests: XCTestCase {
         XCTAssertTrue(still)
     }
 
+    // MARK: - 设备级 / 账号级小设置
+
+    let orientation = ZXPreferenceKey("reader.orientation", scope: .device)
+    let fontSize = ZXPreferenceKey("reader.fontSize", scope: .device)
+    let reminderMinute = ZXPreferenceKey("eveningReminderMinute", scope: .device)
+
+    func testSnapshotSettingRoutesByScope() {
+        var s = ZXLocalUserSnapshot()
+        s.setSetting(orientation, "vertical")
+        s.setSetting("nickname", "居士")
+        XCTAssertEqual(s.deviceSettings, ["reader.orientation": "vertical"])
+        XCTAssertEqual(s.settings, ["nickname": "居士"])
+        XCTAssertEqual(s.setting(orientation), "vertical")
+        XCTAssertNil(s.setting(ZXPreferenceKey("reader.orientation")), "同名的账号级键是另一项")
+        XCTAssertEqual(s.devicePortion, ZXLocalUserSnapshot(deviceSettings: ["reader.orientation": "vertical"]))
+        s.setSetting(orientation, nil)
+        XCTAssertNil(s.setting(orientation))
+    }
+
+    func testOldFileWithoutDeviceSettingsDecodes() throws {
+        let old = #"{"schema":1,"deviceFlags":{"lizhu":true},"settings":{"a":"b"}}"#
+        let s = try JSONDecoder().decode(ZXLocalUserSnapshot.self, from: Data(old.utf8))
+        XCTAssertEqual(s.deviceSettings, [:])
+        XCTAssertEqual(s.deviceFlags, ["lizhu": true])
+        XCTAssertEqual(s.settings, ["a": "b"])
+    }
+
+    func testDeviceSettingIsSameForEveryUser() async throws {
+        let dir = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = ZXLocalUserState(directory: dir)
+        try await store.setSetting(fontSize, "18", for: "u1")
+        try await store.setDeviceSetting(reminderMinute, "1290")
+
+        for user in ["u1", "u2", nil] as [String?] {
+            let size = await store.setting(fontSize, for: user)
+            let minute = await store.setting(reminderMinute, for: user)
+            XCTAssertEqual(size, "18")
+            XCTAssertEqual(minute, "1290")
+        }
+        let direct = await store.deviceSetting(fontSize)
+        XCTAssertEqual(direct, "18")
+        let u1 = await store.snapshot(for: "u1")
+        XCTAssertEqual(u1, .empty, "设备级设置不写进用户文件")
+
+        // 新实例从盘上读。
+        let reopened = await ZXLocalUserState(directory: dir).setting(reminderMinute, for: "u9")
+        XCTAssertEqual(reopened, "1290")
+
+        // nil 删除。
+        try await store.setDeviceSetting(reminderMinute, nil)
+        let cleared = await store.deviceSetting(reminderMinute)
+        XCTAssertNil(cleared)
+    }
+
+    func testUserSettingIsPerUser() async throws {
+        let dir = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = ZXLocalUserState(directory: dir)
+        try await store.setSetting("nickname", "居士", for: "u1")
+        let mine = await store.setting("nickname", for: "u1")
+        let other = await store.setting("nickname", for: "u2")
+        let device = await store.setting("nickname", for: nil)
+        XCTAssertEqual(mine, "居士")
+        XCTAssertNil(other)
+        XCTAssertNil(device)
+    }
+
+    func testDeviceSettingsSurviveAdoptAndRemove() async throws {
+        let dir = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = ZXLocalUserState(directory: dir)
+        // 首启离线: 设备名下既有账号级内容, 也有设备级设置。
+        try await store.recordOpen(for: nil, at: date(2026, 9, 28), timeZone: shanghai)
+        try await store.setSetting("nickname", "居士", for: nil)
+        try await store.setSetting(orientation, "vertical", for: nil)
+        try await store.setSetting(fontSize, "18", for: nil)
+        try await store.setDeviceSetting(ZXPreferenceKey("reader.plainMode", scope: .device), "true")
+
+        try await store.adoptDeviceState(into: "u1")
+        let merged = await store.snapshot(for: "u1")
+        XCTAssertEqual(merged.settings, ["nickname": "居士"], "账号级设置并进账号")
+        XCTAssertEqual(merged.deviceSettings, [:], "设备级设置不并进账号")
+        let device = await store.snapshot(for: nil)
+        XCTAssertEqual(device, ZXLocalUserSnapshot(deviceSettings: [
+            "reader.orientation": "vertical", "reader.fontSize": "18", "reader.plainMode": "true",
+        ]), "设备文件只剩设备级设置")
+
+        // 删号 / 退出 / 清设备名下账号级态, 都不清设备级设置。
+        try await store.remove(for: "u1")
+        try await store.remove(for: nil)
+        let reopened = ZXLocalUserState(directory: dir)
+        let still = await reopened.setting(orientation, for: "u2")
+        XCTAssertEqual(still, "vertical")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("device.json").path))
+    }
+
+    func testRemoveDeviceDeletesFileWhenNothingDeviceScopedRemains() async throws {
+        let dir = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = ZXLocalUserState(directory: dir)
+        try await store.setSetting("nickname", "居士", for: nil)
+        try await store.remove(for: nil)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("device.json").path))
+    }
+
     func testRemoveDeletesFile() async throws {
         let dir = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }

@@ -45,6 +45,13 @@ public struct ZXReaderStyle: Sendable, Hashable {
         ZXFont.serif(size, weight: weight, relativeTo: nil, legibilityWeight: legibilityWeight)
     }
 
+    /// 夹注小字 (caption 一档) 的字号: 竖排正文字号的 0.56。
+    /// 一格排两行小字 (`ClassicLayout.noteRowsPerCell`), 一列并排两行 —— 小字须同时装得进半格高、半列宽。
+    public static func captionSize(for fontSize: CGFloat) -> CGFloat { fontSize * 0.56 }
+
+    /// 白话 (横排对照、竖排白话列) 的字号: 正文字号的 0.68, 与 Flutter 版对照栏同比。
+    public static func plainSize(for fontSize: CGFloat) -> CGFloat { fontSize * 0.68 }
+
     /// 秋鸿楷 (子集字体, 只用于题字一类的短字, 见 `ZXFonts.kaiName`)。
     public func kai(_ size: CGFloat, relativeTo textStyle: Font.TextStyle? = .body) -> Font {
         ZXFont.kai(size, relativeTo: textStyle)

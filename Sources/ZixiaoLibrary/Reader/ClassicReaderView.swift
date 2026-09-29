@@ -9,6 +9,56 @@ public enum ReaderOrientation: String, Sendable, Codable, CaseIterable {
     case horizontal
 }
 
+/// 白话 (段落 `plain`) 怎么显示。竖排与横排各有对应的排法, 一个偏好管两种版式。
+public enum ReaderPlainMode: String, Sendable, Codable, CaseIterable {
+    /// 夹注: 竖排以双行小字接在原文段后; 横排以小字接在原文之下。
+    case interlinear
+    /// 对照: 竖排白话另起单行小字列; 横排原文与白话左右并列。
+    case parallel
+    /// 不显示白话。
+    case hidden
+
+    /// 界面上的名字。
+    public var title: String {
+        switch self {
+        case .interlinear: "夹注"
+        case .parallel: "对照"
+        case .hidden: "不显示白话"
+        }
+    }
+
+    /// 三态轮换的下一个: 夹注 → 对照 → 不显示 → 夹注。
+    public var next: ReaderPlainMode {
+        switch self {
+        case .interlinear: .parallel
+        case .parallel: .hidden
+        case .hidden: .interlinear
+        }
+    }
+
+    /// 竖排版式里的排法。
+    public var classicLayout: ClassicPlainLayout {
+        switch self {
+        case .interlinear: .interlinear
+        case .parallel: .columns
+        case .hidden: .none
+        }
+    }
+}
+
+/// 竖排轻点页边的去向 (纯逻辑, 见 `ClassicReaderView.pageTurn`)。
+enum ReaderPageTurn: Equatable {
+    case page(Int)
+    case previousChapter
+    case nextChapter
+}
+
+/// 外部定位请求: 同一段再定位一次也要生效, 所以带一个递增的序号。
+struct ReaderLocateRequest: Equatable {
+    var passageId: String
+    var token: Int
+}
+
 /// 阅读位置回报: 直接喂给 `ReadingStateStore.move`。
 public struct ReaderLocation: Sendable, Hashable {
     public var bookId: String
@@ -69,6 +119,9 @@ struct ClassicMetrics: Hashable {
 ///
 /// 竖排为默认: 版框 (四周双边)、界栏、左侧版心 (书名 · 章名 · 鱼尾 · 汉字页码); 可切横排对照;
 /// 顶栏点章名跳章, 底栏上一章 / 下一章; 长按一段回调 `onExcerpt`。
+/// 竖排轻点页边翻页 (左边下一页、右边上一页), 章首 / 章尾再点跨章。
+/// 白话按 `plainMode` 排: 夹注 (竖排双行小注) / 对照 / 不显示。
+/// `passageBinding` 给一段 id: 翻到 (滚到) 该段并高亮一次, 然后写回 nil。
 ///
 /// 阅读器不持有阅读状态: 位置、读完一章都通过回调交给 App, 由 App 写进 `ReadingStateStore`。
 /// 这样同一个视图既能用在书斋, 也能用在「今日一句」的展开页, 而不会意外改动进度。
@@ -87,6 +140,9 @@ public struct ClassicReaderView: View {
     private let orientationBinding: Binding<ReaderOrientation>?
     /// false: 不画自带的顶栏 (章名 / 横竖切换) 与底栏 (上一章 / 页码 / 下一章), 由 App 自己的导航栏承担。
     private let showsChrome: Bool
+    private let plainMode: ReaderPlainMode
+    /// 外部定位: 设了就定位并高亮, 处理完写回 nil。
+    private let passageBinding: Binding<String?>?
 
     @State private var ownChapterId: String
     @State private var ownOrientation: ReaderOrientation
@@ -95,11 +151,21 @@ public struct ClassicReaderView: View {
     @State private var showsChapterList = false
     @State private var lastReported: ReaderLocation?
     @State private var finishedReported: Set<String> = []
+    @State private var locateRequest: ReaderLocateRequest?
+    /// 定位后的一次高亮: 哪一段、当前不透明度 (1 → 0 淡出)。
+    @State private var flashPassageId: String?
+    @State private var flashOpacity: Double = 0
+    @State private var flashTask: Task<Void, Never>?
 
     /// 颜色与字来自 ZixiaoDesign 的主题。App 在根视图用 `.zxTheme(identity)` 注入, 随外观切换重新解析;
     /// 没注入时是单色墨系浅色 (ZXTheme 的环境默认值)。
     @Environment(\.zxTheme) private var theme
     @Environment(\.legibilityWeight) private var legibilityWeight
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// 高亮停留多久后开始淡出 (等翻页 / 滚动落定), 与淡出的时长。
+    static let flashHold: Duration = .milliseconds(350)
+    static let flashFade: Double = 1.2
 
     /// - Parameters:
     ///   - chapterId: 打开哪一章; nil 为第一章。
@@ -112,6 +178,10 @@ public struct ClassicReaderView: View {
     ///     阅读器内部换章 (底栏、章目) 也写回它。id 不在书里时按第一章显示。
     ///   - orientationBinding: App 持有横竖排。给了就忽略 `orientation`。
     ///   - showsChrome: 是否画自带的顶栏与底栏; false 时只剩书页与翻页。
+    ///   - plainMode: 白话的排法 (夹注 / 对照 / 不显示)。段落没有白话时三者一样。
+    ///   - passageBinding: 外部定位。设成一段的 id (可在别的章, 阅读器自己找到章并切过去, 写回
+    ///     `chapterBinding`): 竖排翻到含该段的页、横排滚到该段, 用主题强调色的淡底高亮一次 (1.2 秒淡出,
+    ///     减少动态时不做动画), 然后写回 nil —— 同一段再设一次会再定位一次。书里没有这段时只写回 nil。
     public init(
         book: Book,
         chapterId: String? = nil,
@@ -124,8 +194,12 @@ public struct ClassicReaderView: View {
         onExcerpt: ((ReaderSelection) -> Void)? = nil,
         chapterBinding: Binding<String>? = nil,
         orientationBinding: Binding<ReaderOrientation>? = nil,
-        showsChrome: Bool = true
+        showsChrome: Bool = true,
+        plainMode: ReaderPlainMode = .interlinear,
+        passageBinding: Binding<String?>? = nil
     ) {
+        self.plainMode = plainMode
+        self.passageBinding = passageBinding
         self.book = book
         self.fontSize = fontSize
         self.finishedChapterIds = finishedChapterIds
@@ -166,6 +240,24 @@ public struct ClassicReaderView: View {
     }
     private var chapter: Chapter? { chapterIndex.map { book.chapters[$0] } }
 
+    /// 段落定位 (纯函数): 含该段的章的下标。先看 `preferring` 那一章 (当前章), 再按书序找;
+    /// 书里没有这段为 nil。
+    static func chapterIndex(containing passageId: String, in book: Book, preferring chapterId: String?) -> Int? {
+        if let chapterId, let index = book.chapters.firstIndex(where: { $0.id == chapterId }),
+           book.chapters[index].passages.contains(where: { $0.id == passageId }) {
+            return index
+        }
+        return book.chapters.firstIndex { $0.passages.contains { $0.id == passageId } }
+    }
+
+    /// 竖排轻点页边 (纯函数): 往下一页 (左边) 或上一页 (右边); 已在章尾 / 章首时跨章。
+    static func pageTurn(from page: Int, pageCount: Int, towardNext: Bool) -> ReaderPageTurn {
+        if towardNext {
+            return page + 1 < pageCount ? .page(page + 1) : .nextChapter
+        }
+        return page > 0 ? .page(min(page - 1, max(pageCount - 1, 0))) : .previousChapter
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             if showsChrome { topBar }
@@ -175,22 +267,29 @@ public struct ClassicReaderView: View {
                     case .vertical:
                         VerticalChapterView(
                             book: book, chapter: chapter, fontSize: fontSize, style: style,
+                            plainLayout: plainMode.classicLayout,
                             anchorPassageId: $anchorPassageId,
+                            locateRequest: locateRequest,
+                            flashPassageId: flashPassageId, flashOpacity: flashOpacity,
                             onPassage: { report(chapter: chapter, passageId: $0) },
                             onReachedEnd: { finished(chapter) },
-                            onLongPress: { select(chapter: chapter, passageId: $0) }
+                            onLongPress: { select(chapter: chapter, passageId: $0) },
+                            onAdjacentChapter: { goAdjacent($0) }
                         )
                     case .horizontal:
                         HorizontalChapterView(
-                            chapter: chapter, fontSize: fontSize, style: style,
+                            chapter: chapter, fontSize: fontSize, style: style, plainMode: plainMode,
                             anchorPassageId: $anchorPassageId,
+                            locateRequest: locateRequest,
+                            flashPassageId: flashPassageId, flashOpacity: flashOpacity,
                             onPassage: { report(chapter: chapter, passageId: $0) },
                             onReachedEnd: { finished(chapter) },
                             onLongPress: { select(chapter: chapter, passageId: $0) }
                         )
                     }
                 }
-                .id("\(chapter.id)|\(orientation.rawValue)|\(fontSize)")
+                // 白话排法改了, 竖排要重新分页: 与章、横竖、字号一样重建, 按锚定的段落找回页码。
+                .id("\(chapter.id)|\(orientation.rawValue)|\(fontSize)|\(plainMode.rawValue)")
                 if showsChrome { bottomBar } else { Spacer().frame(height: 12) }
             } else {
                 Spacer()
@@ -209,6 +308,14 @@ public struct ClassicReaderView: View {
             }
             report(chapter: chapter, passageId: anchorPassageId ?? chapter.passages.first?.id)
         }
+        .onChange(of: passageBinding?.wrappedValue ?? nil) { _, new in
+            if let new { locate(new) }
+        }
+        .task {
+            // 打开时就带着定位 (如摘抄本「回原文」): 与之后设定同样处理。
+            if let initial = passageBinding?.wrappedValue { locate(initial) }
+        }
+        .onDisappear { flashTask?.cancel() }
     }
 
     // MARK: 版框与栏
@@ -331,6 +438,48 @@ public struct ClassicReaderView: View {
         report(chapter: chapter, passageId: chapter.passages.first?.id)
     }
 
+    /// 上一章 (-1) / 下一章 (+1)。往回跨章时落在上一章末段所在的页, 接着往回读; 往前跨章从章首起。
+    private func goAdjacent(_ step: Int) {
+        guard let index = chapterIndex, book.chapters.indices.contains(index + step) else { return }
+        let target = book.chapters[index + step]
+        guard step < 0, let last = target.passages.last?.id else { return go(target) }
+        anchorPassageId = last
+        chapterId = target.id
+        report(chapter: target, passageId: last)
+    }
+
+    /// 外部定位: 找章 → 必要时换章 → 请子视图翻到 / 滚到 → 高亮 → 写回 nil。
+    private func locate(_ passageId: String) {
+        defer {
+            if passageBinding?.wrappedValue != nil { passageBinding?.wrappedValue = nil }
+        }
+        guard let index = Self.chapterIndex(containing: passageId, in: book, preferring: chapter?.id) else { return }
+        let target = book.chapters[index]
+        anchorPassageId = passageId
+        if target.id != chapter?.id { chapterId = target.id }
+        locateRequest = ReaderLocateRequest(passageId: passageId, token: (locateRequest?.token ?? 0) + 1)
+        flash(passageId)
+    }
+
+    /// 高亮一次: 立即显出, 停一会儿 (翻页 / 滚动落定) 再 1.2 秒淡出; 减少动态时不淡出, 到时直接撤掉。
+    private func flash(_ passageId: String) {
+        flashTask?.cancel()
+        flashPassageId = passageId
+        flashOpacity = 1
+        let reduceMotion = reduceMotion
+        flashTask = Task { @MainActor in
+            try? await Task.sleep(for: Self.flashHold)
+            guard !Task.isCancelled else { return }
+            if !reduceMotion {
+                withAnimation(.easeOut(duration: Self.flashFade)) { flashOpacity = 0 }
+            }
+            try? await Task.sleep(for: .seconds(Self.flashFade))
+            guard !Task.isCancelled else { return }
+            flashOpacity = 0
+            flashPassageId = nil
+        }
+    }
+
     private func report(chapter: Chapter, passageId: String?) {
         if let passageId { anchorPassageId = passageId }
         let location = ReaderLocation(bookId: book.id, chapterId: chapter.id, passageId: passageId)
@@ -359,13 +508,21 @@ private struct VerticalChapterView: View {
     let chapter: Chapter
     let fontSize: CGFloat
     let style: ZXReaderStyle
+    let plainLayout: ClassicPlainLayout
     @Binding var anchorPassageId: String?
+    let locateRequest: ReaderLocateRequest?
+    let flashPassageId: String?
+    let flashOpacity: Double
     let onPassage: (String) -> Void
     let onReachedEnd: () -> Void
     let onLongPress: (String) -> Void
+    let onAdjacentChapter: (Int) -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pageIndex = 0
     @State private var pressedPassageId: String?
+    /// 长按摘抄之后松手, 同一次触摸还会报一次轻点; 记下来吞掉, 免得摘抄面板底下翻了页。
+    @State private var swallowNextTap = false
 
     var body: some View {
         GeometryReader { geo in
@@ -373,7 +530,8 @@ private struct VerticalChapterView: View {
             let pages = ClassicLayout.paginate(
                 passages: chapter.passages,
                 charsPerColumn: metrics.charsPerColumn(in: geo.size),
-                columnsPerPage: metrics.columnsPerPage(in: geo.size)
+                columnsPerPage: metrics.columnsPerPage(in: geo.size),
+                plain: plainLayout
             )
             TabView(selection: $pageIndex) {
                 ForEach(pages.indices, id: \.self) { i in
@@ -381,8 +539,16 @@ private struct VerticalChapterView: View {
                         page: pages[i], size: geo.size, metrics: metrics, style: style,
                         banxinTitle: "\(book.title) · \(chapter.title)", pageNumber: i + 1,
                         pressedPassageId: pressedPassageId,
-                        onPressing: { id, pressing in pressedPassageId = pressing ? id : nil },
-                        onLongPress: onLongPress
+                        flashPassageId: flashPassageId, flashOpacity: flashOpacity,
+                        onPressing: { id, pressing in
+                            pressedPassageId = pressing ? id : nil
+                            if pressing { swallowNextTap = false }
+                        },
+                        onLongPress: { id in
+                            swallowNextTap = true
+                            onLongPress(id)
+                        },
+                        onEdgeTap: { towardNext in turn(towardNext: towardNext, pageCount: pages.count) }
                     )
                     // 页内的字与手势按从左到右的坐标画, 不受外层方向翻转影响。
                     .environment(\.layoutDirection, .leftToRight)
@@ -405,12 +571,37 @@ private struct VerticalChapterView: View {
                 // 一页就完的章没有「翻到末页」这回事, 摊开即读完。
                 if pages.count <= 1 || target == pages.count - 1 { onReachedEnd() }
             }
+            // 同一章里的外部定位: 翻到含该段的第一页 (换章时整个视图重建, 由上面的 task 按锚点找页)。
+            .onChange(of: locateRequest) { _, request in
+                guard let request, pages.contains(where: { $0.contains(passageId: request.passageId) }) else { return }
+                let target = ClassicLayout.page(containing: request.passageId, in: pages)
+                if target != pageIndex { pageIndex = target }
+            }
+        }
+    }
+
+    private func turn(towardNext: Bool, pageCount: Int) {
+        if swallowNextTap {
+            swallowNextTap = false
+            return
+        }
+        switch ClassicReaderView.pageTurn(from: pageIndex, pageCount: pageCount, towardNext: towardNext) {
+        case let .page(target):
+            if reduceMotion {
+                pageIndex = target
+            } else {
+                withAnimation(.easeInOut(duration: 0.28)) { pageIndex = target }
+            }
+        case .previousChapter:
+            onAdjacentChapter(-1)
+        case .nextChapter:
+            onAdjacentChapter(1)
         }
     }
 }
 
-/// 一页线装书: 界栏 + 竖排正文 + 左侧版心。正文与线用 Canvas 一次画完 (一页几百字, 逐字建视图太重),
-/// 手势与无障碍用每列一个透明热区叠在上面。
+/// 一页线装书: 界栏 + 竖排正文 (含夹注与白话列) + 左侧版心。正文与线用 Canvas 一次画完 (一页几百字,
+/// 逐字建视图太重), 手势与无障碍用每列一个透明热区叠在上面。
 private struct ClassicPageView: View {
     let page: ClassicPage
     let size: CGSize
@@ -419,10 +610,20 @@ private struct ClassicPageView: View {
     let banxinTitle: String
     let pageNumber: Int
     let pressedPassageId: String?
+    let flashPassageId: String?
+    let flashOpacity: Double
     let onPressing: (String, Bool) -> Void
     let onLongPress: (String) -> Void
+    /// 轻点页边: true 为左边 (下一页), false 为右边 (上一页)。
+    let onEdgeTap: (Bool) -> Void
+
+    /// 页边轻点区各占页宽的这么多。中间留给长按与将来的「轻点收放工具条」。
+    static let edgeFraction: CGFloat = 0.28
 
     private var textRight: CGFloat { size.width - ClassicMetrics.right }
+    /// 夹注与白话列的小字行高: 半格。
+    private var smallRow: CGFloat { metrics.cellHeight / CGFloat(ClassicLayout.noteRowsPerCell) }
+    private var fitting: Int { metrics.charsPerColumn(in: size) }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -432,22 +633,50 @@ private struct ClassicPageView: View {
                 drawColumns(context, canvasSize)
                 drawBanxin(context, canvasSize)
             }
+            if let flashPassageId {
+                flashLayer(flashPassageId)
+            }
             ForEach(page.columns.indices, id: \.self) { i in
                 hitTarget(for: page.columns[i], at: i)
             }
         }
         .frame(width: size.width, height: size.height)
+        .contentShape(Rectangle())
+        // 与列上的长按并存: 轻点不抢长按, 长按之后的松手由上层吞掉。
+        .simultaneousGesture(SpatialTapGesture().onEnded { value in
+            if value.location.x < size.width * Self.edgeFraction {
+                onEdgeTap(true)
+            } else if value.location.x > size.width * (1 - Self.edgeFraction) {
+                onEdgeTap(false)
+            }
+        })
         .accessibilityElement(children: .contain)
         .accessibilityLabel("第\(HanNumeral.string(pageNumber))页")
     }
 
     private func columnX(_ i: Int) -> CGFloat { textRight - CGFloat(i + 1) * metrics.columnWidth }
 
-    /// 一列的占高: 满列时挤进来的标点只上提着占半格多, 不能让高亮与热区捅出版框。
+    /// 一列的占高 (原文、白话列、夹注取最低的那处): 满列时挤进来的标点只上提着占半格多,
+    /// 不能让高亮与热区捅出版框。
     private func columnHeight(_ column: ClassicColumn) -> CGFloat {
-        let fitting = metrics.charsPerColumn(in: size)
-        let body = CGFloat(min(column.cells.count, fitting)) * metrics.cellHeight
-        return body + 8 + (column.cells.count > fitting ? metrics.cellHeight * 0.65 : 0)
+        func extent(count: Int, capacity: Int, row: CGFloat, from start: Int = 0) -> CGFloat {
+            CGFloat(start + min(count, capacity)) * row + (count > capacity ? row * 0.65 : 0)
+        }
+        var bottom: CGFloat
+        switch column.role {
+        case .text: bottom = extent(count: column.cells.count, capacity: fitting, row: metrics.cellHeight)
+        case .plain: bottom = extent(count: column.cells.count, capacity: fitting * ClassicLayout.noteRowsPerCell, row: smallRow)
+        }
+        if let notes = column.notes {
+            let capacity = fitting * ClassicLayout.noteRowsPerCell - notes.startRow
+            bottom = max(bottom, extent(count: notes.rowCount, capacity: capacity, row: smallRow, from: notes.startRow))
+        }
+        return bottom + 8
+    }
+
+    private func columnRect(_ i: Int) -> CGRect {
+        CGRect(x: columnX(i) + 2, y: ClassicMetrics.top - 4,
+               width: metrics.columnWidth - 4, height: columnHeight(page.columns[i]))
     }
 
     private func hitTarget(for column: ClassicColumn, at i: Int) -> some View {
@@ -462,8 +691,33 @@ private struct ClassicPageView: View {
                 onPressing(column.passageId, pressing)
             }
             .accessibilityElement()
-            .accessibilityLabel(column.text)
+            .accessibilityLabel(accessibilityText(column))
             .accessibilityAction(named: "摘抄") { onLongPress(column.passageId) }
+    }
+
+    /// 直排标点读屏念不出来, 读原字; 夹注与白话列说明是白话。
+    private func accessibilityText(_ column: ClassicColumn) -> String {
+        var parts: [String] = []
+        if !column.cells.isEmpty {
+            parts.append(column.role == .plain ? "白话：\(column.text)" : column.text)
+        }
+        if let notes = column.notes { parts.append("白话：\(notes.text)") }
+        return parts.joined(separator: " ")
+    }
+
+    /// 外部定位后的一次高亮: 强调色淡底, 不透明度由上层动画 (淡出)。
+    /// 只按段落 id 决定画不画 —— 若也按不透明度判断, 动画一开始视图就被拿掉, 看不到淡出。
+    private func flashLayer(_ passageId: String) -> some View {
+        ForEach(page.columnIndices(of: passageId), id: \.self) { i in
+            let rect = columnRect(i)
+            Rectangle()
+                .fill(style.accent.opacity(0.2))
+                .frame(width: rect.width, height: rect.height)
+                .offset(x: rect.minX, y: rect.minY)
+        }
+        .opacity(flashOpacity)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     /// 乌丝栏: 每列之间一道细线; 版心边一道通高的线。
@@ -484,29 +738,59 @@ private struct ClassicPageView: View {
 
     private func drawHighlight(_ context: GraphicsContext) {
         guard let pressedPassageId else { return }
-        for (i, column) in page.columns.enumerated() where column.passageId == pressedPassageId {
-            let rect = CGRect(x: columnX(i) + 2, y: ClassicMetrics.top - 4,
-                              width: metrics.columnWidth - 4, height: columnHeight(column))
-            context.fill(Path(rect), with: .color(style.ink(0.06)))
+        for i in page.columnIndices(of: pressedPassageId) {
+            context.fill(Path(columnRect(i)), with: .color(style.ink(0.06)))
         }
     }
 
     private func drawColumns(_ context: GraphicsContext, _ size: CGSize) {
         let font = style.fixedSerif(metrics.fontSize, weight: .medium)
-        let fitting = metrics.charsPerColumn(in: size)
+        let small = style.fixedSerif(ZXReaderStyle.captionSize(for: metrics.fontSize))
+        let smallCapacity = fitting * ClassicLayout.noteRowsPerCell
         // 同一页同一个字只解析一次; 「之」「而」「不」这类字一页能出现十几次。
+        // 正文、夹注、白话列三种字各一张表 (字号或墨色不同)。
         var resolved: [String: GraphicsContext.ResolvedText] = [:]
+        var resolvedNote: [String: GraphicsContext.ResolvedText] = [:]
+        var resolvedPlain: [String: GraphicsContext.ResolvedText] = [:]
+
+        func draw(_ glyph: String, font: Font, color: Color, cache: inout [String: GraphicsContext.ResolvedText],
+                  at point: CGPoint) {
+            let text = cache[glyph] ?? context.resolve(Text(glyph).font(font).foregroundStyle(color))
+            cache[glyph] = text
+            context.draw(text, at: point, anchor: .center)
+        }
+
         for (i, column) in page.columns.enumerated() {
             let centerX = columnX(i) + metrics.columnWidth / 2
-            for (j, cell) in column.cells.enumerated() {
-                let text = resolved[cell.glyph] ?? context.resolve(
-                    Text(cell.glyph).font(font).foregroundStyle(style.ink)
-                )
-                resolved[cell.glyph] = text
-                // 标点挤在列尾时是第 N+1 个, 稍微上提贴着前一个字。
-                let lift: CGFloat = j >= fitting ? metrics.cellHeight * 0.35 : 0
-                let centerY = ClassicMetrics.top + (CGFloat(j) + 0.5) * metrics.cellHeight - lift
-                context.draw(text, at: CGPoint(x: centerX, y: centerY), anchor: .center)
+            switch column.role {
+            case .text:
+                for (j, cell) in column.cells.enumerated() {
+                    // 标点挤在列尾时是第 N+1 个, 稍微上提贴着前一个字。
+                    let lift: CGFloat = j >= fitting ? metrics.cellHeight * 0.35 : 0
+                    let centerY = ClassicMetrics.top + (CGFloat(j) + 0.5) * metrics.cellHeight - lift
+                    draw(cell.glyph, font: font, color: style.ink, cache: &resolved, at: CGPoint(x: centerX, y: centerY))
+                }
+            case .plain:
+                // 白话列: 单行小字, 半格一字, 墨淡一档。
+                for (j, cell) in column.cells.enumerated() {
+                    let lift: CGFloat = j >= smallCapacity ? smallRow * 0.35 : 0
+                    let centerY = ClassicMetrics.top + (CGFloat(j) + 0.5) * smallRow - lift
+                    draw(cell.glyph, font: small, color: style.ink(0.62), cache: &resolvedPlain,
+                         at: CGPoint(x: centerX, y: centerY))
+                }
+            }
+            // 双行夹注: 一列并排两行小字, 右行先读。两行的中线各在半列的中间偏内一点, 不贴界栏。
+            if let notes = column.notes {
+                let capacity = smallCapacity - notes.startRow
+                let offset = metrics.columnWidth * 0.24
+                for (line, x) in [(notes.right, centerX + offset), (notes.left, centerX - offset)] {
+                    for (r, cell) in line.enumerated() {
+                        let lift: CGFloat = r >= capacity ? smallRow * 0.35 : 0
+                        let centerY = ClassicMetrics.top + (CGFloat(notes.startRow + r) + 0.5) * smallRow - lift
+                        draw(cell.glyph, font: small, color: style.ink(0.78), cache: &resolvedNote,
+                             at: CGPoint(x: x, y: centerY))
+                    }
+                }
             }
         }
     }
@@ -550,17 +834,21 @@ private struct ClassicPageView: View {
 
 // MARK: - 横排对照
 
-/// 横排: 一段原文; 有白话时原文在左、白话在右, 左右对照。
-///
-/// TODO(夹注): 竖排模式下白话以双行小字夹注排在原文之后, 待版式定稿后在 `ClassicLayout` 里加「夹注列」。
+/// 横排: 一段原文; 有白话时按 `plainMode`: 对照 (原文在左、白话在右)、夹注 (白话小字接在原文下)、不显示。
 private struct HorizontalChapterView: View {
     let chapter: Chapter
     let fontSize: CGFloat
     let style: ZXReaderStyle
+    let plainMode: ReaderPlainMode
     @Binding var anchorPassageId: String?
+    let locateRequest: ReaderLocateRequest?
+    let flashPassageId: String?
+    let flashOpacity: Double
     let onPassage: (String) -> Void
     let onReachedEnd: () -> Void
     let onLongPress: (String) -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var visibleId: String?
     // 「读完一章」的三个条件, 只存布尔: 滚动时几何每帧都在变, 存布尔则只在跨过阈值时才触发重绘。
@@ -597,6 +885,15 @@ private struct HorizontalChapterView: View {
                 }
                 .onChange(of: visibleId) { _, new in
                     if let new { onPassage(new) }
+                }
+                // 同一章里的外部定位: 滚到该段 (换章时视图重建, 由上面的 onAppear 按锚点滚)。
+                .onChange(of: locateRequest) { _, request in
+                    guard let request else { return }
+                    if reduceMotion {
+                        proxy.scrollTo(request.passageId, anchor: .top)
+                    } else {
+                        withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo(request.passageId, anchor: .top) }
+                    }
                 }
             }
         }
@@ -647,25 +944,47 @@ private struct HorizontalChapterView: View {
                     .font(style.serif(12, relativeTo: .caption))
                     .foregroundStyle(style.ink(0.5))
             }
-            if p.hasPlain, let plain = p.plain {
-                HStack(alignment: .top, spacing: 12) {
-                    original(p).frame(maxWidth: .infinity, alignment: .leading)
-                    Rectangle().fill(style.rule).frame(width: 0.5)
-                    Text(plain)
-                        .font(style.serif(fontSize * 0.68, relativeTo: .callout))
-                        .foregroundStyle(style.ink(0.62))
-                        .lineSpacing(fontSize * 0.68 * 0.6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .accessibilityLabel("白话: \(plain)")
+            if p.hasPlain, let plain = p.plain, plainMode != .hidden {
+                if plainMode == .parallel {
+                    HStack(alignment: .top, spacing: 12) {
+                        original(p).frame(maxWidth: .infinity, alignment: .leading)
+                        Rectangle().fill(style.rule).frame(width: 0.5)
+                        plainText(plain).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                } else {
+                    // 横排的「夹注」: 白话小字紧接原文之下, 与竖排双行小注同一个意思 —— 注随文走。
+                    VStack(alignment: .leading, spacing: 6) {
+                        original(p)
+                        plainText(plain)
+                    }
                 }
             } else {
                 original(p)
+            }
+        }
+        .padding(.vertical, 4)
+        .background {
+            // 外部定位的一次高亮。只按段落 id 决定画不画, 不透明度由上层动画淡出。
+            if p.id == flashPassageId {
+                Rectangle()
+                    .fill(style.accent.opacity(0.2))
+                    .padding(.horizontal, -8)
+                    .opacity(flashOpacity)
+                    .accessibilityHidden(true)
             }
         }
         .contentShape(Rectangle())
         .onLongPressGesture(minimumDuration: 0.45) { onLongPress(p.id) }
         .accessibilityElement(children: .combine)
         .accessibilityAction(named: "摘抄") { onLongPress(p.id) }
+    }
+
+    private func plainText(_ plain: String) -> some View {
+        Text(plain)
+            .font(style.serif(ZXReaderStyle.plainSize(for: fontSize), relativeTo: .callout))
+            .foregroundStyle(style.ink(0.62))
+            .lineSpacing(ZXReaderStyle.plainSize(for: fontSize) * 0.6)
+            .accessibilityLabel("白话: \(plain)")
     }
 
     private func original(_ p: Passage) -> some View {
@@ -763,8 +1082,17 @@ private struct ReaderPreview: View {
     ReaderPreview(identity: .monochromeInk, scheme: .dark, content: ClassicReaderView(book: PreviewBooks.lunyu))
 }
 
+#Preview("竖排夹注 · paper-ink-seal") {
+    ReaderPreview(identity: .paperInkSeal, content: ClassicReaderView(book: PreviewBooks.sample, plainMode: .interlinear))
+}
+
+#Preview("竖排白话列 · paper-ink-seal 深色") {
+    ReaderPreview(identity: .paperInkSeal, scheme: .dark,
+                  content: ClassicReaderView(book: PreviewBooks.sample, plainMode: .parallel))
+}
+
 #Preview("横排对照 · paper-ink-seal") {
-    ReaderPreview(identity: .paperInkSeal, content: ClassicReaderView(book: PreviewBooks.sample, orientation: .horizontal))
+    ReaderPreview(identity: .paperInkSeal, content: ClassicReaderView(book: PreviewBooks.sample, orientation: .horizontal, plainMode: .parallel))
 }
 
 #Preview("横排对照 · paper-ink-seal 深色") {
