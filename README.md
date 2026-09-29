@@ -16,7 +16,7 @@
 ## 规则
 
 - 内核里不出现任何产品专属逻辑 (不写「玄览」「苏轼」)。产品差异靠 Identity JSON 与资源注入。
-- 所有 public API 标 `Sendable`, 开 StrictConcurrency。
+- 所有 public 模型与服务类型标 `Sendable`, 开 StrictConcurrency。SwiftUI View 本身不要求 Sendable, 但它交出去的数据必须是。
 - 每个模块有测试; 历法类必须对齐 `Fixtures/` 里的金标。
 - 不改 `Package.swift` 的 target 结构; 需要加依赖或资源, 在 PR 说明里提出。
 

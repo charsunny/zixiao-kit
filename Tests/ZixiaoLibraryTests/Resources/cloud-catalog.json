@@ -1,0 +1,91 @@
+{
+ "schema": 1,
+ "generated": "2026-09-28",
+ "books": [
+  {
+   "id": "lunyu",
+   "title": "论语",
+   "author": "孔子弟子及再传弟子",
+   "dynasty": "春秋战国",
+   "category": "经",
+   "tags": [
+    "p0",
+    "儒"
+   ],
+   "version": 1,
+   "hash": "sha256:01709828abbd690879937eba5149058333f64dbca3ba02ae7baa8bd273e3aa6e",
+   "bytes": 29558,
+   "url": "https://qizen.weshici.com/books/v1/lunyu/1/book.json.gz",
+   "has_plain": false,
+   "summary": "孔子及其弟子的言行录，由孔门弟子与再传弟子编纂，通行本二十篇。所论以学、仁、礼、政为核心，是了解儒家思想最基本的文献，南宋朱熹列为四书之一。"
+  },
+  {
+   "id": "daodejing",
+   "title": "道德经",
+   "author": "老子",
+   "dynasty": "春秋",
+   "category": "子",
+   "tags": [
+    "p0",
+    "道"
+   ],
+   "version": 1,
+   "hash": "sha256:64e98dd59f060fe134149d437a7ce042a00deeb39579216e43f10f570ff7298d",
+   "bytes": 11001,
+   "url": "https://qizen.weshici.com/books/v1/daodejing/1/book.json.gz",
+   "has_plain": false,
+   "summary": "老子五千言，分上、下篇八十一章，此本取王弼注本的白文，不含注。论道与德、无为与自然、柔弱与不争，是道家的根本经典，也是先秦思想的重要文本。"
+  },
+  {
+   "id": "xinjing",
+   "title": "般若波罗蜜多心经",
+   "author": "玄奘（译）",
+   "dynasty": "唐",
+   "category": "子",
+   "tags": [
+    "p0",
+    "释"
+   ],
+   "version": 1,
+   "hash": "sha256:4c189e35e6359c937c8dc2cdb33ba8b3884af78c6edc566d48da66eb687df71c",
+   "bytes": 1442,
+   "url": "https://qizen.weshici.com/books/v1/xinjing/1/book.json.gz",
+   "has_plain": false,
+   "summary": "玄奘所译《般若波罗蜜多心经》，正文二百六十字，浓缩般若部要义：五蕴皆空，无所得故心无挂碍。是汉传佛教流传最广、诵读最多的短篇经典。"
+  },
+  {
+   "id": "caigentan",
+   "title": "菜根谭",
+   "author": "洪应明",
+   "dynasty": "明",
+   "category": "子",
+   "tags": [
+    "p0",
+    "儒"
+   ],
+   "version": 1,
+   "hash": "sha256:c9b6aa16d564e440371c78794fb1c8ee4b70031415997be2a3a3a5b8ac1f37b7",
+   "bytes": 26474,
+   "url": "https://qizen.weshici.com/books/v1/caigentan/1/book.json.gz",
+   "has_plain": false,
+   "summary": "明洪应明所著语录体清言集，明刻本分前集、后集三百余条。以儒家修身处世为主，兼采道、释，谈涵养心性与闲适自处，句式对仗，便于诵读。"
+  },
+  {
+   "id": "chanshi",
+   "title": "禅诗选",
+   "author": "编选",
+   "dynasty": "历代",
+   "category": "集",
+   "tags": [
+    "p0",
+    "释"
+   ],
+   "version": 1,
+   "hash": "sha256:5bf53bcff475a6c2280d243a6334bd6211cb44eec66523d11e2de30fceb363f2",
+   "bytes": 17544,
+   "url": "https://qizen.weshici.com/books/v1/chanshi/1/book.json.gz",
+   "has_plain": false,
+   "summary": "编选历代禅门诗偈：寒山诗、永嘉证道歌、信心铭，王维、苏轼与唐宋诸家的禅意之作，并附禅门传诵的偈颂。逐篇注明公版出处，未能核实者标出。"
+  }
+ ]
+}

@@ -49,7 +49,8 @@ let package = Package(
         ),
         .testTarget(name: "ZixiaoCoreTests", dependencies: ["ZixiaoCore"]),
         .testTarget(name: "ZixiaoDesignTests", dependencies: ["ZixiaoDesign"]),
-        .testTarget(name: "ZixiaoCalendarTests", dependencies: ["ZixiaoCalendar"], resources: [.copy("../../Fixtures")]),
-        .testTarget(name: "ZixiaoLibraryTests", dependencies: ["ZixiaoLibrary"]),
+        // 金标 fixture 在仓库根 Fixtures/, 测试用 #filePath 定位读取 (SPM 不允许 target 外的 resources)。
+        .testTarget(name: "ZixiaoCalendarTests", dependencies: ["ZixiaoCalendar"]),
+        .testTarget(name: "ZixiaoLibraryTests", dependencies: ["ZixiaoLibrary"], resources: [.process("Resources")]),
     ]
 )

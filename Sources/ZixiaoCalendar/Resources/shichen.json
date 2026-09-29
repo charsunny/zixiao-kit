@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "note": "十二时辰。start 为起始小时(子时 23 点起, 跨日)。ancient 为古名, gloss 为一句古人此时的作息, 供时辰钟与首启页使用。",
+  "items": [
+    {"branch": "子", "ancient": "夜半", "start": 23, "end": 1, "gloss": "夜色最深，万籁俱寂，古人早已安睡。"},
+    {"branch": "丑", "ancient": "鸡鸣", "start": 1, "end": 3, "gloss": "鸡将叫未叫，是一夜里最静的时候。"},
+    {"branch": "寅", "ancient": "平旦", "start": 3, "end": 5, "gloss": "天光将明未明，早行的人已经起身。"},
+    {"branch": "卯", "ancient": "日出", "start": 5, "end": 7, "gloss": "太阳升起，古人此时点卯、开门、洒扫。"},
+    {"branch": "辰", "ancient": "食时", "start": 7, "end": 9, "gloss": "早饭的时候，一日之计从一餐开始。"},
+    {"branch": "巳", "ancient": "隅中", "start": 9, "end": 11, "gloss": "日近中天而未中，古人此时读书理事。"},
+    {"branch": "午", "ancient": "日中", "start": 11, "end": 13, "gloss": "太阳正中，午饭后小憩片刻。"},
+    {"branch": "未", "ancient": "日昳", "start": 13, "end": 15, "gloss": "日头开始西斜，一天过了一半。"},
+    {"branch": "申", "ancient": "晡时", "start": 15, "end": 17, "gloss": "古人一日两餐，第二餐就在此时。"},
+    {"branch": "酉", "ancient": "日入", "start": 17, "end": 19, "gloss": "太阳落山，鸡回窝，人归家。"},
+    {"branch": "戌", "ancient": "黄昏", "start": 19, "end": 21, "gloss": "天色昏黄，掌灯的时候。"},
+    {"branch": "亥", "ancient": "人定", "start": 21, "end": 23, "gloss": "人声安定下来，该睡了。"}
+  ],
+  "geng": [
+    {"name": "一更", "ancient": "黄昏", "start": 19},
+    {"name": "二更", "ancient": "人定", "start": 21},
+    {"name": "三更", "ancient": "夜半", "start": 23},
+    {"name": "四更", "ancient": "鸡鸣", "start": 1},
+    {"name": "五更", "ancient": "平旦", "start": 3}
+  ]
+}
