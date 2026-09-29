@@ -40,12 +40,22 @@ enum LunarBridge {
     /// `hour` 只影响「精确」干支 (年按立春交节时刻、月按节交节时刻换); 其余字段
     /// 只看年月日。默认取正午, 与 Flutter 版 AlmanacEngine 一致。
     static func snapshot(_ date: ZXCivilDate, hour: Int = 12) -> LunarSnapshot {
+        withLunar(date, hour: hour) { lunar in snapshot(date, lunar: lunar) }
+    }
+
+    /// 在锁里以 `date` 的 `hour:00` 建一个 `Lunar` 交给 `body`, 由它转成值类型再出锁。
+    ///
+    /// `T: Sendable` 是这里的闸门: lunar-swift 的对象都不是 Sendable, 编译器因此不允许
+    /// `body` 把 `Lunar` / `Solar` 原样带出锁外。各类快照 (岁时、历注) 都经这一个入口。
+    static func withLunar<T: Sendable>(_ date: ZXCivilDate, hour: Int = 12, _ body: (Lunar) -> T) -> T {
         lock.lock()
         defer { lock.unlock() }
-
         let solar = Solar.fromYmdHms(year: date.year, month: date.month, day: date.day, hour: hour, minute: 0, second: 0)
-        let lunar = solar.lunar
+        return body(solar.lunar)
+    }
 
+    /// 只在 `withLunar` 的锁内调用。
+    private static func snapshot(_ date: ZXCivilDate, lunar: Lunar) -> LunarSnapshot {
         // 形如「秋分 初候」。与 Flutter 版 houPositionOf 同一取法。
         let parts = lunar.hou.split(separator: " ").map(String.init)
         let houTerm = parts.first ?? ""

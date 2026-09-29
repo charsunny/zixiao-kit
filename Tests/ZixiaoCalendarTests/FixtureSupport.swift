@@ -80,3 +80,42 @@ struct ShichenFixture: Decodable {
         let geng: Geng?
     }
 }
+
+// MARK: - almanac-2026.json 的形状
+
+struct AlmanacFixture: Decodable {
+    let timeZone: String
+    let sampleHour: Int
+    let days: [DayRow]
+
+    struct DayRow: Decodable, Equatable, CustomStringConvertible {
+        struct Deities: Decodable, Equatable { let xi, cai, fu: String }
+        struct Xiu: Decodable, Equatable { let name, zheng, animal, luck: String }
+        struct PengZu: Decodable, Equatable { let gan, zhi: String }
+        struct Hour: Decodable, Equatable, CustomStringConvertible {
+            let branch, ganZhi, tianShen: String
+            let auspicious: Bool
+            let yi, ji: [String]
+            var description: String {
+                "\(branch)\(ganZhi)\(tianShen)\(auspicious ? "吉" : "凶") 宜\(yi.joined(separator: "、")) 忌\(ji.joined(separator: "、"))"
+            }
+        }
+
+        let gregorian: String
+        let yi, ji: [String]
+        let officer, tianShen, huangDao: String
+        let auspicious: Bool
+        let clashZodiac, sha: String
+        let deities: Deities
+        let xiu: Xiu
+        let pengZu: PengZu
+        let hours: [Hour]
+
+        var description: String {
+            "\(gregorian) 宜\(yi.joined(separator: "、")) 忌\(ji.joined(separator: "、")) \(officer)日 "
+                + "\(tianShen)\(huangDao)\(auspicious ? "吉" : "凶") 冲\(clashZodiac)煞\(sha) "
+                + "喜\(deities.xi)财\(deities.cai)福\(deities.fu) \(xiu.name)\(xiu.zheng)\(xiu.animal)\(xiu.luck) "
+                + "\(pengZu.gan) \(pengZu.zhi)"
+        }
+    }
+}

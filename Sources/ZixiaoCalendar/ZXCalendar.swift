@@ -60,6 +60,21 @@ public enum ZXCalendar {
         )
     }
 
+    // MARK: - 历注
+
+    /// `date` 在 `timeZone` 墙上日历里那一天的历注 (宜忌、建除、值神、冲煞、二十八宿、彭祖百忌、
+    /// 神方、十二时辰吉凶)。同一天无论几点查都是同一结果。
+    ///
+    /// 一次推算建一个 `Lunar` (约同 `day(for:)` 的一次快照), 调用方按日缓存即可, 不必每个时辰重取。
+    public static func almanacNotes(for date: Date, timeZone: TimeZone = defaultTimeZone) -> ZXAlmanacNotes {
+        almanacNotes(ZXCivilDate(date, timeZone: timeZone))
+    }
+
+    /// 某个民用日的历注。与时区无关。
+    public static func almanacNotes(_ civil: ZXCivilDate) -> ZXAlmanacNotes {
+        LunarBridge.almanac(civil)
+    }
+
     // MARK: - 近期节气与节日
 
     /// 自 `date` 那天起 `days` 天内 (含当天, 共 days + 1 天) 的节气与节日, 按日期排,
