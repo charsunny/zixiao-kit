@@ -162,6 +162,7 @@ public struct ZXTabShell<Content: View>: View {
     private func stack(for tab: ZXTab) -> some View {
         NavigationStack(path: path(for: tab.id)) {
             roots[tab.id]
+                .zxRootTitleDisplayMode()
         }
         .environment(\.zxScrollToTop, ZXScrollToTop(generation: scrollRequests[tab.id] ?? 0))
     }
@@ -192,6 +193,27 @@ public struct ZXTabShell<Content: View>: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - 标题栏模式
+
+extension View {
+    /// Tab 根页面的标题栏: iOS 26 用 inlineLarge (大字标题, 不随滚动折叠), 以下回退 inline。
+    /// 产品规则: 根页面 inlineLarge, 二级页面 inline, 任何地方不用 large —— 折叠式大标题
+    /// 占纵向空间, 与纸墨版式不合。由壳统一设置, 页面自己不要再设。
+    @ViewBuilder
+    public func zxRootTitleDisplayMode() -> some View {
+        if #available(iOS 26.0, *) {
+            self.toolbarTitleDisplayMode(.inlineLarge)
+        } else {
+            self.toolbarTitleDisplayMode(.inline)
+        }
+    }
+
+    /// 二级页面的标题栏: 一律 inline。
+    public func zxSecondaryTitleDisplayMode() -> some View {
+        self.toolbarTitleDisplayMode(.inline)
     }
 }
 
