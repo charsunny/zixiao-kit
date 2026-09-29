@@ -27,19 +27,19 @@ let package = Package(
             resources: [.process("Resources")],
             swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]
         ),
-        // Swift Pieces (swiftpieces.com): 源码归我们的 SwiftUI 组件与屏幕, 由 `npx swiftpieces add` 写入,
-        // 配置在仓库根 swiftpieces.json。免费件是独立组件; Pro 的 design-system (SPTheme) 登录后装到同一目录。
-        // 规则: 不手改这里的文件 (升级会被 --overwrite 覆盖), 要定制走 ZixiaoDesign 的主题桥。
+        // Swift Pieces (swiftpieces.com) 的免费件 (MIT + Commons Clause), 由 `npx swiftpieces add` 写入,
+        // 配置在仓库根 swiftpieces.json。规则: 不手改这里的文件 (升级会被 --overwrite 覆盖)。
+        // 没有 Pro: 设计系统与屏幕件按同样契约在 ZixiaoDesign 里自己实现。
         .target(
             name: "SwiftPieces",
             dependencies: [],
             path: "Sources/SwiftPieces",
             swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]
         ),
-        // 设计 token / 身份 / 字体 / 文化组件 (印章、竖排、线装封面、釉面面板)。依赖 SwiftPieces 以便做 ZXIdentity → SPTheme 桥。
+        // 设计系统: token 分组 (color / type / space / radius / motion)、身份、字体、修饰符、文化组件与屏幕件。
         .target(
             name: "ZixiaoDesign",
-            dependencies: ["SwiftPieces"],
+            dependencies: [],
             resources: [.process("Resources")],
             swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]
         ),
