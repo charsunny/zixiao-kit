@@ -17,6 +17,21 @@ public struct ZXTheme: Sendable {
     public let identity: ZXIdentity
     public let colorScheme: ColorScheme
 
+    // MARK: token 分组 (设计系统契约)
+
+    /// 颜色角色, 全部由身份派生。见 `ZXColorTokens` 的派生表。
+    public let color: ZXColorTokens
+    /// 字号阶。display / 标题用身份的展示字族, 其余用正文字族。
+    public let type: ZXTypeTokens
+    /// 间距尺。
+    public let space: ZXSpaceTokens
+    /// 圆角阶。
+    public let radius: ZXRadiusTokens
+    /// 动效。
+    public let motion: ZXMotionTokens
+
+    // MARK: 平铺属性 (早于 token 分组的 API, 与 `color` 组同义, 保留以免下游改代码)
+
     public let surface: Color
     public let muted: Color
     public let border: Color
@@ -32,31 +47,43 @@ public struct ZXTheme: Sendable {
 
     // 纸与墨不直接暴露成属性: 层级只能经 `ink(_:)` / `paper(_:)` 表达,
     // 省得同一处有人写 `theme.ink.opacity(0.6)`、有人写 `theme.ink(0.6)`。
+    // (`color.ink` / `color.paper` 是给 token 组的完整性留的, 视图里仍用这两个函数。)
     private let paperHex: ZXHex
     private let inkHex: ZXHex
 
     /// - Parameters:
     ///   - accentName: 选用身份里 `palette.accents` 的一支备选强调色 (如系列里的诗人身份色);
     ///     找不到就用调色板默认的 accent。
-    public nonisolated init(_ identity: ZXIdentity, colorScheme: ColorScheme, accentName: String? = nil) {
+    ///   - legibilityWeight: 系统「粗体文本」开关。传进来后 `type` 组的字会跟着加粗
+    ///     (随包宋体不会自己响应这个开关)。`zxTheme(_ identity:)` 会自动从环境取。
+    ///   - space / radius / motion: 尺度。默认是标准尺; 产品要更圆、更慢, 换一套传进来。
+    public nonisolated init(_ identity: ZXIdentity, colorScheme: ColorScheme, accentName: String? = nil,
+                            legibilityWeight: LegibilityWeight? = nil,
+                            space: ZXSpaceTokens = .standard,
+                            radius: ZXRadiusTokens = .standard,
+                            motion: ZXMotionTokens = .defaults) {
         self.identity = identity
         self.colorScheme = colorScheme
-        let dark = colorScheme == .dark
-        let s = dark ? identity.palette.dark : identity.palette.light
-        paperHex = s.paper
-        inkHex = s.ink
-        surface = Color(zxHex: s.surface)
-        muted = Color(zxHex: s.muted)
-        border = Color(zxHex: s.border)
-        track = Color(zxHex: s.track)
-        let alternate = accentName.flatMap { identity.palette.accents?[$0] }
-        accent = Color(zxHex: alternate.map { dark ? $0.dark : $0.light } ?? s.accent)
-        seal = Color(zxHex: s.seal)
-        rule = Color(zxHex: s.rule)
-        night = Color(zxHex: s.night)
+        let color = ZXColorTokens(identity: identity, colorScheme: colorScheme, accentName: accentName)
+        self.color = color
+        paperHex = color.values.paper
+        inkHex = color.values.ink
+        surface = color.surface
+        muted = color.muted
+        border = color.border
+        track = color.track
+        accent = color.accent
+        seal = color.seal
+        rule = color.rule
+        night = color.night
         displayFace = ZXFace(descriptor: identity.type.display)
         bodyFace = ZXFace(descriptor: identity.type.body)
         uiFace = ZXFace(descriptor: identity.type.ui)
+        type = ZXTypeTokens(displayFace: displayFace, bodyFace: bodyFace, uiFace: uiFace,
+                            legibilityWeight: legibilityWeight)
+        self.space = space
+        self.radius = radius
+        self.motion = motion
     }
 
     /// 墨。画面里一切记号的颜色; `alpha` 是层级 —— 1 是正文与最强的一笔,
@@ -131,9 +158,11 @@ private struct ZXThemeResolver: ViewModifier {
     let identity: ZXIdentity
     let accentName: String?
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.legibilityWeight) private var legibilityWeight
 
     func body(content: Content) -> some View {
-        content.environment(\.zxTheme, ZXTheme(identity, colorScheme: colorScheme, accentName: accentName))
+        content.environment(\.zxTheme, ZXTheme(identity, colorScheme: colorScheme, accentName: accentName,
+                                               legibilityWeight: legibilityWeight))
     }
 }
 

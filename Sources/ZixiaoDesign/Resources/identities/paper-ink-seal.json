@@ -1,6 +1,6 @@
 {
   "name": "纸墨朱印",
-  "rationale": "诗人志系列共用的纸墨朱印: 纸 #F2EEE4、墨 #272E2A、朱印 #963E31, 以苏轼 (东坡志) 为默认身份, accent 取朱印 —— 强调色只用于选中、方向与少量身份标识, 不铺满正文, 正文始终是墨字。数值取自系列设计规范 (POET_SERIES_DESIGN.md) 的浅深两列: surface 对应「书页」, muted 对应「次级文字」, border 与 rule 对应「细线」。规范未给 track, 取墨 6% 叠在纸上推得 (浅 #E6E3D9 / 深 #292D2A)。night 取系列深色纸面。李白的江月青、杜甫的草堂绿作为备选 accent 放在 accents 里, 由各自 App 选用; 诗人各自的完整身份 (纪年、标记形状、印文) 仍由其编成 JSON 提供, 所以这里 sealText 留空。",
+  "rationale": "诗人志系列共用的纸墨朱印: 纸 #F2EEE4、墨 #272E2A、朱印 #963E31, 以苏轼 (东坡志) 为默认身份, accent 取朱印 —— 强调色只用于选中、方向与少量身份标识, 不铺满正文, 正文始终是墨字。数值取自系列设计规范 (POET_SERIES_DESIGN.md) 的浅深两列: surface 对应「书页」, muted 对应「次级文字」, border 与 rule 对应「细线」。规范未给 track, 取墨 6% 叠在纸上推得 (浅 #E6E3D9 / 深 #292D2A)。night 取系列深色纸面。李白的江月青、杜甫的草堂绿作为备选 accent 放在 accents 里, 由各自 App 选用; 诗人各自的完整身份 (纪年、标记形状、印文) 仍由其编成 JSON 提供, 所以这里 sealText 留空。 token 分组补入的五槽: secondary 取江月青 (浅 #49697B / 深 #A4BED0) —— 系列里已有的第二支色, 给图表第二组与标签用, 不另造; success 取草堂绿 (#5B6B48 / #B3C399), 同理; warning 取赭 (#8A5E14 / #D9B26A), 矿物颜料里最常见的暖黄, 比藤黄沉, 纸色压在上面才够 4.5:1; danger 取朱砂 (#A8321F / #E88B78), 比朱印更艳、更偏橙, 与 accent 拉开一点, 但仍是同一族 —— 纸墨朱印里「危险」本来就该是朱, 另起一支正红会跳出身份; info 取黛 (#3D5566 / #9DB3C4), 比江月青深一档, 避免与 secondary 同值。五支色都按「纸色字压在上面 ≥ 4.5:1」挑过 (statusOn 取纸)。",
   "palette": {
     "light": {
       "paper": "#F2EEE4",
@@ -12,7 +12,12 @@
       "accent": "#963E31",
       "seal": "#963E31",
       "rule": "#D1D0C1",
-      "night": "#1C211F"
+      "night": "#1C211F",
+      "secondary": "#49697B",
+      "success": "#5B6B48",
+      "warning": "#8A5E14",
+      "danger": "#A8321F",
+      "info": "#3D5566"
     },
     "dark": {
       "paper": "#1C211F",
@@ -24,7 +29,12 @@
       "accent": "#E3A08B",
       "seal": "#E3A08B",
       "rule": "#465045",
-      "night": "#1C211F"
+      "night": "#1C211F",
+      "secondary": "#A4BED0",
+      "success": "#B3C399",
+      "warning": "#D9B26A",
+      "danger": "#E88B78",
+      "info": "#9DB3C4"
     },
     "accents": {
       "江月青": { "light": "#49697B", "dark": "#A4BED0" },
