@@ -13,6 +13,7 @@ let package = Package(
         .library(name: "ZixiaoDesign", targets: ["ZixiaoDesign"]),
         .library(name: "ZixiaoCalendar", targets: ["ZixiaoCalendar"]),
         .library(name: "ZixiaoLibrary", targets: ["ZixiaoLibrary"]),
+        .library(name: "SwiftPieces", targets: ["SwiftPieces"]),
     ],
     dependencies: [
         .package(url: "https://github.com/supabase/supabase-swift.git", from: "2.0.0"),
@@ -26,10 +27,19 @@ let package = Package(
             resources: [.process("Resources")],
             swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]
         ),
-        // 设计 token / 身份 / 字体 / 文化组件 (印章、竖排、线装封面、釉面面板)。
+        // Swift Pieces (swiftpieces.com): 源码归我们的 SwiftUI 组件与屏幕, 由 `npx swiftpieces add` 写入,
+        // 配置在仓库根 swiftpieces.json。免费件是独立组件; Pro 的 design-system (SPTheme) 登录后装到同一目录。
+        // 规则: 不手改这里的文件 (升级会被 --overwrite 覆盖), 要定制走 ZixiaoDesign 的主题桥。
+        .target(
+            name: "SwiftPieces",
+            dependencies: [],
+            path: "Sources/SwiftPieces",
+            swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]
+        ),
+        // 设计 token / 身份 / 字体 / 文化组件 (印章、竖排、线装封面、釉面面板)。依赖 SwiftPieces 以便做 ZXIdentity → SPTheme 桥。
         .target(
             name: "ZixiaoDesign",
-            dependencies: [],
+            dependencies: ["SwiftPieces"],
             resources: [.process("Resources")],
             swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]
         ),
