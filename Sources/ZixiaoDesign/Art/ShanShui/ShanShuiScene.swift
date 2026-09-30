@@ -196,79 +196,106 @@ extension ShanShuiEngine {
 // MARK: - 竖幅构图
 
 extension ShanShuiEngine {
-    /// 手机竖幅: 上方 `quietTop` 留白 (锁屏时钟 + 诗句), 山在中上, 水在下。
+    /// 整体平移 (纯几何, 不取随机数)。
+    static func shifted(_ canv: ZXArt.SSCanv, dx: Double, dy: Double) -> ZXArt.SSCanv {
+        canv.map { var q = $0; q.p = q.p.map { P($0.x + dx, $0.y + dy) }; return q }
+    }
+
+    /// 最高点 (最小 y); 空画返回 nil。
+    static func top(_ canv: ZXArt.SSCanv) -> Double? {
+        var t = Double.infinity
+        for p in canv { for v in p.p where v.y.isFinite && v.y < t { t = v.y } }
+        return t.isFinite ? t : nil
+    }
+
+    /// 最低点 (最大 y)。
+    static func bottom(_ canv: ZXArt.SSCanv) -> Double? {
+        var b = -Double.infinity
+        for p in canv { for v in p.p where v.y.isFinite && v.y > b { b = v.y } }
+        return b.isFinite ? b : nil
+    }
+
+    /// 生成后按实际最高点对位: 原作山高 = hei × 噪声, 事先不可知; 这里量出来再竖直平移到 `topY`。
+    func placed(_ canv: ZXArt.SSCanv, topY: Double, maxShiftDown: Double = .infinity) -> ZXArt.SSCanv {
+        guard let t = ShanShuiEngine.top(canv) else { return canv }
+        return ShanShuiEngine.shifted(canv, dx: 0, dy: min(topY - t, maxShiftDown))
+    }
+
+    /// 手机竖幅: 上方 `quietTop` 留白 (锁屏时钟 + 诗句); 下方 (H - q) 相当于原作 800 高的视窗。
     func compose(width W: Double, height H: Double, params: ZXArt.ShanShui.Params) -> [(ZXArt.SSCanv, Bool)] {
         drawTowers = false
         let d = min(max(params.density, 0), 1)
         var layers: [(ZXArt.SSCanv, Bool)] = []  // (canv, isDistant)
         let q = params.quietTop * H
-        let texScale = 0.6 + 0.8 * d
-        // 高度方向的尺度: 原作 800 高; 竖幅用画布高度的份额来定位, 山的尺寸按宽度定。
-        let s = W / 560
+        let R = H - q  // 可画区域高度
+        let texScale = 0.7 + 0.6 * d
 
-        func distant(_ y: Double, _ hei: Double, _ len: Double = 0) -> ZXArt.SSCanv {
-            let l = len > 0 ? len : ((W + 300) / 50).rounded(.up) * 50
-            return distMount(-150 + (r() - 0.5) * 100, y, r() * 100, hei: hei, len: l)
+        func distant(_ y: Double, _ hei: Double) -> ZXArt.SSCanv {
+            let l = ((W + 400) / 50).rounded(.up) * 50
+            return distMount(-200 + (r() - 0.5) * 100, y, r() * 100, hei: hei, len: l)
         }
-        func waterBand(_ y0: Double, _ y1: Double, count: Int) -> ZXArt.SSCanv {
+        func waterLines(_ y0: Double, _ y1: Double, count: Int) -> ZXArt.SSCanv {
             var c: ZXArt.SSCanv = []
             for k in 0..<count {
                 let t = count == 1 ? 0.5 : Double(k) / Double(count - 1)
-                let y = y0 + (y1 - y0) * t + (r() - 0.5) * 20
-                let x = W * (0.2 + 0.6 * r())
-                c += water(x, y, Double(k) * 2, hei: 2, len: W * (0.9 + 0.6 * r()), clu: 6 + Int(4 * d))
+                let y = y0 + (y1 - y0) * t + (r() - 0.5) * 10
+                let x = W * (0.15 + 0.7 * r())
+                c += water(x, y, Double(k) * 2, hei: 2, len: W * (0.45 + 0.35 * r()), clu: 4 + Int(3 * d))
             }
             return c
+        }
+        func boat(_ y: Double, _ sca: Double) -> ZXArt.SSCanv {
+            boat01(W * (0.12 + 0.6 * r()), y, r(), sca: sca, fli: e.choice([true, false]))
         }
 
         switch params.variant {
         case .alpine:
-            layers.append((distant(q + 0.15 * H, 130 * s), true))
-            // 背后的次峰
-            let backCount = d < 0.3 ? 0 : (d < 0.7 ? 1 : 2)
+            layers.append((distant(q + 0.20 * R, 70), true))
+            let backCount = d < 0.25 ? 0 : (d < 0.7 ? 1 : 2)
+            let side: Double = r() < 0.5 ? -1 : 1
             var backs: ZXArt.SSCanv = []
             for k in 0..<backCount {
-                let side: Double = k % 2 == 0 ? (r() < 0.5 ? -1 : 1) : -1
-                let x = W * (0.5 + side * (0.28 + 0.12 * r()))
-                backs += mountain(x, q + 0.40 * H, r() * 100, hei: (0.20 + 0.08 * r()) * H, wid: (0.55 + 0.2 * r()) * W,
-                                  tex: 120 * texScale, veg: true)
+                let sgn = k == 0 ? side : -side
+                let m = mountain(W * (0.5 + sgn * (0.30 + 0.1 * r())), q + 0.6 * R, r() * 100,
+                                 hei: (0.55 + 0.15 * r()) * R, wid: (0.7 + 0.2 * r()) * W, tex: 150 * texScale)
+                backs += placed(m, topY: q + (0.14 + 0.08 * r()) * R)
             }
-            layers.append((waterBand(0.80 * H, 0.97 * H, count: 3), false))
             layers.append((backs, false))
-            let mx = W * (0.38 + 0.24 * r())
-            layers.append((mountain(mx, 0.80 * H, r() * 100, hei: (0.40 + 0.06 * r()) * H, wid: (0.85 + 0.2 * r()) * W,
-                                    tex: 200 * texScale, veg: true), false))
-            if d > 0.2 {
-                let by = 0.90 * H + r() * 0.05 * H
-                layers.append((boat01(W * (0.15 + 0.7 * r()), by, r(), sca: 0.55 * s, fli: e.choice([true, false])), false))
-            }
+            let main = placed(mountain(W * (0.5 - side * (0.05 + 0.08 * r())), q + 0.75 * R, r() * 100,
+                                       hei: (0.95 + 0.2 * r()) * R, wid: (1.0 + 0.25 * r()) * W, tex: 220 * texScale),
+                              topY: q + (0.04 + 0.05 * r()) * R)
+            // 水从主峰山脚 (实测) 往下铺, 画在山的下面。
+            let base = min(ShanShuiEngine.bottom(main) ?? (q + 0.8 * R), H - 0.12 * R)
+            layers.append((waterLines(base - 0.02 * R, H - 0.03 * R, count: 2 + Int(3 * d)), false))
+            layers.append((main, false))
+            if d > 0.2 { layers.append((boat(q + (0.90 + 0.06 * r()) * R, 0.6), false)) }
         case .riverbank:
-            layers.append((distant(q + 0.14 * H, 110 * s), true))
+            layers.append((distant(q + 0.16 * R, 60), true))
             let side: Double = r() < 0.5 ? -1 : 1
-            layers.append((waterBand(0.66 * H, 0.84 * H, count: 3), false))
-            layers.append((mountain(W * (0.5 + side * 0.36), q + 0.36 * H, r() * 100, hei: (0.18 + 0.06 * r()) * H,
-                                    wid: 0.7 * W, tex: 150 * texScale, veg: true), false))
-            if d > 0.2 {
-                layers.append((boat01(W * (0.5 - side * (0.1 + 0.25 * r())), 0.76 * H, r(), sca: 0.6 * s,
-                                      fli: side > 0), false))
+            let m = mountain(W * (0.5 + side * 0.34), q + 0.45 * R, r() * 100, hei: (0.55 + 0.15 * r()) * R,
+                             wid: 0.8 * W, tex: 160 * texScale)
+            layers.append((placed(m, topY: q + (0.10 + 0.08 * r()) * R), false))
+            if d > 0.45 {
+                let m2 = mountain(W * (0.5 - side * 0.42), q + 0.50 * R, r() * 100, hei: 0.35 * R, wid: 0.55 * W,
+                                  tex: 100 * texScale, veg: true)
+                layers.append((placed(m2, topY: q + (0.30 + 0.06 * r()) * R), false))
             }
-            let fw = (1.05 + 0.3 * r()) * W
-            layers.append((flatMount(W * (0.5 - side * 0.12), 0.93 * H, 2 * r() * Double.pi, hei: 100, wid: fw,
+            layers.append((waterLines(q + 0.55 * R, q + 0.72 * R, count: 2 + Int(2 * d)), false))
+            if d > 0.2 { layers.append((boat(q + 0.64 * R, 0.55), false)) }
+            let fw = (1.1 + 0.3 * r()) * W
+            layers.append((flatMount(W * (0.5 - side * 0.1), q + 0.97 * R, 2 * r() * Double.pi, hei: 100, wid: fw,
                                      tex: 80 * texScale, cho: 0.5 + r() * 0.2), false))
         case .distant:
             let rows = d < 0.4 ? 2 : 3
             for k in 0..<rows {
-                let y = q + (0.12 + 0.11 * Double(k)) * H
-                layers.append((distant(y, (90 + 45 * Double(k)) * s), true))
+                layers.append((distant(q + (0.14 + 0.13 * Double(k)) * R, 55 + 30 * Double(k)), true))
             }
-            layers.append((waterBand(0.68 * H, 0.95 * H, count: 2 + Int(2 * d)), false))
-            if d > 0.15 {
-                layers.append((boat01(W * (0.2 + 0.6 * r()), 0.82 * H, r(), sca: 0.45 * s, fli: e.choice([true, false])), false))
-            }
+            layers.append((waterLines(q + 0.62 * R, q + 0.92 * R, count: 2 + Int(2 * d)), false))
+            if d > 0.15 { layers.append((boat(q + (0.72 + 0.1 * r()) * R, 0.5), false)) }
             if d > 0.5 {
                 let side: Double = r() < 0.5 ? -1 : 1
-                layers.append((flatMount(W * (0.5 + side * 0.42), 0.99 * H, 2 * r() * Double.pi, hei: 100,
-                                         wid: 0.7 * W, tex: 60 * texScale, cho: 0.55), false))
+                layers.append((flatMount(W * (0.5 + side * 0.45), q + 1.0 * R, 2 * r() * Double.pi, hei: 100,
+                                         wid: 0.8 * W, tex: 60 * texScale, cho: 0.55), false))
             }
         }
         return layers
@@ -309,8 +336,8 @@ public extension ZXArt {
             }
         }
 
-        /// 逻辑画布的短边 (原作单位 ≈ CSS 像素)。1206 px 宽的手机约 2.15 px / 单位。
-        public static let logicalShortSide: Double = 560
+        /// 逻辑画布的短边 (原作单位 ≈ CSS 像素)。1206 px 宽的手机约 2.9 px / 单位。
+        public static let logicalShortSide: Double = 420
 
         /// 纯函数: 同一 (seed, size, params) 永远得到同一张画。`size` 只决定长宽比。
         public static func generate(seed: Seed, size: CGSize, params: Params = Params()) -> Drawing {

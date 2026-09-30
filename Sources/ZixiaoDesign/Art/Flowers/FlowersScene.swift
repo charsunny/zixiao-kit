@@ -311,7 +311,8 @@ extension FlowersEngine {
                     spot = true
                 }
                 visit?(rr.rounded(.down), gg.rounded(.down), bb.rounded(.down))
-                let v: UInt8 = spot ? UInt8(min(255, 110 + max(0, 255 - c))) : UInt8(min(max((255 - c).rounded(), 0), 255))
+                // 原作斑点是棕色 (c·0.7, c·0.5, c·0.2); 映射成偏墨的淡点, 不然镜像平铺的斑点图案太显眼。
+                let v: UInt8 = spot ? UInt8(min(255.0, 38 + max(0, 255 - c))) : UInt8(min(max((255 - c).rounded(), 0), 255))
                 put(i, j, v); put(side - i, j, v); put(i, side - j, v); put(side - i, side - j, v)
             }
         }
@@ -350,8 +351,8 @@ extension FlowersEngine {
             P.innerLength = range(3, 5)
             P.innerColor = ZXArt.HSVRange(min: [48, 0.7, 0.85, 1], max: [52, 0.5, 0.95, 0.9])
             let bh = range(15, 30)
-            P.branchColor = ZXArt.HSVRange(min: [bh, 0.35, 0.35, 1], max: [bh, 0.35, 0.35, 1])
-            P.childBranchColor = ZXArt.HSVRange(min: [bh, 0.3, 0.42, 1], max: [bh, 0.3, 0.42, 1])
+            P.branchColor = ZXArt.HSVRange(min: [bh, 0.4, 0.22, 1], max: [bh, 0.4, 0.22, 1])
+            P.childBranchColor = ZXArt.HSVRange(min: [bh, 0.35, 0.3, 1], max: [bh, 0.35, 0.3, 1])
             P.branchWidth = range(1.0, 1.3)
             P.branchDepth = 3
             P.branchFork = range(5, 7).rounded(.down)
