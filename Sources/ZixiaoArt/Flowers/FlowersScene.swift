@@ -709,9 +709,12 @@ public extension ZXArt {
             public var paperTexture: Bool
             /// 0…1 (0.5 = 常态): 花 / 叶的多少 (只作用于季节预设; `.none` 保持原作参数)。
             public var density: Double
+            /// @2: 给诗留的框 (单位坐标)。nil = @1 的摆放; 非 nil = 花绕开诗句框摆放 (`placeV2`)。
+            public var verse: VerseLayout?
 
             public init(palette: Palette = .paperInk, hue: Double? = nil, season: Season = .none, layout: Layout = .auto,
-                        quietTop: Double = 0.32, paperTexture: Bool = true, density: Double = 0.5) {
+                        quietTop: Double = 0.32, paperTexture: Bool = true, density: Double = 0.5,
+                        verse: VerseLayout? = nil) {
                 self.palette = palette
                 self.hue = hue
                 self.season = season
@@ -719,6 +722,66 @@ public extension ZXArt {
                 self.quietTop = quietTop
                 self.paperTexture = paperTexture
                 self.density = density
+                self.verse = verse
+            }
+
+            /// @2 的摆放 → (k, tx, ty): 原作 1200² 画布坐标 × k + (tx, ty) = 逻辑坐标。改这里要升版本 (@3)。
+            /// - 横带 (top): 花在横带之下满宽的区域里, 同 @1 (按包围盒等比放大, 底对齐、居中)。
+            /// - 横幅 (widget): 花在竖栏另一侧的区域里, 同上。
+            /// - 竖幅 / 方幅的竖栏: 「L 形」—— 花底对齐画面下沿, 诗栏下沿以上的部分必须落在画栏里, 以下可以
+            ///   伸到诗栏之下。取满足这个条件的最大 k (≤ 包围盒放得下的上限, ≤ 2.4; 放不下时二分 30 次),
+            ///   水平位置取画栏居中, 再夹进可行范围。`pts` 是原作坐标的顶点 (已夹到 0…1199)。
+            static func placeV2(_ verse: VerseLayout, layout: Layout, W: Double, H: Double, quietTop: Double,
+                                bounds: (xmin: Double, xmax: Double, ymin: Double, ymax: Double),
+                                pts: [SIMD2<Double>]) -> (k: Double, tx: Double, ty: Double) {
+                let (xmin, xmax, ymin, ymax) = bounds
+                let bw = max(xmax - xmin, 1), bh = max(ymax - ymin, 1)
+                let vx0 = Double(verse.rect.minX) * W, vx1 = Double(verse.rect.maxX) * W
+                let vy1 = Double(verse.rect.maxY) * H
+                let g = 0.03 * min(W, H)
+                let portrait = layout == .portrait
+                let bottom = portrait ? 0.965 * H : 0.95 * H
+                let yTop = portrait ? quietTop * H + 0.04 * H : 0.05 * H
+                let right = (vx0 + vx1) / 2 > W / 2
+                func fitted(_ x0: Double, _ y0: Double, _ x1: Double, _ y1: Double) -> (Double, Double, Double) {
+                    let k = min(max(x1 - x0, 0) / bw, max(y1 - y0, 0) / bh, 2.4)
+                    return (k, (x0 + x1) / 2 - (xmin + xmax) / 2 * k, y1 - ymax * k)
+                }
+                if layout == .widget {
+                    return right ? fitted(0.05 * W, yTop, vx0 - g, bottom) : fitted(vx1 + g, yTop, 0.95 * W, bottom)
+                }
+                if verse.side == .top {
+                    return fitted(0.06 * W, vy1 + g, 0.94 * W, bottom)
+                }
+                let xl = 0.05 * W, xr = 0.95 * W, ey = vy1 + g
+                // 画栏的中线 (花偏好的水平位置)
+                let mid = right ? (xl + vx0 - g) / 2 : (vx1 + g + xr) / 2
+                func place(_ k: Double) -> Double? {
+                    let ty = bottom - ymax * k
+                    var hiMax = -Double.infinity, hiMin = Double.infinity
+                    for p in pts where p.y * k + ty < ey {
+                        hiMax = max(hiMax, p.x)
+                        hiMin = min(hiMin, p.x)
+                    }
+                    var lo = xl - xmin * k, hi = xr - xmax * k
+                    if right, hiMax.isFinite { hi = min(hi, vx0 - g - hiMax * k) }
+                    if !right, hiMin.isFinite { lo = max(lo, vx1 + g - hiMin * k) }
+                    guard lo <= hi else { return nil }
+                    return min(max(mid - (xmin + xmax) / 2 * k, lo), hi)
+                }
+                let kmax = min((xr - xl) / bw, (bottom - yTop) / bh, 2.4)
+                var k = kmax
+                var tx = place(kmax)
+                if tx == nil {
+                    var a = 0.0, b = kmax
+                    for _ in 0..<30 {
+                        let c = (a + b) / 2
+                        if place(c) != nil { a = c } else { b = c }
+                    }
+                    k = a
+                    tx = place(a)
+                }
+                return (k, tx ?? (mid - (xmin + xmax) / 2 * k), bottom - ymax * k)
             }
         }
 
@@ -771,6 +834,17 @@ public extension ZXArt {
             if !xmin.isFinite { xmin = 500; xmax = 700; ymin = 500; ymax = 840 }
             let bw = max(xmax - xmin, 1), bh = max(ymax - ymin, 1)
 
+            let k: Double, tx: Double, ty: Double
+            if let verse = params.verse {
+                var pts: [SIMD2<Double>] = []
+                for p in engine.polys {
+                    for v in p.p where v.x.isFinite && v.y.isFinite {
+                        pts.append(SIMD2(min(max(v.x, 0), 1199), min(max(v.y, 0), 1199)))
+                    }
+                }
+                (k, tx, ty) = Params.placeV2(verse, layout: layout, W: W, H: H, quietTop: params.quietTop,
+                                             bounds: (xmin, xmax, ymin, ymax), pts: pts)
+            } else {
             let region: CGRect
             switch layout {
             case .widget:
@@ -782,9 +856,10 @@ public extension ZXArt {
                 let top = max(0.08 * H, params.quietTop * H + 0.03 * H)
                 region = CGRect(x: 0.08 * W, y: top, width: 0.84 * W, height: 0.94 * H - top)
             }
-            let k = min(Double(region.width) / bw, Double(region.height) / bh, 2.4)
-            let tx = Double(region.midX) - (xmin + xmax) / 2 * k
-            let ty = Double(region.maxY) - ymax * k
+            k = min(Double(region.width) / bw, Double(region.height) / bh, 2.4)
+            tx = Double(region.midX) - (xmin + xmax) / 2 * k
+            ty = Double(region.maxY) - ymax * k
+            }
 
             let pal = params.palette
             let dark = pal.isDark
@@ -826,8 +901,9 @@ public extension ZXArt {
             paper.tint = pal.ink
             paper.strength = dark ? 0.6 : 1
             trace.transform = [k, tx, ty]
-            let d = Drawing(width: W, height: H, background: pal.paper,
+            var d = Drawing(width: W, height: H, background: pal.paper,
                             paper: params.paperTexture ? paper : nil, layers: layers, quietRect: quiet)
+            if let verse = params.verse { d.setVerse(verse, quietTop: params.quietTop) }
             return (d, trace)
         }
     }

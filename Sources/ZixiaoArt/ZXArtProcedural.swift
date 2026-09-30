@@ -3,11 +3,16 @@
 //  契约 (poetryhub 画屏配方, 2026-09-30 定稿):
 //
 //      background.procedural = {
-//        generator: "shanshui@1" | "nonflowers@1",
+//        generator: "shanshui@1" | "nonflowers@1" | "shanshui@2" | "nonflowers@2",
 //        seed: string,
 //        variant: shanshui → "高山" | "江岸" | "远山";  nonflowers → "梅" | "荷" | "菊" | "兰" | "自然",
-//        params: { density?: number (0.5–1.5), hue?: number (0–360, 仅花), quiet_top?: number (0–0.5) }
+//        params: { density?: number (0.5–1.5), hue?: number (0–360, 仅花), quiet_top?: number (0–0.5),
+//                  verse_side?: "left" | "right" | "top" (仅 @2), verse_columns?: int, verse_chars?: int (仅 @2) }
 //      }
+//
+//  @2 (2026-09-30): 构图给诗留一块「诗句框」(`verseLayout`, 见 ZXArtVerse.swift) —— 竖排是一侧的竖栏,
+//  横排是时钟区下的横带 —— 山与花绕开它, 客户端把诗排进这个框。生成器 (随机序列、笔触) 与 @1 相同,
+//  只是构图 (山水: `composeV2`; 花: 摆放的区域) 不同。@1 的代码路径一字未动。
 //
 //  配色取 style.palette 的 paper / ink; wash 缺省 = ink 以 40% 叠在 paper 上。
 //  未知 generator / 版本 / variant → `render` 返回 nil, 调用方回退纸纹 (配方原样保留)。
@@ -27,7 +32,7 @@ import ZixiaoDesign
 public extension ZXArt {
     /// 配方里的程序化背景。Codable 的键与契约一致 (snake_case)。
     struct Procedural: Sendable, Hashable, Codable {
-        /// "shanshui@1" | "nonflowers@1"
+        /// "shanshui@1" | "nonflowers@1" | "shanshui@2" | "nonflowers@2"
         public var generator: String
         public var seed: String
         /// 山水: "高山" | "江岸" | "远山"; 花: "梅" | "荷" | "菊" | "兰" | "自然"
@@ -42,16 +47,29 @@ public extension ZXArt {
             /// 0–0.5: 顶部留白 (锁屏时钟 + 诗句) 占画面高度的份额。缺省 0.32。花的横幅 (中号小组件) 不用它,
             /// 花在右侧、左侧留白; 山水横幅两者都用 (主体在右下)。
             public var quietTop: Double?
+            /// 仅 @2: 诗句落在哪边 ("left" | "right" | "top"), 缺省 "right"。认不出的值 → 本库不画 (回退纸纹)。
+            public var verseSide: String?
+            /// 仅 @2: 诗句几列 (竖) / 几行 (横), 定诗句框的宽 (竖) / 高 (横)。缺省 2, 夹到 1…4。
+            public var verseColumns: Int?
+            /// 仅 @2: 最长一句几个字, 定诗句框的高 (竖) / 宽 (横)。缺省 7, 夹到 4…10。
+            public var verseChars: Int?
 
-            public init(density: Double? = nil, hue: Double? = nil, quietTop: Double? = nil) {
+            public init(density: Double? = nil, hue: Double? = nil, quietTop: Double? = nil,
+                        verseSide: String? = nil, verseColumns: Int? = nil, verseChars: Int? = nil) {
                 self.density = density
                 self.hue = hue
                 self.quietTop = quietTop
+                self.verseSide = verseSide
+                self.verseColumns = verseColumns
+                self.verseChars = verseChars
             }
 
             enum CodingKeys: String, CodingKey {
                 case density, hue
                 case quietTop = "quiet_top"
+                case verseSide = "verse_side"
+                case verseColumns = "verse_columns"
+                case verseChars = "verse_chars"
             }
         }
 
@@ -90,11 +108,13 @@ public extension ZXArt {
         public var isSupported: Bool { resolved != nil }
 
         /// 支持的生成器版本 (客户端可据此决定是否回退纸纹)。
-        public static let supportedGenerators: Set<String> = ["shanshui@1", "nonflowers@1"]
+        public static let supportedGenerators: Set<String> = ["shanshui@1", "nonflowers@1", "shanshui@2", "nonflowers@2"]
 
         enum Resolved {
             case shanshuiV1(ShanShui.Variant)
             case nonflowersV1(Flowers.Season)
+            case shanshuiV2(ShanShui.Variant, VerseSide)
+            case nonflowersV2(Flowers.Season, VerseSide)
         }
 
         var resolved: Resolved? {
@@ -103,9 +123,37 @@ public extension ZXArt {
                 return ShanShui.Variant(rawValue: variant).map { .shanshuiV1($0) }
             case "nonflowers@1":
                 return Flowers.Season(rawValue: variant).map { .nonflowersV1($0) }
+            case "shanshui@2":
+                guard let side = resolvedVerseSide else { return nil }
+                return ShanShui.Variant(rawValue: variant).map { .shanshuiV2($0, side) }
+            case "nonflowers@2":
+                guard let side = resolvedVerseSide else { return nil }
+                return Flowers.Season(rawValue: variant).map { .nonflowersV2($0, side) }
             default:
                 return nil
             }
+        }
+
+        /// @2 的诗句边: 缺省 right; 认不出的值为 nil。
+        var resolvedVerseSide: VerseSide? {
+            guard let raw = params.verseSide else { return .right }
+            return VerseSide(rawValue: raw)
+        }
+
+        /// @2: 这张画在 `pixelSize` 上给诗留的框 (单位坐标)。@1 / 画不出的配方为 nil —— 调用方照旧按
+        /// style.layout 与安全区排字。纯函数, 不生成画 (桌面组件的字与背景分开画, 字这边只需要框)。
+        public func verseLayout(pixelSize: CGSize) -> VerseLayout? {
+            guard pixelSize.width >= 1, pixelSize.height >= 1, let kind = resolved else { return nil }
+            let side: VerseSide
+            switch kind {
+            case .shanshuiV1, .nonflowersV1: return nil
+            case .shanshuiV2(_, let s), .nonflowersV2(_, let s): side = s
+            }
+            let frame = Frame(pixelSize: pixelSize)
+            let quiet = min(max(params.quietTop ?? frame.defaultQuietTop, 0), 0.5)
+            return ZXArt.verseLayout(side: side, frame: frame,
+                                     aspect: Double(pixelSize.width / pixelSize.height), quietTop: quiet,
+                                     columns: params.verseColumns, chars: params.verseChars)
         }
     }
 
@@ -157,6 +205,18 @@ extension ZXArt {
             return Flowers.generateTraced(seed: seed, size: pixelSize,
                                           params: .init(palette: palette, hue: p.params.hue, season: season, layout: layout,
                                                         quietTop: quiet, density: density))
+        case .shanshuiV2(let variant, _):
+            guard let verse = p.verseLayout(pixelSize: pixelSize) else { return nil }
+            var params = ShanShui.Params(palette: palette, density: density, variant: variant, quietTop: quiet)
+            params.verse = verse
+            return ShanShui.generateTraced(seed: seed, size: pixelSize, params: params)
+        case .nonflowersV2(let season, _):
+            guard let verse = p.verseLayout(pixelSize: pixelSize) else { return nil }
+            let layout: Flowers.Layout = frame == .wide ? .widget : (frame == .portrait ? .portrait : .square)
+            var params = Flowers.Params(palette: palette, hue: p.params.hue, season: season, layout: layout,
+                                        quietTop: quiet, density: density)
+            params.verse = verse
+            return Flowers.generateTraced(seed: seed, size: pixelSize, params: params)
         }
     }
 }

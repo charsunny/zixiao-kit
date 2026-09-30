@@ -386,14 +386,17 @@ public extension ZXArt {
             public var quietTop: Double
             /// 是否叠原作的纸纹。
             public var paperTexture: Bool
+            /// @2: 给诗留的框 (单位坐标)。nil = @1 构图 (`compose`); 非 nil = @2 构图 (`composeV2`)。
+            public var verse: VerseLayout?
 
             public init(palette: Palette = .paperInk, density: Double = 0.5, variant: Variant = .alpine,
-                        quietTop: Double = 0.32, paperTexture: Bool = true) {
+                        quietTop: Double = 0.32, paperTexture: Bool = true, verse: VerseLayout? = nil) {
                 self.palette = palette
                 self.density = density
                 self.variant = variant
                 self.quietTop = quietTop
                 self.paperTexture = paperTexture
+                self.verse = verse
             }
         }
 
@@ -415,15 +418,21 @@ public extension ZXArt {
                 H = logicalShortSide; W = logicalShortSide / aspect
             }
             let engine = ShanShuiEngine(seed: seed)
-            let parts = engine.compose(width: W, height: H, params: params)
+            let parts: [ShanShuiEngine.Part]
+            if let verse = params.verse {
+                parts = engine.composeV2(width: W, height: H, params: params, verse: verse)
+            } else {
+                parts = engine.compose(width: W, height: H, params: params)
+            }
             var trace = ZXArt.Trace(logicalWidth: W, logicalHeight: H, prngAfter: engine.e.state)
             for part in parts { for p in part.canv { trace.add(p.p.map { ($0.x, $0.y) }) } }
             var paper = params.paperTexture ? engine.backgroundPaper() : nil
             paper?.tint = params.palette.ink
-            let d = Drawing(width: W, height: H, background: params.palette.paper, paper: paper,
+            var d = Drawing(width: W, height: H, background: params.palette.paper, paper: paper,
                             layers: layers(parts, palette: params.palette),
                             quietRect: W > H * 1.3 ? CGRectCodable(x: 0, y: 0, width: 0.42 * W, height: H)
                                                     : CGRectCodable(x: 0, y: 0, width: W, height: params.quietTop * H))
+            if let verse = params.verse { d.setVerse(verse, quietTop: params.quietTop) }
             return (d, trace)
         }
 

@@ -92,6 +92,11 @@ public extension ZXArt {
         public var layers: [Layer]
         /// 生成器留下的构图提示 (例如「上方 32% 为留白区」), 给排版用, 渲染不读。
         public var quietRect: CGRectCodable?
+        /// @2: 给诗留的框 (逻辑画布坐标), 画绕开了它; 客户端把诗排进这里。@1 为 nil。
+        /// 单位坐标版见 `verseLayout` / `ZXArt.Procedural.verseLayout(pixelSize:)` (同一个数)。
+        public var verseRect: CGRectCodable?
+        /// @2: 诗句框 + 竖排 / 横排 (单位坐标)。@1 为 nil。
+        public var verseLayout: VerseLayout?
 
         public init(width: Double, height: Double, background: ZXHex, paper: PaperTexture? = nil,
                     layers: [Layer] = [], quietRect: CGRectCodable? = nil) {
@@ -101,6 +106,15 @@ public extension ZXArt {
             self.paper = paper
             self.layers = layers
             self.quietRect = quietRect
+        }
+
+        /// @2: 记下诗句框; quietRect 改成「竖幅: 时钟区; 方幅 / 横幅: 诗句框」。
+        mutating func setVerse(_ verse: VerseLayout, quietTop: Double) {
+            let r = verse.rect(in: CGSize(width: width, height: height))
+            verseLayout = verse
+            verseRect = CGRectCodable(x: Double(r.minX), y: Double(r.minY), width: Double(r.width), height: Double(r.height))
+            quietRect = height >= width * 1.3 ? CGRectCodable(x: 0, y: 0, width: width, height: min(max(quietTop, 0), 0.5) * height)
+                                              : verseRect
         }
 
         /// 形状总数 / 顶点总数 (调试与性能日志用)。
