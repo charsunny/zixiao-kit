@@ -1,0 +1,380 @@
+{
+  "cases" : [
+    {
+      "drawing" : {
+        "layers" : [
+          {
+            "kind" : "mist",
+            "points" : 1404,
+            "shapes" : 433,
+            "sumX" : 370462.08901405334,
+            "sumY" : 536217.45022583008
+          },
+          {
+            "kind" : "plain",
+            "points" : 26116,
+            "shapes" : 1261,
+            "sumX" : 7344327.2454694416,
+            "sumY" : 16720450.390014648
+          }
+        ]
+      },
+      "engine" : {
+        "points" : 27520,
+        "polys" : 1694,
+        "prngAfter" : 859074905025,
+        "sumX" : 7714789.3385015586,
+        "sumY" : 17256667.84691304
+      },
+      "generator" : "shanshui@1",
+      "logical" : [
+        420,
+        913.1343283582089
+      ],
+      "palette" : "paperInk (#F2EEE4 \/ #272E2A)",
+      "params" : {
+
+      },
+      "pixelSize" : [
+        1206,
+        2622
+      ],
+      "seed" : "秋分-1",
+      "variant" : "江岸"
+    },
+    {
+      "drawing" : {
+        "layers" : [
+          {
+            "kind" : "mist",
+            "points" : 1964,
+            "shapes" : 615,
+            "sumX" : 1180888.7026367188,
+            "sumY" : 316516.29988098145
+          },
+          {
+            "kind" : "mist",
+            "points" : 1949,
+            "shapes" : 610,
+            "sumX" : 1289151.0915222168,
+            "sumY" : 380190.0383605957
+          },
+          {
+            "kind" : "mist",
+            "points" : 3389,
+            "shapes" : 1090,
+            "sumX" : 2160033.5303955078,
+            "sumY" : 722869.50695800781
+          },
+          {
+            "kind" : "plain",
+            "points" : 10623,
+            "shapes" : 434,
+            "sumX" : 8652386.8008422852,
+            "sumY" : 3648414.7261047363
+          }
+        ]
+      },
+      "engine" : {
+        "points" : 17925,
+        "polys" : 2749,
+        "prngAfter" : 721051349191,
+        "sumX" : 13282460.113582717,
+        "sumY" : 5067990.570895806
+      },
+      "generator" : "shanshui@1",
+      "logical" : [
+        895.6626506024096,
+        420
+      ],
+      "palette" : "paperInk (#F2EEE4 \/ #272E2A)",
+      "params" : {
+        "density" : 1.3999999999999999
+      },
+      "pixelSize" : [
+        1062,
+        498
+      ],
+      "seed" : "a",
+      "variant" : "远山"
+    },
+    {
+      "drawing" : {
+        "layers" : [
+          {
+            "kind" : "mist",
+            "points" : 1566,
+            "shapes" : 487,
+            "sumX" : 354244.96678161621,
+            "sumY" : 333307.34182739258
+          },
+          {
+            "kind" : "plain",
+            "points" : 20701,
+            "shapes" : 980,
+            "sumX" : 2646295.4112397553,
+            "sumY" : 6317309.814743042
+          }
+        ]
+      },
+      "engine" : {
+        "points" : 22298,
+        "polys" : 1468,
+        "prngAfter" : 673227427441,
+        "sumX" : 3004587.9819830651,
+        "sumY" : 6659477.7188909426
+      },
+      "generator" : "shanshui@1",
+      "logical" : [
+        420,
+        420
+      ],
+      "palette" : "paperInk (#F2EEE4 \/ #272E2A)",
+      "params" : {
+        "quiet_top" : 0.40000000000000002
+      },
+      "pixelSize" : [
+        510,
+        510
+      ],
+      "seed" : "2026",
+      "variant" : "高山"
+    },
+    {
+      "drawing" : {
+        "layers" : [
+          {
+            "kind" : "filter",
+            "points" : 60536,
+            "shapes" : 11468,
+            "sumX" : 19450490.338317871,
+            "sumY" : 50415186.140014648
+          },
+          {
+            "kind" : "filter",
+            "points" : 68640,
+            "shapes" : 11880,
+            "sumX" : 22701515.034572601,
+            "sumY" : 58085450.127563477
+          }
+        ]
+      },
+      "engine" : {
+        "points" : 129176,
+        "polys" : 23348,
+        "prngAfter" : 632439876254,
+        "sumX" : 68236928.473788872,
+        "sumY" : 82031323.935299158,
+        "transform" : [
+          2.0424725952642948,
+          -752.61698004764321,
+          -457.09802764203596
+        ]
+      },
+      "generator" : "nonflowers@1",
+      "logical" : [
+        600,
+        1304.4776119402984
+      ],
+      "palette" : "paperInk (#F2EEE4 \/ #272E2A)",
+      "params" : {
+
+      },
+      "pixelSize" : [
+        1206,
+        2622
+      ],
+      "seed" : "42",
+      "variant" : "梅"
+    },
+    {
+      "drawing" : {
+        "layers" : [
+          {
+            "kind" : "filter",
+            "points" : 1753,
+            "shapes" : 362,
+            "sumX" : 1609553.7210083008,
+            "sumY" : 648253.41705322266
+          },
+          {
+            "kind" : "filter",
+            "points" : 4700,
+            "shapes" : 800,
+            "sumX" : 3829543.9368896484,
+            "sumY" : 386332.82226371765
+          }
+        ]
+      },
+      "engine" : {
+        "points" : 6453,
+        "polys" : 1162,
+        "prngAfter" : 712061816824,
+        "sumX" : 3708212.5376440333,
+        "sumY" : 2945770.4621456503,
+        "transform" : [
+          1.0818643021669045,
+          221.18625281555376,
+          -333.54062702975921
+        ]
+      },
+      "generator" : "nonflowers@1",
+      "logical" : [
+        1275.6302521008404,
+        600
+      ],
+      "palette" : "paperInk (#F2EEE4 \/ #272E2A)",
+      "params" : {
+        "hue" : 200
+      },
+      "pixelSize" : [
+        1012,
+        476
+      ],
+      "seed" : "秋分-1",
+      "variant" : "荷"
+    },
+    {
+      "drawing" : {
+        "layers" : [
+          {
+            "kind" : "filter",
+            "points" : 3436,
+            "shapes" : 610,
+            "sumX" : 1196665.6292266846,
+            "sumY" : 3444513.455078125
+          },
+          {
+            "kind" : "filter",
+            "points" : 36736,
+            "shapes" : 6272,
+            "sumX" : 10832133.701660156,
+            "sumY" : 25574505.617126465
+          }
+        ]
+      },
+      "engine" : {
+        "points" : 40172,
+        "polys" : 6882,
+        "prngAfter" : 565815889793,
+        "sumX" : 22194381.692419816,
+        "sumY" : 21872810.999376699,
+        "transform" : [
+          1.8093872787964287,
+          -700.22484706069099,
+          -262.80411466519286
+        ]
+      },
+      "generator" : "nonflowers@1",
+      "logical" : [
+        600,
+        1304.4776119402984
+      ],
+      "palette" : "paperInk (#F2EEE4 \/ #272E2A)",
+      "params" : {
+        "density" : 0.69999999999999996
+      },
+      "pixelSize" : [
+        1206,
+        2622
+      ],
+      "seed" : "2026",
+      "variant" : "菊"
+    },
+    {
+      "drawing" : {
+        "layers" : [
+          {
+            "kind" : "filter",
+            "points" : 13288,
+            "shapes" : 3264,
+            "sumX" : 4044099.3852615356,
+            "sumY" : 5180182.9425506592
+          },
+          {
+            "kind" : "filter",
+            "points" : 10080,
+            "shapes" : 1728,
+            "sumX" : 3139756.8533325195,
+            "sumY" : 2492241.1960144043
+          }
+        ]
+      },
+      "engine" : {
+        "points" : 23368,
+        "polys" : 4992,
+        "prngAfter" : 404978067397,
+        "sumX" : 14534354.574816763,
+        "sumY" : 14173647.470186183,
+        "transform" : [
+          0.8441136430018491,
+          -217.59631755557689,
+          -183.65906645448297
+        ]
+      },
+      "generator" : "nonflowers@1",
+      "logical" : [
+        600,
+        630.50847457627117
+      ],
+      "palette" : "paperInk (#F2EEE4 \/ #272E2A)",
+      "params" : {
+
+      },
+      "pixelSize" : [
+        1062,
+        1116
+      ],
+      "seed" : "a",
+      "variant" : "兰"
+    },
+    {
+      "drawing" : {
+        "layers" : [
+          {
+            "kind" : "filter",
+            "points" : 19964,
+            "shapes" : 3782,
+            "sumX" : 6227791.7120513916,
+            "sumY" : 14085542.459747314
+          },
+          {
+            "kind" : "filter",
+            "points" : 222768,
+            "shapes" : 37440,
+            "sumX" : 62640124.998077393,
+            "sumY" : 140982882.87002563
+          }
+        ]
+      },
+      "engine" : {
+        "points" : 242732,
+        "polys" : 41222,
+        "prngAfter" : 358251867416,
+        "sumX" : 129860859.77317518,
+        "sumY" : 115480055.26135017,
+        "transform" : [
+          1.7020639773832114,
+          -626.87892318395382,
+          -170.91284547950954
+        ]
+      },
+      "generator" : "nonflowers@1",
+      "logical" : [
+        600,
+        1304.4776119402984
+      ],
+      "palette" : "paperInk (#F2EEE4 \/ #272E2A)",
+      "params" : {
+
+      },
+      "pixelSize" : [
+        1206,
+        2622
+      ],
+      "seed" : "1",
+      "variant" : "自然"
+    }
+  ],
+  "note" : "ZixiaoArt @1 cross-platform fixtures. engine = raw generator polygons (shanshui: composition parts in logical units; nonflowers: original 1200x1200 canvas, before transform [k, tx, ty]); drawing = after palette mapping, dropping polygons with < 2 points \/ no visible fill+stroke \/ non-finite points, points stored as Float32. Counts must match exactly; sums to ~1e-6 relative (drawing sums are over Float32-rounded points). prngAfter = PRNG integer state right after generation (before shanshui's background paper)."
+}
