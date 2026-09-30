@@ -4,11 +4,15 @@
 //  display / title 用身份的展示字族 (宋), 所以只能走 UIKit 的外观代理, 在 App 启动时
 //  设一次。字号沿用系统默认 (大字 34 / 内联 17), 只换字族, Dynamic Type 由系统按
 //  textStyle 缩放。
+//
+//  已弃用 (charsunny, 2026-09-29): 导航栏标题改为一律用 iOS 26 系统默认样式 (字体、位置都交给
+//  系统, 见 `ZXNavigationTitle.swift`), App 启动时不再调用本类型。保留一个版本周期后删除。
 
 #if canImport(UIKit)
 import SwiftUI
 import UIKit
 
+@available(*, deprecated, message: "导航栏标题统一用系统默认样式, 不再改外观代理")
 public enum ZXNavigationBarAppearance {
     /// 在 App 启动时调用一次 (需先 `ZXFonts.registerAll()`)。
     /// - Parameters:
