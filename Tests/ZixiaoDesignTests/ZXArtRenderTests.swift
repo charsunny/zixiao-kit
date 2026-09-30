@@ -160,3 +160,28 @@ final class ZXArtRenderTests: XCTestCase {
         XCTAssertEqual(w, 1012)
     }
 }
+
+extension ZXArtRenderTests {
+    /// 花卉渲染耗时拆分: 矢量填描 vs 逐像素滤镜 (滤镜层去掉 filter 再渲一次求差)。
+    func testFlowerRenderBreakdown() throws {
+        let phone = CGSize(width: 402, height: 874)
+        var rows: [Timing] = []
+        for (name, params) in [("plum-portrait", ZXArt.Flowers.Params(season: .plum)), ("1-portrait", .init())] {
+            let seed: ZXArt.Seed = name.hasPrefix("1") ? 1 : 42
+            let d = ZXArt.Flowers.generate(seed: seed, size: phone, params: params)
+            var noFilter = d
+            noFilter.layers = d.layers.map { var l = $0; l.filter = nil; return l }
+            var noPaper = noFilter
+            noPaper.paper = nil
+            let clock = ContinuousClock()
+            func med(_ x: ZXArt.Drawing) -> Double {
+                Self.median((0..<Self.reps).map { _ in Self.ms(clock.measure { _ = ZXArt.render(x, size: phone, scale: 3) }) })
+            }
+            let full = med(d), vec = med(noFilter), bare = med(noPaper)
+            rows.append(Timing(name: "\(name) full", gen: 0, render: full, shapes: d.shapeCount, points: d.pointCount))
+            rows.append(Timing(name: "\(name) vector+paper (no filter)", gen: 0, render: vec, shapes: d.shapeCount, points: d.pointCount))
+            rows.append(Timing(name: "\(name) vector only", gen: 0, render: bare, shapes: d.shapeCount, points: d.pointCount))
+        }
+        Self.log(rows, "Flowers render breakdown")
+    }
+}
