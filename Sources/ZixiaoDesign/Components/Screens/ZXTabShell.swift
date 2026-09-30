@@ -97,12 +97,16 @@ public struct ZXShellScrollView<Content: View>: View {
 public struct ZXTabShell<Content: View>: View {
     let tabs: [ZXTab]
     let external: Binding<String>?
+    /// 各 Tab 的 `NavigationPath`, 外部持有版本 —— 给 App 层的路由用 (深链要 push 一条
+    /// 类型化路由到某个 Tab 的栈里, 而不只是切 Tab)。nil 时壳自己持有, 行为与加这个参数
+    /// 之前逐字节相同。
+    let externalPaths: Binding<[String: NavigationPath]>?
     /// 各 Tab 的根页, 在 init 里按 Tab 求值 (与 @ViewBuilder 内容的惯常语义一致:
     /// 父视图重算时整个壳重建, 根页随之更新), 这样闭包不必逃逸。
     let roots: [String: Content]
 
     @State private var ownSelection: String
-    @State private var paths: [String: NavigationPath] = [:]
+    @State private var ownPaths: [String: NavigationPath] = [:]
     @State private var scrollRequests: [String: Int] = [:]
     @Environment(\.zxTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -110,12 +114,16 @@ public struct ZXTabShell<Content: View>: View {
     /// - Parameters:
     ///   - tabs: Tab 列表, 顺序即显示顺序。
     ///   - selection: 外部持有的选中 Tab id (深链、恢复状态用); nil 则壳自己持有, 默认第一个。
+    ///   - paths: 外部持有的各 Tab `NavigationPath` (深链要 push 类型化路由用); nil 则壳自己
+    ///     持有 (原行为)。谁持有都一样支持「重选当前 Tab 弹回根」—— 壳读写的是同一份绑定。
     ///   - content: 每个 Tab 的根页。壳会把它包进这个 Tab 自己的 NavigationStack;
     ///     根页里用 `NavigationLink(value:)` + `.navigationDestination(for:)` 推页。
     public init(tabs: [ZXTab], selection: Binding<String>? = nil,
+                paths: Binding<[String: NavigationPath]>? = nil,
                 @ViewBuilder content: (ZXTab) -> Content) {
         self.tabs = tabs
         self.external = selection
+        self.externalPaths = paths
         var roots: [String: Content] = [:]
         for tab in tabs { roots[tab.id] = content(tab) }
         self.roots = roots
@@ -143,11 +151,16 @@ public struct ZXTabShell<Content: View>: View {
         )
     }
 
+    /// 各 Tab path 的存取, 不管落在外部绑定还是自己的 `@State` 里都走这一处。
+    private var pathsStorage: Binding<[String: NavigationPath]> {
+        externalPaths ?? Binding(get: { ownPaths }, set: { ownPaths = $0 })
+    }
+
     /// 重选: 栈不空 → 弹回根; 已在根 → 请求滚到顶。
     private func reselect(_ id: String) {
-        if let path = paths[id], !path.isEmpty {
+        if let path = pathsStorage.wrappedValue[id], !path.isEmpty {
             withAnimation(theme.motion.adapted(theme.motion.smooth, reduceMotion: reduceMotion)) {
-                paths[id] = NavigationPath()
+                pathsStorage.wrappedValue[id] = NavigationPath()
             }
         } else {
             scrollRequests[id, default: 0] += 1
@@ -155,7 +168,8 @@ public struct ZXTabShell<Content: View>: View {
     }
 
     private func path(for id: String) -> Binding<NavigationPath> {
-        Binding(get: { paths[id] ?? NavigationPath() }, set: { paths[id] = $0 })
+        Binding(get: { pathsStorage.wrappedValue[id] ?? NavigationPath() },
+                set: { pathsStorage.wrappedValue[id] = $0 })
     }
 
     @ViewBuilder

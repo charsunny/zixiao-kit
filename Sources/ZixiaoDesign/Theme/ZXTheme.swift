@@ -54,17 +54,21 @@ public struct ZXTheme: Sendable {
     /// - Parameters:
     ///   - accentName: 选用身份里 `palette.accents` 的一支备选强调色 (如系列里的诗人身份色);
     ///     找不到就用调色板默认的 accent。
+    ///   - seasonTint: 季节偏色 (T18, V3 §2.7); nil (默认) 不偏, 与加这个参数之前行为一致。
+    ///     App 按 `ZXDay.term` 映射出五行之季, 设备关了「季节色」开关时也传 nil。
     ///   - legibilityWeight: 系统「粗体文本」开关。传进来后 `type` 组的字会跟着加粗
     ///     (随包宋体不会自己响应这个开关)。`zxTheme(_ identity:)` 会自动从环境取。
     ///   - space / radius / motion: 尺度。默认是标准尺; 产品要更圆、更慢, 换一套传进来。
     public nonisolated init(_ identity: ZXIdentity, colorScheme: ColorScheme, accentName: String? = nil,
+                            seasonTint: ZXSeasonTint? = nil,
                             legibilityWeight: LegibilityWeight? = nil,
                             space: ZXSpaceTokens = .standard,
                             radius: ZXRadiusTokens = .standard,
                             motion: ZXMotionTokens = .defaults) {
         self.identity = identity
         self.colorScheme = colorScheme
-        let color = ZXColorTokens(identity: identity, colorScheme: colorScheme, accentName: accentName)
+        let color = ZXColorTokens(identity: identity, colorScheme: colorScheme, accentName: accentName,
+                                  seasonTint: seasonTint)
         self.color = color
         paperHex = color.values.paper
         inkHex = color.values.ink
@@ -149,20 +153,24 @@ public extension View {
     ///
     /// 这是 App 根视图该用的入口。Flutter 版吃过亏: 颜色在构建时按当时的亮度烤死,
     /// 外观一切换, 缓存的页面全都不跟着变。这里每次外观变化都重新解析。
-    func zxTheme(_ identity: ZXIdentity, accentName: String? = nil) -> some View {
-        modifier(ZXThemeResolver(identity: identity, accentName: accentName))
+    ///
+    /// - Parameter seasonTint: 季节偏色 (T18); nil (默认) 不偏。App 传当前节气映射出的季,
+    ///   或者设备关了「季节色」开关时传 nil —— 这里也随外观切换一起重新解析, 不需要单独处理。
+    func zxTheme(_ identity: ZXIdentity, accentName: String? = nil, seasonTint: ZXSeasonTint? = nil) -> some View {
+        modifier(ZXThemeResolver(identity: identity, accentName: accentName, seasonTint: seasonTint))
     }
 }
 
 private struct ZXThemeResolver: ViewModifier {
     let identity: ZXIdentity
     let accentName: String?
+    let seasonTint: ZXSeasonTint?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.legibilityWeight) private var legibilityWeight
 
     func body(content: Content) -> some View {
         content.environment(\.zxTheme, ZXTheme(identity, colorScheme: colorScheme, accentName: accentName,
-                                               legibilityWeight: legibilityWeight))
+                                               seasonTint: seasonTint, legibilityWeight: legibilityWeight))
     }
 }
 

@@ -6,8 +6,10 @@ import XCTest
 final class ColorTokenTests: XCTestCase {
     private let schemes: [ColorScheme] = [.light, .dark]
 
-    private func tokens(_ which: ZXBundledIdentity, _ scheme: ColorScheme, accent: String? = nil) throws -> ZXColorTokens.Values {
-        ZXColorTokens(identity: try ZXIdentity.bundled(which), colorScheme: scheme, accentName: accent).values
+    private func tokens(_ which: ZXBundledIdentity, _ scheme: ColorScheme, accent: String? = nil,
+                        seasonTint: ZXSeasonTint? = nil) throws -> ZXColorTokens.Values {
+        ZXColorTokens(identity: try ZXIdentity.bundled(which), colorScheme: scheme, accentName: accent,
+                     seasonTint: seasonTint).values
     }
 
     /// 压在 accent 上的字 ≥ 4.5:1 (WCAG 正文)。含系列里的备选强调色。
@@ -123,6 +125,47 @@ final class ColorTokenTests: XCTestCase {
         XCTAssertEqual(v.warning, v.ink)
         XCTAssertEqual(v.info, v.ink)
         XCTAssertEqual(v.danger, v.seal)
+    }
+
+    /// 季节偏色 (T18): 五季 × 两身份 × 浅深, 偏色之后 textPrimary 对 bg / surface、
+    /// accentOn 对 accent 仍要 ≥ 4.5:1 —— 偏色只揉纸面, 墨与 accent 本身不变, 这条理应稳过;
+    /// 写成测试是为了未来有人调偏色比例或换偏色本身时, 一旦揉过头立刻在这里炸。
+    func testSeasonTintKeepsContrast() throws {
+        for which in ZXBundledIdentity.allCases {
+            for scheme in schemes {
+                for tint in ZXSeasonTint.allCases {
+                    let v = try tokens(which, scheme, seasonTint: tint)
+                    XCTAssertGreaterThanOrEqual(v.textPrimary.contrast(with: v.bg), 4.5,
+                                                "\(which) \(scheme) \(tint) textPrimary/bg")
+                    XCTAssertGreaterThanOrEqual(v.textPrimary.contrast(with: v.surface), 4.5,
+                                                "\(which) \(scheme) \(tint) textPrimary/surface")
+                    let accentRatio = v.accentOn.contrast(with: v.accent.composited(over: v.bg))
+                    XCTAssertGreaterThanOrEqual(accentRatio, 4.5, "\(which) \(scheme) \(tint) accentOn/accent")
+                }
+            }
+        }
+    }
+
+    /// nil 是「不偏」, 逐字节等于没加这个参数之前。
+    func testSeasonTintNilIsIdentity() throws {
+        for which in ZXBundledIdentity.allCases {
+            for scheme in schemes {
+                let plain = try tokens(which, scheme)
+                let withNilTint = try tokens(which, scheme, seasonTint: nil)
+                XCTAssertEqual(plain, withNilTint, "\(which) \(scheme)")
+            }
+        }
+    }
+
+    /// 偏色只动纸面: 墨、accent 原样不变; bg / surface 确实挪了一点点 (不是摆设)。
+    func testSeasonTintOnlyMovesPaper() throws {
+        let plain = try tokens(.monochromeInk, .light)
+        let tinted = try tokens(.monochromeInk, .light, seasonTint: .spring)
+        XCTAssertEqual(tinted.ink, plain.ink)
+        XCTAssertEqual(tinted.accent, plain.accent)
+        XCTAssertEqual(tinted.seal, plain.seal)
+        XCTAssertNotEqual(tinted.bg, plain.bg)
+        XCTAssertNotEqual(tinted.surface, plain.surface)
     }
 
     func testHexArithmetic() throws {
