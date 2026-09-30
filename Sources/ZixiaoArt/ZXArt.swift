@@ -9,11 +9,12 @@
 //  (`ZXArt.render`) 只读 `Drawing`, 不再取随机数。随机源是原作的 PRNG 与 Perlin 噪声,
 //  按原作的调用顺序逐次消耗, 同 seed 与原 JS 取到完全相同的序列 (见 Tests/…/Fixtures/zxart)。
 //
-//  放在 ZixiaoDesign 里是因为 README 不许改 target 结构; 它不依赖设计系统的其余部分,
-//  产品化时值得拆成独立模块 (ZixiaoArt), 见 spike 报告。
+//  独立模块 ZixiaoArt: 只依赖 ZixiaoDesign 的色值 (`ZXHex`)。配方侧的入口见 `ZXArtProcedural.swift`
+//  (`ZXArt.Procedural` + `ZXArt.render(procedural:palette:pixelSize:)`)。
 
 import CoreGraphics
 import Foundation
+import ZixiaoDesign
 
 /// 程序化国画: 山水 (`ShanShui`) 与花卉 (`Flowers`) 两个生成器, 共享的随机源、笔触与渲染器。
 public enum ZXArt {}

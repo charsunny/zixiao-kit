@@ -2,7 +2,7 @@
 // ZXArt parity harness — runs the ORIGINAL LingDong- JavaScript headlessly (node:vm + a
 // minimal DOM/canvas shim) and dumps fixtures that the Swift port is tested against.
 //
-//   node Tools/zxart-fixtures/generate.cjs            # writes Tests/ZixiaoDesignTests/Fixtures/zxart/*.json
+//   node Tools/zxart-fixtures/generate.cjs            # writes Tests/ZixiaoArtTests/Fixtures/zxart/*.json
 //   ZXART_SRC=/path/to/clones node ...                # reuse existing clones
 //
 // Sources are pinned to exact commits (MIT, (c) 2018 Lingdong Huang):
@@ -29,7 +29,7 @@ const FLOW_SHA = "03b653d220f16c6bed7ea9c7edc852f7e91846cb";
 const SEEDS = ["1", "42", "2026"];
 
 const repoRoot = path.resolve(__dirname, "..", "..");
-const outDir = path.join(repoRoot, "Tests", "ZixiaoDesignTests", "Fixtures", "zxart");
+const outDir = path.join(repoRoot, "Tests", "ZixiaoArtTests", "Fixtures", "zxart");
 const srcRoot = process.env.ZXART_SRC || "/tmp/zxart-src";
 
 function ensureClone(name, sha) {

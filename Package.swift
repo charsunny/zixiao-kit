@@ -13,6 +13,7 @@ let package = Package(
         .library(name: "ZixiaoDesign", targets: ["ZixiaoDesign"]),
         .library(name: "ZixiaoCalendar", targets: ["ZixiaoCalendar"]),
         .library(name: "ZixiaoLibrary", targets: ["ZixiaoLibrary"]),
+        .library(name: "ZixiaoArt", targets: ["ZixiaoArt"]),
         .library(name: "SwiftPieces", targets: ["SwiftPieces"]),
     ],
     dependencies: [
@@ -57,10 +58,20 @@ let package = Package(
             resources: [.process("Resources")],
             swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]
         ),
+        // 程序化国画 (画屏背景): 山水 (shan-shui-inf) 与花卉 (nonflowers) 的 Swift 移植 (MIT, 许可全文在
+        // ZXArtLicenses.swift, 以 ZXArt.acknowledgements 暴露)。只依赖 ZixiaoDesign 的色值 (ZXHex);
+        // 纯 CoreGraphics 渲染, 可在小组件扩展 / 后台线程里调用。
+        .target(
+            name: "ZixiaoArt",
+            dependencies: ["ZixiaoDesign"],
+            swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]
+        ),
         .testTarget(name: "ZixiaoCoreTests", dependencies: ["ZixiaoCore"]),
         .testTarget(name: "ZixiaoDesignTests", dependencies: ["ZixiaoDesign"]),
         // 金标 fixture 在仓库根 Fixtures/, 测试用 #filePath 定位读取 (SPM 不允许 target 外的 resources)。
         .testTarget(name: "ZixiaoCalendarTests", dependencies: ["ZixiaoCalendar"]),
         .testTarget(name: "ZixiaoLibraryTests", dependencies: ["ZixiaoLibrary"], resources: [.process("Resources")]),
+        // 对拍金标 (原作 JS 跑出, Tools/zxart-fixtures/generate.cjs) 随测试包拷贝, 用 Bundle.module 读取。
+        .testTarget(name: "ZixiaoArtTests", dependencies: ["ZixiaoArt"], resources: [.copy("Fixtures")]),
     ]
 )

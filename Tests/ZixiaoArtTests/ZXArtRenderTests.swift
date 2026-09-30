@@ -8,7 +8,8 @@ import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
 import XCTest
-@testable import ZixiaoDesign
+@testable import ZixiaoArt
+import ZixiaoDesign
 
 final class ZXArtRenderTests: XCTestCase {
     static let outDir = URL(fileURLWithPath: "/tmp/zxart-shots", isDirectory: true)

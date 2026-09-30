@@ -10,6 +10,7 @@
 //  `&&` / `||` 短路)。
 
 import Foundation
+import ZixiaoDesign
 
 extension ZXArt {
     /// 原作的 CSS 颜色, 0…255 + alpha。山水全是灰阶 (r == g == b)。

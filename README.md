@@ -12,13 +12,16 @@
 | ZixiaoDesign | 设计 token、身份 (Identity) JSON、字体注册、文化组件 (印章、竖排、线装封面、釉面面板、分节标题) | 无 |
 | ZixiaoCalendar | 农历、干支、节气、七十二候、花信、时辰更点、年号纪年、节日 | lunar-swift |
 | ZixiaoLibrary | book.json 模型、目录、随包 / 云端书库 (sha256)、阅读状态、线装书阅读器 | ZixiaoDesign |
+| ZixiaoArt | 程序化国画 (画屏背景): 山水 (shan-shui-inf 移植) 与花卉 (nonflowers 移植), 配方 `background.procedural` 的解码与渲染 (纯 CoreGraphics, 小组件 / 后台线程可用); MIT 致谢 `ZXArt.acknowledgements` | ZixiaoDesign |
 
 ## 规则
 
 - 内核里不出现任何产品专属逻辑 (不写「玄览」「苏轼」)。产品差异靠 Identity JSON 与资源注入。
 - 所有 public 模型与服务类型标 `Sendable`, 开 StrictConcurrency。SwiftUI View 本身不要求 Sendable, 但它交出去的数据必须是。
 - 每个模块有测试; 历法类必须对齐 `Fixtures/` 里的金标。
-- 不改 `Package.swift` 的 target 结构; 需要加依赖或资源, 在 PR 说明里提出。
+- 不擅自改 `Package.swift` 的 target 结构; 加模块 / 依赖 / 资源须先经 charsunny 同意并在 PR 说明里写明
+  (ZixiaoArt 独立成模块已获批, 2026-09-30)。
+- 第三方移植代码 (目前只有 ZixiaoArt) 的许可全文随模块走 (`ZXArtLicenses.swift`), 仓库根 `LICENSES/` 列出处与上游 commit。
 
 ## 验证
 

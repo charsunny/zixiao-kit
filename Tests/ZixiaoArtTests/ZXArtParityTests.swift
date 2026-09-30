@@ -1,19 +1,20 @@
 //  ZXArtParityTests.swift — Swift 移植 vs 原 JS 的对拍
 //
-//  金标由 Tools/zxart-fixtures/generate.cjs 跑原作 JS 生成 (Fixtures/zxart/*.json)。
+//  金标由 Tools/zxart-fixtures/generate.cjs 跑原作 JS 生成 (Fixtures/zxart/*.json, 以测试包资源读取)。
 //  - PRNG: 逐位相等 (整数状态 + 前 64 个输出)。
 //  - Perlin / 几何: 逐点比较, 容差 1e-9 (JS 与 Apple libm 的 sin/cos/atan2 末位可能差 1 ulp)。
 //  - 每个用例结束时的 PRNG 状态逐位相等 —— 证明随机数的消耗次数与顺序完全一致。
 
 import XCTest
-@testable import ZixiaoDesign
+@testable import ZixiaoArt
+import ZixiaoDesign
 
 final class ZXArtParityTests: XCTestCase {
     static let seeds = ["1", "42", "2026"]
 
     static func fixture(_ name: String) throws -> [String: Any] {
-        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .appendingPathComponent("Fixtures/zxart/\(name).json")
+        let url = try XCTUnwrap(Bundle.module.url(forResource: name, withExtension: "json",
+                                                  subdirectory: "Fixtures/zxart"), "missing fixture \(name)")
         let data = try Data(contentsOf: url)
         return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }

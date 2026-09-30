@@ -9,6 +9,7 @@
 //  回写复现这个副作用。
 
 import Foundation
+import ZixiaoDesign
 
 extension ShanShuiEngine {
     private func leafAlpha(_ col: C) -> Double { col.a }

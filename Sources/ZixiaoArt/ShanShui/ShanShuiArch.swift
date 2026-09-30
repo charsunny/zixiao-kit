@@ -8,6 +8,7 @@
 //  消耗, 文字不画。
 
 import Foundation
+import ZixiaoDesign
 
 extension ShanShuiEngine {
     private static let one: @Sendable (Double) -> Double = { _ in 1 }
