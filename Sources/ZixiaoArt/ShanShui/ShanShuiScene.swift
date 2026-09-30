@@ -222,84 +222,144 @@ extension ShanShuiEngine {
         return ShanShuiEngine.shifted(canv, dx: 0, dy: min(topY - t, maxShiftDown))
     }
 
-    /// 手机竖幅: 上方 `quietTop` 留白 (锁屏时钟 + 诗句); 下方 (H - q) 相当于原作 800 高的视窗。
-    func compose(width W: Double, height H: Double, params: ZXArt.ShanShui.Params) -> [(ZXArt.SSCanv, Bool)] {
+    /// 构图的一个部分: 一段多边形, 远山另带雾化参数 (渲染成单独的雾化层)。
+    struct Part {
+        struct Mist { var depth: Double; var blur: Double; var peak: Double; var floorY: Double; var floorDepth: Double }
+        var canv: ZXArt.SSCanv
+        var mist: Mist? = nil
+    }
+
+    /// 画框: 可画区域 (逻辑单位)。竖幅 / 方幅 = 整宽 × 留白以下; 横幅 (小组件) = 右侧, 左侧留给诗句。
+    struct Frame {
+        var x0: Double, x1: Double, top: Double, bottom: Double
+        /// 横幅: 主体靠右, 左侧 (x < x0) 只允许极淡的远山 / 水纹。
+        var wide: Bool
+        var w: Double { x1 - x0 }
+        var h: Double { bottom - top }
+        func x(_ f: Double) -> Double { x0 + f * w }
+        func y(_ f: Double) -> Double { top + f * h }
+    }
+
+    /// 构图 @1 (shanshui@1)。所有随机数都从本引擎按固定顺序取 —— 改动这里的任何取数 / 位置都会
+    /// 改变 @1 的出图, 必须另开 @2 (保留本函数不动)。
+    func compose(width W: Double, height H: Double, params: ZXArt.ShanShui.Params) -> [Part] {
         drawTowers = false
         let d = min(max(params.density, 0), 1)
-        var layers: [(ZXArt.SSCanv, Bool)] = []  // (canv, isDistant)
-        let q = params.quietTop * H
-        let R = H - q  // 可画区域高度
+        let q = min(max(params.quietTop, 0), 0.5) * H
+        let wide = W > H * 1.3
+        let fr = wide ? Frame(x0: 0.42 * W, x1: W, top: q, bottom: H, wide: true)
+                      : Frame(x0: 0, x1: W, top: q, bottom: H, wide: false)
+        let R = fr.h
         let texScale = 0.7 + 0.6 * d
+        var parts: [Part] = []
 
-        func distant(_ y: Double, _ hei: Double) -> ZXArt.SSCanv {
-            let l = ((W + 400) / 50).rounded(.up) * 50
-            return distMount(-200 + (r() - 0.5) * 100, y, r() * 100, hei: hei, len: l)
+        /// 远山: 一条横贯画框的远山, 渲染时雾化 (山脊以下淡出、底边化进雾里、整体柔化)。
+        func distant(_ y: Double, _ hei: Double, from xa: Double, to xb: Double, peak: Double = 0.9) -> Part {
+            let len = ((xb - xa + 300) / 50).rounded(.up) * 50
+            let c = distMount(xa - 150 + (r() - 0.5) * 60, y, r() * 100, hei: hei, len: len)
+            return Part(canv: c, mist: .init(depth: hei * 1.1, blur: 1.2, peak: peak, floorY: y + 8, floorDepth: hei * 0.55))
         }
-        func waterLines(_ y0: Double, _ y1: Double, count: Int) -> ZXArt.SSCanv {
+        func waterLines(_ y0: Double, _ y1: Double, count: Int, xa: Double, xb: Double) -> ZXArt.SSCanv {
             var c: ZXArt.SSCanv = []
+            let span = xb - xa
             for k in 0..<count {
                 let t = count == 1 ? 0.5 : Double(k) / Double(count - 1)
                 let y = y0 + (y1 - y0) * t + (r() - 0.5) * 10
-                let x = W * (0.15 + 0.7 * r())
-                c += water(x, y, Double(k) * 2, hei: 2, len: W * (0.45 + 0.35 * r()), clu: 4 + Int(3 * d))
+                let x = xa + span * (0.2 + 0.6 * r())
+                c += water(x, y, Double(k) * 2, hei: 2, len: span * (0.4 + 0.3 * r()), clu: 3 + Int(3 * d))
             }
             return c
         }
-        func boat(_ y: Double, _ sca: Double) -> ZXArt.SSCanv {
-            boat01(W * (0.12 + 0.6 * r()), y, r(), sca: sca, fli: e.choice([true, false]))
+        func boat(_ x: Double, _ y: Double, _ sca: Double) -> ZXArt.SSCanv {
+            boat01(x, y, r(), sca: sca, fli: e.choice([true, false]))
+        }
+        /// 近岸: 平岸 (不带原作的 flatDec 杂物) + 克制的点景: 一丛同种的树、一两块石。
+        /// `cx` 在画框边上 (岸的一半在画外), `inward` 指向画面内侧。
+        func bank(_ cx: Double, _ y: Double, wid: Double, inward: Double) -> ZXArt.SSCanv {
+            var c = flatMount(cx, y, 2 * r() * Double.pi, hei: 90, wid: wid, tex: 70 * texScale, cho: 0.5 + r() * 0.2,
+                              dec: false)
+            guard let top = ShanShuiEngine.top(c) else { return c }
+            let ground = top + 14
+            // 一丛树 (同一树种, 2–4 棵), 靠画框外侧
+            let species = r() < 0.5 ? 1 : 3
+            let count = 2 + Int(r() * (1 + 2 * d))
+            let tx0 = cx + inward * wid * (0.06 + 0.06 * r())
+            for k in 0..<count {
+                let tx = tx0 + inward * Double(k) * (9 + 7 * r())
+                let ht = (species == 1 ? 55 : 70) * (0.75 + 0.5 * r())
+                if species == 1 {
+                    c += tree01(tx, ground + 4 * r(), hei: ht, wid: 2 + 2 * r(), col: .ink(0.45 + 0.15 * r()))
+                } else {
+                    let bc = r() * 0.08
+                    c += tree03(tx, ground + 4 * r(), hei: ht, ben: { pow($0 * bc, 1) }, col: .ink(0.35 + 0.1 * r()))
+                }
+            }
+            // 石: 靠内侧 1–2 块小石
+            let rocks = 1 + (r() < 0.4 ? 1 : 0)
+            for k in 0..<rocks {
+                let rx = cx + inward * wid * (0.26 + 0.08 * Double(k) + 0.05 * r())
+                c += rock(rx, ground + 6, r() * 100, hei: 10 + 8 * r(), wid: 14 + 10 * r(), sha: 2)
+            }
+            return c
         }
 
         switch params.variant {
         case .alpine:
-            layers.append((distant(q + 0.20 * R, 70), true))
+            parts.append(distant(fr.y(0.22), 70, from: wide ? 0.45 * W : 0, to: W))
+            let side: Double = wide ? 1 : (r() < 0.5 ? -1 : 1)
             let backCount = d < 0.25 ? 0 : (d < 0.7 ? 1 : 2)
-            let side: Double = r() < 0.5 ? -1 : 1
             var backs: ZXArt.SSCanv = []
             for k in 0..<backCount {
                 let sgn = k == 0 ? side : -side
-                let m = mountain(W * (0.5 + sgn * (0.30 + 0.1 * r())), q + 0.6 * R, r() * 100,
-                                 hei: (0.55 + 0.15 * r()) * R, wid: (0.7 + 0.2 * r()) * W, tex: 150 * texScale)
-                backs += placed(m, topY: q + (0.14 + 0.08 * r()) * R)
+                let bx = wide ? fr.x(0.5 + sgn * (0.28 + 0.08 * r())) : fr.x(0.5 + sgn * (0.30 + 0.1 * r()))
+                let m = mountain(bx, fr.y(0.6), r() * 100, hei: (0.55 + 0.15 * r()) * R,
+                                 wid: (0.7 + 0.2 * r()) * (wide ? 0.8 * fr.w : fr.w), tex: 150 * texScale)
+                backs += placed(m, topY: fr.y(0.14 + 0.08 * r()))
             }
-            layers.append((backs, false))
-            let main = placed(mountain(W * (0.5 - side * (0.05 + 0.08 * r())), q + 0.75 * R, r() * 100,
-                                       hei: (0.95 + 0.2 * r()) * R, wid: (1.0 + 0.25 * r()) * W, tex: 220 * texScale),
-                              topY: q + (0.04 + 0.05 * r()) * R)
+            parts.append(Part(canv: backs))
+            let mx = wide ? fr.x(0.55 + 0.08 * r()) : fr.x(0.5 - side * (0.05 + 0.08 * r()))
+            let main = placed(mountain(mx, fr.y(0.75), r() * 100, hei: (0.95 + 0.2 * r()) * R,
+                                       wid: (1.0 + 0.25 * r()) * (wide ? 0.75 * fr.w : fr.w), tex: 220 * texScale),
+                              topY: fr.y(0.04 + 0.05 * r()))
             // 水从主峰山脚 (实测) 往下铺, 画在山的下面。
-            let base = min(ShanShuiEngine.bottom(main) ?? (q + 0.8 * R), H - 0.12 * R)
-            layers.append((waterLines(base - 0.02 * R, H - 0.03 * R, count: 2 + Int(3 * d)), false))
-            layers.append((main, false))
-            if d > 0.2 { layers.append((boat(q + (0.90 + 0.06 * r()) * R, 0.6), false)) }
-        case .riverbank:
-            layers.append((distant(q + 0.16 * R, 60), true))
-            let side: Double = r() < 0.5 ? -1 : 1
-            let m = mountain(W * (0.5 + side * 0.34), q + 0.45 * R, r() * 100, hei: (0.55 + 0.15 * r()) * R,
-                             wid: 0.8 * W, tex: 160 * texScale)
-            layers.append((placed(m, topY: q + (0.10 + 0.08 * r()) * R), false))
-            if d > 0.45 {
-                let m2 = mountain(W * (0.5 - side * 0.42), q + 0.50 * R, r() * 100, hei: 0.35 * R, wid: 0.55 * W,
-                                  tex: 100 * texScale, veg: true)
-                layers.append((placed(m2, topY: q + (0.30 + 0.06 * r()) * R), false))
+            let base = min(ShanShuiEngine.bottom(main) ?? fr.y(0.8), H - 0.12 * R)
+            parts.append(Part(canv: waterLines(base - 0.02 * R, H - 0.03 * R, count: 2 + Int(3 * d), xa: fr.x0, xb: fr.x1)))
+            parts.append(Part(canv: main))
+            if d > 0.2 {
+                let by = fr.y(0.90 + 0.06 * r())
+                parts.append(Part(canv: boat(fr.x(0.12 + 0.6 * r()), by, 0.6)))
             }
-            layers.append((waterLines(q + 0.55 * R, q + 0.72 * R, count: 2 + Int(2 * d)), false))
-            if d > 0.2 { layers.append((boat(q + 0.64 * R, 0.55), false)) }
-            let fw = (1.1 + 0.3 * r()) * W
-            layers.append((flatMount(W * (0.5 - side * 0.1), q + 0.97 * R, 2 * r() * Double.pi, hei: 100, wid: fw,
-                                     tex: 80 * texScale, cho: 0.5 + r() * 0.2), false))
+        case .riverbank:
+            parts.append(distant(fr.y(0.16), 60, from: wide ? 0.45 * W : 0, to: W))
+            let side: Double = wide ? 1 : (r() < 0.5 ? -1 : 1)
+            let m = mountain(fr.x(0.5 + side * 0.34), fr.y(0.45), r() * 100, hei: (0.55 + 0.15 * r()) * R,
+                             wid: 0.8 * fr.w, tex: 160 * texScale)
+            parts.append(Part(canv: placed(m, topY: fr.y(0.10 + 0.08 * r()))))
+            if d > 0.45 {
+                let m2 = mountain(fr.x(0.5 - side * 0.42), fr.y(0.50), r() * 100, hei: 0.35 * R, wid: 0.55 * fr.w,
+                                  tex: 100 * texScale, veg: true)
+                parts.append(Part(canv: placed(m2, topY: fr.y(0.30 + 0.06 * r()))))
+            }
+            parts.append(Part(canv: waterLines(fr.y(0.55), fr.y(0.74), count: 2 + Int(2 * d), xa: fr.x0, xb: fr.x1)))
+            if d > 0.2 { parts.append(Part(canv: boat(fr.x(0.5 - side * (0.05 + 0.2 * r())), fr.y(0.64), 0.55))) }
+            // 近岸在主山的对侧下角, 画面下方正中留出水面。
+            let bw = (0.75 + 0.15 * r()) * fr.w
+            parts.append(Part(canv: bank(fr.x(0.5 - side * 0.5), fr.y(0.95), wid: bw, inward: side)))
         case .distant:
             let rows = d < 0.4 ? 2 : 3
             for k in 0..<rows {
-                layers.append((distant(q + (0.14 + 0.13 * Double(k)) * R, 55 + 30 * Double(k)), true))
+                let fk = Double(k)
+                parts.append(distant(fr.y(0.14 + 0.13 * fk), 80 + 35 * fk, from: wide ? 0.4 * W : 0, to: W,
+                                     peak: 0.5 + 0.22 * fk))
             }
-            layers.append((waterLines(q + 0.62 * R, q + 0.92 * R, count: 2 + Int(2 * d)), false))
-            if d > 0.15 { layers.append((boat(q + (0.72 + 0.1 * r()) * R, 0.5), false)) }
+            parts.append(Part(canv: waterLines(fr.y(0.62), fr.y(0.92), count: 2 + Int(2 * d), xa: fr.x0, xb: fr.x1)))
+            if d > 0.15 { parts.append(Part(canv: boat(fr.x(0.15 + 0.6 * r()), fr.y(0.72 + 0.1 * r()), 0.5))) }
             if d > 0.5 {
-                let side: Double = r() < 0.5 ? -1 : 1
-                layers.append((flatMount(W * (0.5 + side * 0.45), q + 1.0 * R, 2 * r() * Double.pi, hei: 100,
-                                         wid: 0.8 * W, tex: 60 * texScale, cho: 0.55), false))
+                let side: Double = wide ? 1 : (r() < 0.5 ? -1 : 1)
+                parts.append(Part(canv: bank(fr.x(0.5 + side * 0.5), fr.y(0.97), wid: 0.7 * fr.w, inward: -side)))
             }
         }
-        return layers
+        return parts
     }
 }
 
@@ -342,6 +402,11 @@ public extension ZXArt {
 
         /// 纯函数: 同一 (seed, size, params) 永远得到同一张画。`size` 只决定长宽比。
         public static func generate(seed: Seed, size: CGSize, params: Params = Params()) -> Drawing {
+            generateTraced(seed: seed, size: size, params: params).drawing
+        }
+
+        /// generate + 生成器原始输出的统计 (跨平台对拍金标用, 见 Fixtures/zxart/procedural-v1.json)。
+        static func generateTraced(seed: Seed, size: CGSize, params: Params) -> (drawing: Drawing, trace: ZXArt.Trace) {
             let aspect = size.width > 0 && size.height > 0 ? Double(size.height / size.width) : 2
             let W: Double, H: Double
             if aspect >= 1 {
@@ -351,14 +416,36 @@ public extension ZXArt {
             }
             let engine = ShanShuiEngine(seed: seed)
             let parts = engine.compose(width: W, height: H, params: params)
+            var trace = ZXArt.Trace(logicalWidth: W, logicalHeight: H, prngAfter: engine.e.state)
+            for part in parts { for p in part.canv { trace.add(p.p.map { ($0.x, $0.y) }) } }
             var paper = params.paperTexture ? engine.backgroundPaper() : nil
             paper?.tint = params.palette.ink
-            var shapes: [Shape] = []
-            shapes.reserveCapacity(parts.reduce(0) { $0 + $1.0.count })
-            for (canv, _) in parts { ZXArt.appendShapes(canv, palette: params.palette, into: &shapes) }
-            return Drawing(width: W, height: H, background: params.palette.paper, paper: paper,
-                           layers: [Layer(shapes: shapes)],
-                           quietRect: CGRectCodable(x: 0, y: 0, width: W, height: params.quietTop * H))
+            let d = Drawing(width: W, height: H, background: params.palette.paper, paper: paper,
+                            layers: layers(parts, palette: params.palette),
+                            quietRect: W > H * 1.3 ? CGRectCodable(x: 0, y: 0, width: 0.42 * W, height: H)
+                                                    : CGRectCodable(x: 0, y: 0, width: W, height: params.quietTop * H))
+            return (d, trace)
+        }
+
+        /// 构图各部分 → 图层: 远山各成一个雾化层, 其余按先后并进普通层。
+        static func layers(_ parts: [ShanShuiEngine.Part], palette: Palette) -> [Layer] {
+            var out: [Layer] = []
+            var current: [Shape] = []
+            for part in parts {
+                if let m = part.mist {
+                    if !current.isEmpty { out.append(Layer(shapes: current)); current = [] }
+                    var shapes: [Shape] = []
+                    ZXArt.appendShapes(part.canv, palette: palette, into: &shapes, washContrast: 0.4)
+                    let (ridge, x0) = LayerMist.ridge(of: shapes, step: 2)
+                    out.append(Layer(mist: LayerMist(depth: m.depth, blur: m.blur, peakOpacity: m.peak, ridge: ridge,
+                                                     ridgeX0: x0, ridgeStep: 2, floorY: m.floorY, floorDepth: m.floorDepth),
+                                     shapes: shapes))
+                } else {
+                    ZXArt.appendShapes(part.canv, palette: palette, into: &current)
+                }
+            }
+            if !current.isEmpty { out.append(Layer(shapes: current)) }
+            return out
         }
 
         /// 原作网页打开时的第一屏 (3000×800 横卷, 对拍与预览用)。
@@ -378,10 +465,12 @@ public extension ZXArt {
 
 extension ZXArt {
     /// SSPoly → Shape (灰阶映射到调色板; 透明填充 / 零线宽丢掉)。
-    static func appendShapes(_ canv: SSCanv, palette: Palette, into shapes: inout [Shape]) {
+    /// `washContrast`: 远山灰度围绕 227 压缩 (1 = 原作; 雾化层用 0.4, 三角面片的深浅差更小, 看不出棱面)。
+    static func appendShapes(_ canv: SSCanv, palette: Palette, into shapes: inout [Shape], washContrast: Double = 1) {
         func map(_ c: SSColor?, wash: Bool) -> ZXHex? {
             guard let c, c.a > 0 else { return nil }
-            let g = (c.r + c.g + c.b) / 3
+            var g = (c.r + c.g + c.b) / 3
+            if wash { g = 227 + (g - 227) * washContrast }
             return wash ? palette.mapWash(g, alpha: min(c.a, 1)) : palette.mapGray(g, alpha: min(c.a, 1))
         }
         for p in canv where p.p.count >= 2 {

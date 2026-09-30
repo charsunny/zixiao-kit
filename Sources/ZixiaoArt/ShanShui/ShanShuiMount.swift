@@ -206,7 +206,7 @@ extension ShanShuiEngine {
     struct Bound { var xmin: Double, xmax: Double, ymin: Double, ymax: Double }
 
     func flatMount(_ xoff: Double, _ yoff: Double, _ seed: Double = 0, hei hIn: Double? = nil, wid wIn: Double? = nil,
-                   tex: Double = 80, cho: Double = 0.5) -> ZXArt.SSCanv {
+                   tex: Double = 80, cho: Double = 0.5, dec: Bool = true) -> ZXArt.SSCanv {
         let hei = hIn ?? 40 + r() * 400
         let wid = wIn ?? 400 + r() * 200
         var canv: ZXArt.SSCanv = []
@@ -283,7 +283,8 @@ extension ShanShuiEngine {
             if k == 0 || p.y < bd.ymin { bd.ymin = p.y }
             if k == 0 || p.y > bd.ymax { bd.ymax = p.y }
         }
-        canv += flatDec(xoff, yoff, bd)
+        // dec = false: 竖幅构图不要原作的随机点景 (树 / 石 / 屋), 由构图自己布置。
+        if dec { canv += flatDec(xoff, yoff, bd) }
         return canv
     }
 

@@ -46,13 +46,13 @@ public extension ZXArt {
     struct Palette: Sendable, Hashable {
         public var paper: ZXHex
         public var ink: ZXHex
-        /// 淡墨 (远山、最淡的一层渲染)。缺省是墨 22% 压在纸上 —— 与原作远山的灰度相当。
+        /// 淡墨 (远山)。缺省是墨 40% 叠在纸上 (配方契约; palette.overlay 不参与)。
         public var wash: ZXHex
 
         public init(paper: ZXHex, ink: ZXHex, wash: ZXHex? = nil) {
             self.paper = paper
             self.ink = ink
-            self.wash = wash ?? ink.opacity(0.22).composited(over: paper)
+            self.wash = wash ?? ink.opacity(0.4).composited(over: paper)
         }
 
         /// 纸墨: 纸 #F2EEE4 / 墨 #272E2A。
@@ -131,16 +131,100 @@ public extension ZXArt {
         public var perlin: [Double]
     }
 
+    /// 雾化 (远山): 图层离屏画在低分辨率上, 按「山脊以下的深度」淡出, 再模糊, 放大贴回。
+    /// 山脊是生成时量好的 (每列最高点), 与渲染分块无关 —— 分块并行渲染时各块结果一致。
+    struct LayerMist: Sendable, Hashable {
+        /// 山脊以下多深 (逻辑单位) 淡到 0。
+        public var depth: Double
+        /// 模糊半径 (逻辑单位)。
+        public var blur: Double
+        /// 山脊最高处保留的不透明度 (0…1)。
+        public var peakOpacity: Double
+        /// 每列山脊的 y (逻辑单位), 列 i 在 x = ridgeX0 + i · ridgeStep; 无形状的列为 +∞。
+        public var ridge: [Float]
+        public var ridgeX0: Double
+        public var ridgeStep: Double
+        /// 雾底: 到 `floorY` (逻辑 y) 淡到 0, 往上 `floorDepth` 内平滑过渡 (让整条远山的底边也化进雾里)。
+        public var floorY: Double
+        public var floorDepth: Double
+
+        public init(depth: Double, blur: Double, peakOpacity: Double = 1, ridge: [Float], ridgeX0: Double, ridgeStep: Double,
+                    floorY: Double = .infinity, floorDepth: Double = 1) {
+            self.depth = depth
+            self.blur = blur
+            self.peakOpacity = peakOpacity
+            self.ridge = ridge
+            self.ridgeX0 = ridgeX0
+            self.ridgeStep = ridgeStep
+            self.floorY = floorY
+            self.floorDepth = floorDepth
+        }
+
+        /// 逻辑坐标 (x 的山脊已查好) 处的保留比例 0…1。
+        @inline(__always)
+        func keep(y: Double, ridgeY: Double) -> Double {
+            @inline(__always) func smooth(_ t: Double) -> Double { let u = min(max(t, 0), 1); return u * u * (3 - 2 * u) }
+            let a = 1 - smooth((y - ridgeY) / max(depth, 1e-6))
+            let b = floorY.isFinite ? 1 - smooth((y - (floorY - floorDepth)) / max(floorDepth, 1e-6)) : 1
+            return peakOpacity * a * b
+        }
+
+        /// 从形状的边量出每列最高点 (逻辑单位, 步长 `step`)。
+        public static func ridge(of shapes: [Shape], step: Double) -> (ridge: [Float], x0: Double) {
+            var minX = Float.infinity, maxX = -Float.infinity
+            for sh in shapes { for p in sh.points { minX = Swift.min(minX, p.x); maxX = Swift.max(maxX, p.x) } }
+            guard minX.isFinite, step > 0 else { return ([], 0) }
+            let x0 = (Double(minX) / step).rounded(.down) * step
+            let n = Int(((Double(maxX) - x0) / step).rounded(.up)) + 1
+            var r = [Float](repeating: .infinity, count: n)
+            for sh in shapes {
+                let pts = sh.points
+                guard pts.count >= 2 else { continue }
+                for k in 0..<pts.count {
+                    let a = pts[k], b = pts[(k + 1) % pts.count]
+                    let lo = Swift.min(a.x, b.x), hi = Swift.max(a.x, b.x)
+                    var i = Int(((Double(lo) - x0) / step).rounded(.up))
+                    let i1 = Int(((Double(hi) - x0) / step).rounded(.down))
+                    while i <= i1 {
+                        let x = Float(x0 + Double(i) * step)
+                        let t = hi > lo ? (x - a.x) / (b.x - a.x) : 0
+                        let y = hi > lo ? a.y + (b.y - a.y) * t : Swift.min(a.y, b.y)
+                        if i >= 0 && i < n && y < r[i] { r[i] = y }
+                        i += 1
+                    }
+                }
+            }
+            return (r, x0)
+        }
+
+        /// x 处的山脊 (线性插值)。
+        func ridgeY(at x: Double) -> Double {
+            guard !ridge.isEmpty else { return .infinity }
+            let f = (x - ridgeX0) / ridgeStep
+            let i = Int(f.rounded(.down))
+            if i < 0 { return Double(ridge[0]) }
+            if i >= ridge.count - 1 { return Double(ridge[ridge.count - 1]) }
+            let a = Double(ridge[i]), b = Double(ridge[i + 1])
+            if !a.isFinite { return b }
+            if !b.isFinite { return a }
+            let t = f - Double(i)
+            return a + (b - a) * t
+        }
+    }
+
     struct Layer: Sendable {
         public var blend: BlendMode
         public var opacity: Double
         public var filter: LayerFilter?
+        public var mist: LayerMist?
         public var shapes: [Shape]
 
-        public init(blend: BlendMode = .normal, opacity: Double = 1, filter: LayerFilter? = nil, shapes: [Shape] = []) {
+        public init(blend: BlendMode = .normal, opacity: Double = 1, filter: LayerFilter? = nil,
+                    mist: LayerMist? = nil, shapes: [Shape] = []) {
             self.blend = blend
             self.opacity = opacity
             self.filter = filter
+            self.mist = mist
             self.shapes = shapes
         }
     }
@@ -182,6 +266,33 @@ public extension ZXArt {
             self.texel = texel
             self.strength = strength
             self.tint = tint
+        }
+    }
+}
+
+// MARK: - Trace (跨平台对拍)
+
+extension ZXArt {
+    /// 生成器原始输出的统计: 多边形数 / 点数 / 坐标和 + 生成结束时的 PRNG 状态。web 端 (JS 移植)
+    /// 用同样的配方跑出同样的数, 证明构图逐步一致 (见 Tests/ZixiaoArtTests/Fixtures/zxart/procedural-v1.json)。
+    struct Trace: Sendable, Hashable {
+        var logicalWidth: Double
+        var logicalHeight: Double
+        var prngAfter: Double
+        var polys = 0
+        var points = 0
+        var sumX = 0.0
+        var sumY = 0.0
+        /// 花: 原作画布 → 逻辑画布的缩放与平移 [k, tx, ty]; 山水为空。
+        var transform: [Double] = []
+
+        mutating func add(_ pts: [(Double, Double)]) {
+            polys += 1
+            for (x, y) in pts where x.isFinite && y.isFinite {
+                points += 1
+                sumX += x
+                sumY += y
+            }
         }
     }
 }

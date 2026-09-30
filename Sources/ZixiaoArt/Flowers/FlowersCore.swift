@@ -127,6 +127,8 @@ final class FlowersEngine {
     var polys: [ZXArt.FPoly] = []
     /// 季节预设改子枝颜色用; nil = 原作 (子枝用 branch 的缺省色)。
     var childColorOverride: ZXArt.HSVRange?
+    /// 季节预设的花瓣分段数 (小花瓣不需要原作的 40 段; 形状数少 3 倍, 渲染快得多); nil = 原作。
+    var petalSeg: Int?
 
     init(seed: ZXArt.Seed) { e = ZXArt.Entropy(seed: seed) }
 
@@ -270,7 +272,17 @@ final class FlowersEngine {
             disp = V3(disp.x + step.x, disp.y + step.y, disp.z + step.z)
             P.append(disp)
         }
-        let (L, R) = ZXArt.tubify(P.map { P2($0) }, a.wid)
+        tube(layer, P, xof: a.xof, yof: a.yof, wid: a.wid, col: a.col)
+        return P
+    }
+
+    /// stem() 的绘制部分 (给定中心线): 四段宽的明暗条 + 两侧墨线。季节预设也用它画自定的茎。
+    /// `clampShade`: 原作 stem 的明暗参数 lt = nn/p 在茎根处远大于 1, 外推出越界的 s / v (茎根的彩色小斑);
+    /// 预设自画的茎把它夹到 0…1 (原作路径保持不夹, 对拍)。
+    func tube(_ layer: Int, _ P: [V3], xof: Double, yof: Double, wid: (Double) -> Double, col: ZXArt.HSVRange,
+              clampShade: Bool = false) {
+        let a = (xof: xof, yof: yof, col: col)
+        let (L, R) = ZXArt.tubify(P.map { P2($0) }, wid)
         let wseg = 4
         for i in 1..<P.count {
             for j in 1..<wseg {
@@ -281,7 +293,7 @@ final class FlowersEngine {
                 let p1 = L[i] * (1 - m) + R[i] * m
                 let p2 = L[i - 1] * (1 - nn) + R[i - 1] * nn
                 let p3 = L[i] * (1 - nn) + R[i] * nn
-                let lt = nn / p
+                let lt = clampShade ? min(nn / p, 1) : nn / p
                 let nz = n(p * 10, m * 10, nn * 10)
                 let h = ZXArt.lerpHue(a.col.min[0], a.col.max[0], lt) * ZXArt.mapval(nz, 0, 1, 0.5, 1)
                 let s = ZXArt.mapval(lt, 0, 1, a.col.max[1], a.col.min[1]) * ZXArt.mapval(nz, 0, 1, 0.5, 1)
@@ -292,7 +304,6 @@ final class FlowersEngine {
         }
         stroke(layer, L, xof: a.xof, yof: a.yof, col: ZXArt.fcolor(0, 0, 0, 0.5))
         stroke(layer, R, xof: a.xof, yof: a.yof, col: ZXArt.fcolor(0, 0, 0, 0.5))
-        return P
     }
 
     // MARK: branch
