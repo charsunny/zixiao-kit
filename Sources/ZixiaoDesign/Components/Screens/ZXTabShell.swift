@@ -8,10 +8,13 @@
 //  2. 重选当前 Tab: 栈不空就弹回根; 已在根就滚到顶 (经 `\.zxScrollToTop`)。
 //     这是 iOS 用户的肌肉记忆, 系统 TabView 在 SwiftUI 里不给这个行为。
 //  3. iOS 26 起滚动时收起 tab bar (`tabBarMinimizeBehavior(.onScrollDown)`), 把屏幕让给内容。
+//
+//  搜索 Tab: `ZXTab.isSearch` → iOS 18 起 `Tab(role: .search)` (26 起是 Tab 栏右侧分离的搜索钮),
+//  iOS 17 回退普通 Tab。
 
 import SwiftUI
 
-/// 一个 Tab 的描述。纯数据: 标题、图标、角标; 内容由 `ZXTabShell` 的闭包按 Tab 给出。
+/// 一个 Tab 的描述。纯数据: 标题、图标、角标、是否搜索 Tab; 内容由 `ZXTabShell` 的闭包按 Tab 给出。
 public struct ZXTab: Identifiable, Hashable, Sendable {
     /// 稳定的标识, 也是 selection 的值。不要用标题当 id —— 标题会本地化, id 不能变。
     public let id: String
@@ -20,13 +23,25 @@ public struct ZXTab: Identifiable, Hashable, Sendable {
     public let systemImage: String
     /// 角标数字; nil 或 0 不显示。
     public let badge: Int?
+    /// 搜索 Tab: iOS 18 起映射为 `Tab(role: .search)` —— iOS 26 起系统把它画成 Tab 栏右侧分离的
+    /// 一颗搜索钮 (页面挂 `.searchable` 时点它, Tab 栏就地变成搜索框); iOS 18–25 的 iPhone 上是
+    /// 一个普通样式的 Tab (iPad 侧栏里是搜索项)。iOS 17 没有 Tab role, 回退成普通 Tab。
+    /// 系统约定一个 TabView 里至多一个搜索 Tab, 且放在最后。
+    /// 实测 (2026-09-30, iOS 27.0 模拟器 · iPhone 17): 搜索 Tab 与其余 Tab 在同一条玻璃栏里 (排最后),
+    /// `.searchable` 的搜索框在导航栏下方 —— 没有分离; iOS 26 上的分离样式未在本机验证。
+    public let isSearch: Bool
 
-    public init(id: String, title: String, systemImage: String, badge: Int? = nil) {
+    public init(id: String, title: String, systemImage: String, badge: Int? = nil, isSearch: Bool = false) {
         self.id = id
         self.title = title
         self.systemImage = systemImage
         self.badge = badge
+        self.isSearch = isSearch
     }
+
+    /// 给系统 `Tab` 的 role。
+    @available(iOS 18.0, *)
+    var tabRole: TabRole? { isSearch ? .search : nil }
 }
 
 // MARK: - 滚到顶
@@ -185,7 +200,7 @@ public struct ZXTabShell<Content: View>: View {
         if #available(iOS 18.0, *) {
             let view = TabView(selection: selection) {
                 ForEach(tabs) { tab in
-                    Tab(tab.title, systemImage: tab.systemImage, value: tab.id) {
+                    Tab(tab.title, systemImage: tab.systemImage, value: tab.id, role: tab.tabRole) {
                         stack(for: tab)
                     }
                     .badge(tab.badge ?? 0)
@@ -198,6 +213,7 @@ public struct ZXTabShell<Content: View>: View {
                 view
             }
         } else {
+            // iOS 17: 没有 Tab role, 搜索 Tab (`isSearch`) 就是一个普通 Tab。
             TabView(selection: selection) {
                 ForEach(tabs) { tab in
                     stack(for: tab)
@@ -271,6 +287,7 @@ private struct ZXTabShellPreviewRoot: View {
             ZXTab(id: "today", title: "今日", systemImage: "sun.horizon"),
             ZXTab(id: "study", title: "书斋", systemImage: "books.vertical", badge: 2),
             ZXTab(id: "me", title: "我的", systemImage: "person"),
+            ZXTab(id: "search", title: "搜索", systemImage: "magnifyingglass", isSearch: true),
         ]) { tab in
             ZXTabShellPreviewRoot(tab: tab)
         }
