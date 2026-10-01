@@ -6,11 +6,17 @@ import Supabase
 /// 用到的 supabase-swift 方法:
 /// - `auth.session` / `auth.currentUser` —— 恢复钥匙串里的 session (默认 `KeychainLocalStorage`, 自动持久化);
 /// - `auth.signInAnonymously()`;
-/// - `auth.linkIdentityWithIdToken(credentials:)` —— Apple 原生面板拿到的 id token 绑到当前用户;
+/// - `auth.setSession(accessToken:refreshToken:)` —— Apple 登录 (`linkApple` / `signInWithApple`): 不走 GoTrue 的
+///   Apple provider (阿里云托管的 GoTrue 没开, 回 `provider_disabled`), 而是把 Apple id token 交给子晓系共用的
+///   服务端换 session (`ZXAppleExchange`, 现由微诗 web 提供), 拿回同一 Supabase 项目的 session 再 setSession。
+///   换来的是「这个 Apple ID 在子晓系账号体系里的那个人」, 通常**不是**当前匿名用户 —— 即账号切换, 见 `ZXAuth.linkApple`;
 /// - `auth.update(user: UserAttributes(phone:))` + `auth.verifyOTP(phone:token:type: .phoneChange)` —— 手机号绑定;
-/// - `auth.signInWithIdToken(credentials:)`、`auth.signInWithOTP(phone:shouldCreateUser: false)` +
-///   `auth.verifyOTP(phone:token:type: .sms)` —— 仅用于「找回旧账号」, 会换 user id (见 `ZXAuth.signInWithApple`);
+/// - `auth.signInWithOTP(phone:shouldCreateUser: false)` + `auth.verifyOTP(phone:token:type: .sms)` ——
+///   仅用于「找回旧账号」, 会换 user id (见 `ZXAuth.signInWithApple` 上方说明);
+/// - `auth.update(user: UserAttributes(data:))` —— 昵称 / 头像样式写进 user_metadata (键名见 `ZXUserMetadata`);
 /// - `auth.signOut(scope:)`; `rpc("zen_delete_account")`。
+///
+/// 失败一律抛 `ZXAuthFailure` (映射后的 `ZXCoreError` + GoTrue 原文), `ZXAuth` 把原文记进 `lastErrorDetail`。
 ///
 /// ### 为什么手机号绑定不用 `signInWithOTP(phone:)` + `verifyOTP(type: .sms)`
 /// 查过 supabase-swift 源码 (AuthClient.swift): `signInWithOTP(phone:)` 走 `api.execute` 打 `POST /otp`,
@@ -32,16 +38,22 @@ public struct ZXSupabaseAuthBackend: ZXAuthBackend {
 
     private let clientProvider: @Sendable () throws -> SupabaseClient
     private let deleteAccountRPC: String
+    private let appleExchangeProvider: @Sendable () throws -> ZXAppleExchange
 
-    public init(deleteAccountRPC: String = ZXSupabaseAuthBackend.defaultDeleteAccountRPC) {
-        self.init(deleteAccountRPC: deleteAccountRPC, client: { try ZXSupabase.requireClient() })
+    public init(deleteAccountRPC: String = ZXSupabaseAuthBackend.defaultDeleteAccountRPC,
+                appleExchange: @escaping @Sendable () throws -> ZXAppleExchange = { try ZXAppleExchange.current() }) {
+        self.init(deleteAccountRPC: deleteAccountRPC, client: { try ZXSupabase.requireClient() },
+                  appleExchange: appleExchange)
     }
 
-    /// 注入客户端来源。默认每次调用都去读 `ZXSupabase`, 所以 App 晚于 `ZXAuth` 初始化配置也没关系。
+    /// 注入客户端来源。默认每次调用都去读 `ZXSupabase` / `ZXAppleExchange` 的全局配置,
+    /// 所以 App 晚于 `ZXAuth` 初始化配置也没关系。
     public init(deleteAccountRPC: String = ZXSupabaseAuthBackend.defaultDeleteAccountRPC,
-                client: @escaping @Sendable () throws -> SupabaseClient) {
+                client: @escaping @Sendable () throws -> SupabaseClient,
+                appleExchange: @escaping @Sendable () throws -> ZXAppleExchange = { try ZXAppleExchange.current() }) {
         self.clientProvider = client
         self.deleteAccountRPC = deleteAccountRPC
+        self.appleExchangeProvider = appleExchange
     }
 
     public var isConfigured: Bool { (try? clientProvider()) != nil }
@@ -61,7 +73,7 @@ public struct ZXSupabaseAuthBackend: ZXAuthBackend {
         } catch {
             // 网络问题: 本地还有 session 就先认这个人, 等联网后 SDK 的自动刷新会接上。
             if let user = client.auth.currentUser { return ZXAuthUser(user) }
-            throw Self.map(error)
+            throw Self.failure(error)
         }
     }
 
@@ -70,23 +82,14 @@ public struct ZXSupabaseAuthBackend: ZXAuthBackend {
         do {
             return ZXAuthUser(try await client.auth.signInAnonymously().user)
         } catch {
-            throw Self.map(error)
+            throw Self.failure(error)
         }
     }
 
+    /// 子晓系账号统一后, Apple「绑定」与「登录」是同一件事: 换到这个 Apple ID 所属的账号 (服务端没有就新建)。
+    /// 返回的用户一般与当前匿名用户不同 —— `ZXAuth.linkApple` 按账号切换收尾。
     public func linkApple(idToken: String, nonce: String) async throws -> ZXAuthUser {
-        let client = try clientProvider()
-        do {
-            // linkIdentityWithIdToken 会带上当前 session 的 Bearer 并置 link_identity=true,
-            // GoTrue 因而把 Apple identity 挂到当前用户, 而不是按 Apple 邮箱另找 / 另建用户。
-            // 需要服务端开 GOTRUE_SECURITY_MANUAL_LINKING_ENABLED (现行后端的 Apple 绑定已在用)。
-            let session = try await client.auth.linkIdentityWithIdToken(
-                credentials: OpenIDConnectCredentials(provider: .apple, idToken: idToken, nonce: nonce)
-            )
-            return ZXAuthUser(session.user)
-        } catch {
-            throw Self.map(error, provider: .apple)
-        }
+        try await exchangeApple(idToken: idToken, nonce: nonce)
     }
 
     public func requestPhoneLink(phone: String) async throws {
@@ -94,7 +97,7 @@ public struct ZXSupabaseAuthBackend: ZXAuthBackend {
         do {
             try await client.auth.update(user: UserAttributes(phone: phone))
         } catch {
-            throw Self.map(error, provider: .phone)
+            throw Self.failure(error, provider: .phone)
         }
     }
 
@@ -106,22 +109,41 @@ public struct ZXSupabaseAuthBackend: ZXAuthBackend {
             let response = try await client.auth.verifyOTP(phone: phone, token: code, type: .phoneChange)
             return ZXAuthUser(response.user)
         } catch {
-            throw Self.map(error, provider: .phone)
+            throw Self.failure(error, provider: .phone)
         }
     }
 
     public func signInWithApple(idToken: String, nonce: String) async throws -> ZXAuthUser {
+        try await exchangeApple(idToken: idToken, nonce: nonce)
+    }
+
+    /// Apple id token → 服务端换 session → `setSession`。
+    ///
+    /// 1. `ZXAppleExchange` 把 token 交给服务端 (失败抛 `ZXAuthFailure`, detail 是服务端 JSON 的 `error` 原文);
+    /// 2. `setSession`: token 未过期时 SDK 用它 `GET /user` 取用户, 并把 session 存进钥匙串 (之后自动刷新照常);
+    /// 3. 服务端签的是「代理登录」用户 (合成邮箱、无 Apple identity), GoTrue 看不出它是 Apple 登录的,
+    ///    所以第一次换进来时在 user_metadata 记一笔 `zx_apple_linked` (见 `ZXUserMetadata.appleLinkedKey`),
+    ///    冷启动恢复 session 时「绑定方式」才认得出 Apple。记不上 (断网等) 不算失败, 本次结果照样带 `.apple`。
+    func exchangeApple(idToken: String, nonce: String, fullName: String? = nil) async throws -> ZXAuthUser {
         let client = try clientProvider()
+        let exchange = try appleExchangeProvider()
+        let tokens = try await exchange.exchange(idToken: idToken, nonce: nonce, fullName: fullName)
+        var user: User
         do {
-            // 与 linkIdentityWithIdToken 同一个 /token?grant_type=id_token, 只是不带 link_identity 与当前 Bearer:
-            // GoTrue 据 Apple 的 sub 找到它所属的账号并签发那个账号的 session。
-            let session = try await client.auth.signInWithIdToken(
-                credentials: OpenIDConnectCredentials(provider: .apple, idToken: idToken, nonce: nonce)
-            )
-            return ZXAuthUser(session.user)
+            user = try await client.auth.setSession(accessToken: tokens.accessToken, refreshToken: tokens.refreshToken)
+                .user
         } catch {
-            throw Self.map(error, provider: .apple)
+            throw Self.failure(error, provider: .apple)
         }
+        if user.userMetadata[ZXUserMetadata.appleLinkedKey] != .bool(true),
+           let marked = try? await client.auth.update(
+               user: UserAttributes(data: [ZXUserMetadata.appleLinkedKey: .bool(true)])
+           ) {
+            user = marked
+        }
+        var result = ZXAuthUser(user)
+        result.providers.insert(.apple)
+        return result
     }
 
     public func requestPhoneSignIn(phone: String) async throws {
@@ -134,7 +156,7 @@ public struct ZXSupabaseAuthBackend: ZXAuthBackend {
             // GoTrue 对「不许新建且用户不存在」回 otp_disabled (Signups not allowed for otp)。
             throw ZXCoreError.accountNotFound
         } catch {
-            throw Self.map(error, provider: .phone)
+            throw Self.failure(error, provider: .phone)
         }
     }
 
@@ -144,7 +166,7 @@ public struct ZXSupabaseAuthBackend: ZXAuthBackend {
             let response = try await client.auth.verifyOTP(phone: phone, token: code, type: .sms)
             return ZXAuthUser(response.user)
         } catch {
-            throw Self.map(error, provider: .phone)
+            throw Self.failure(error, provider: .phone)
         }
     }
 
@@ -154,7 +176,7 @@ public struct ZXSupabaseAuthBackend: ZXAuthBackend {
             // supabase-swift 先删本地 session 再调 /logout, 所以就算这里抛了, 本地也已经退出了。
             try await client.auth.signOut()
         } catch {
-            throw Self.map(error)
+            throw Self.failure(error)
         }
     }
 
@@ -163,10 +185,22 @@ public struct ZXSupabaseAuthBackend: ZXAuthBackend {
         do {
             try await client.rpc(deleteAccountRPC).execute()
         } catch {
-            throw Self.map(error)
+            throw Self.failure(error)
         }
         // auth.users 行已删, 服务端 /logout 会回 401/404 (SDK 会吞掉); 只需清本地。
         try? await client.auth.signOut(scope: .local)
+    }
+
+    public func updateUserMetadata(_ data: [String: ZXJSONValue]) async throws -> ZXAuthUser {
+        let client = try clientProvider()
+        do {
+            // PUT /user 带当前 Bearer; GoTrue 把 data 的顶层键并进 user_metadata (null 删键), 返回整个用户,
+            // SDK 同时把它写回本地 session —— 离线重启后 restoreSession 拿到的也是新资料。
+            let user = try await client.auth.update(user: UserAttributes(data: data.mapValues { AnyJSON(zx: $0) }))
+            return ZXAuthUser(user)
+        } catch {
+            throw Self.failure(error)
+        }
     }
 
     // MARK: - 映射
@@ -175,6 +209,28 @@ public struct ZXSupabaseAuthBackend: ZXAuthBackend {
     static func isDeadSession(_ error: AuthError) -> Bool {
         guard case let .api(_, _, _, response) = error else { return false }
         return (400..<500).contains(response.statusCode) && response.statusCode != 429
+    }
+
+    /// 映射 + 保留底层原文 (`ZXAuthFailure`)。我们自己的 `ZXCoreError` (如 `.accountNotFound`) 原样抛。
+    static func failure(_ error: any Error, provider: ZXProvider? = nil) -> any Error {
+        if let own = error as? ZXCoreError { return own }
+        return ZXAuthFailure(map(error, provider: provider), detail: detail(of: error))
+    }
+
+    /// 底层原文。GoTrue 的 API 错误带上 error_code 与 HTTP 状态, 如
+    /// `Unsupported provider: provider is not enabled (validation_failed · HTTP 400)`。
+    static func detail(of error: any Error) -> String {
+        guard let auth = error as? AuthError else {
+            let text = (error as NSError).localizedDescription
+            return text.isEmpty ? String(describing: error) : text
+        }
+        if case let .api(message, code, _, response) = auth {
+            var tags: [String] = []
+            if !code.rawValue.isEmpty, code != .unknown { tags.append(code.rawValue) }
+            tags.append("HTTP \(response.statusCode)")
+            return "\(message) (\(tags.joined(separator: " · ")))"
+        }
+        return auth.message
     }
 
     /// GoTrue 错误码 → 界面能说的话。
@@ -206,13 +262,43 @@ public struct ZXSupabaseAuthBackend: ZXAuthBackend {
 extension ZXAuthUser {
     /// 从 GoTrue 用户抽出我们关心的部分。
     init(_ user: User) {
-        var providers = Set((user.identities ?? []).compactMap { ZXProvider(rawValue: $0.provider) })
-        // identity 列表不一定可靠 (老 GoTrue 的 phone_change 不建 phone identity), 以确认时间兜底。
-        if user.phoneConfirmedAt != nil, let phone = user.phone, !phone.isEmpty { providers.insert(.phone) }
-        if user.emailConfirmedAt != nil, let email = user.email, !email.isEmpty { providers.insert(.email) }
-        if case .string? = user.appMetadata["google_sub"] { providers.insert(.google) }
-        self.init(id: user.id.uuidString, isAnonymous: user.isAnonymous, providers: providers,
-                  phone: user.phone.flatMap { $0.isEmpty ? nil : $0 },
-                  email: user.email.flatMap { $0.isEmpty ? nil : $0 })
+        self = ZXAuthUser.fromGoTrue(
+            id: user.id.uuidString, isAnonymous: user.isAnonymous,
+            identityProviders: (user.identities ?? []).map(\.provider),
+            phone: user.phone, phoneConfirmed: user.phoneConfirmedAt != nil,
+            email: user.email, emailConfirmed: user.emailConfirmedAt != nil,
+            appMetadata: user.appMetadata.mapValues { ZXJSONValue(supabase: $0) },
+            userMetadata: user.userMetadata.mapValues { ZXJSONValue(supabase: $0) }
+        )
+    }
+}
+
+// MARK: - ZXJSONValue ⇄ AnyJSON
+
+extension ZXJSONValue {
+    init(supabase json: AnyJSON) {
+        switch json {
+        case .null: self = .null
+        case .bool(let v): self = .bool(v)
+        case .integer(let v): self = .int(v)
+        case .double(let v): self = .double(v)
+        case .string(let v): self = .string(v)
+        case .array(let v): self = .array(v.map { ZXJSONValue(supabase: $0) })
+        case .object(let v): self = .object(v.mapValues { ZXJSONValue(supabase: $0) })
+        }
+    }
+}
+
+extension AnyJSON {
+    init(zx value: ZXJSONValue) {
+        switch value {
+        case .null: self = .null
+        case .bool(let v): self = .bool(v)
+        case .int(let v): self = .integer(v)
+        case .double(let v): self = .double(v)
+        case .string(let v): self = .string(v)
+        case .array(let v): self = .array(v.map { AnyJSON(zx: $0) })
+        case .object(let v): self = .object(v.mapValues { AnyJSON(zx: $0) })
+        }
     }
 }

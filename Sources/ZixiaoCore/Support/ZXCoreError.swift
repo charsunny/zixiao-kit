@@ -39,6 +39,7 @@ public enum ZXCoreError: Error, Sendable, Hashable {
     public init(_ error: any Error) {
         switch error {
         case let own as ZXCoreError: self = own
+        case let failure as ZXAuthFailure: self = failure.error
         case is CancellationError: self = .cancelled
         case let url as URLError: self = url.code == .cancelled ? .cancelled : .network
         default: self = .backend(String(describing: error))

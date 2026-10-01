@@ -1,7 +1,8 @@
 import Foundation
 import Observation
 
-/// 账号: 匿名优先, 之后绑定 Apple / 手机号, user id 始终不变 (架构决定 7)。
+/// 账号: 匿名优先, 之后绑定手机号 (user id 不变, 架构决定 7); Apple 登录走子晓系共用服务端换 session,
+/// 会换到统一账号的 user id (T43, 见 `linkApple`)。
 ///
 /// 为什么 @MainActor @Observable 而不是 actor: 它的全部意义是驱动界面 (登录页、我的页的「已绑定」),
 /// 状态放在主线程上 SwiftUI 可直接观察; 真正的网络活在 `ZXAuthBackend` 里, 不占主线程。
@@ -29,6 +30,10 @@ public final class ZXAuth {
     public private(set) var pendingPhone: String?
     /// 已发出「找回账号」登录验证码、等待填写的手机号 (E.164)。与绑定分开, 免得界面把两个流程搅在一起。
     public private(set) var pendingSignInPhone: String?
+    /// 最近一次失败的账号操作的底层原文 (GoTrue 的 message / error_code / HTTP 状态, 或系统错误描述);
+    /// 每个操作开始时清空。`ZXCoreError` 的界面文案会丢掉这些 (如 `.providerDisabled`), 排查服务端配置时看这里。
+    /// 本地校验失败 (手机号格式等) 与没有更多信息的错误为 nil。
+    public private(set) var lastErrorDetail: String?
 
     @ObservationIgnored private let backend: any ZXAuthBackend
     @ObservationIgnored private let outbox: ZXOutbox?
@@ -68,6 +73,7 @@ public final class ZXAuth {
 
     private func runBootstrap() async -> ZXAuthState {
         defer { isBootstrapped = true }
+        lastErrorDetail = nil
         isOffline = !backend.isConfigured
         guard !isOffline else {
             bootstrapError = .offline
@@ -84,23 +90,36 @@ public final class ZXAuth {
             }
             bootstrapError = nil
         } catch {
-            bootstrapError = ZXCoreError(error)
+            bootstrapError = fail(error)
         }
         return state
     }
 
     // MARK: - 绑定
 
-    /// 把 Apple 身份绑到当前 (通常是匿名) 用户上。`nonce` 传原文, 见 `ZXAppleSignIn`。
+    /// 「通过 Apple 登录」(界面上匿名用户的入口)。`nonce` 传原文, 见 `ZXAppleSignIn`。
     ///
-    /// - Throws: `.identityInUse(.apple)` 这个 Apple ID 已是别的账号; `.identityChanged` 绑完 user id 变了。
-    public func linkApple(idToken: String, nonce: String) async throws {
+    /// T43 起子晓系账号统一: 生产后端 (`ZXSupabaseAuthBackend`) 把 Apple token 交给共用服务端换 session,
+    /// 得到的是这个 Apple ID 在子晓系的那个账号 (没有就新建) —— **通常不是当前匿名用户, 即一次账号切换**,
+    /// 不再是「把 Apple 绑到匿名用户、user id 不变」。所以这里不再核对 user id 不变 (不抛 `.identityChanged`),
+    /// 而是按切换收尾: 状态换到新用户, 离线队列交给新用户 (`outbox.setOwner`, 旧匿名号未传完的写入随之丢弃)。
+    ///
+    /// 匿名期间的本机数据怎么并进新账号是 App 的事 (同步层按 `abandonedUserId` / `abandonedWasAnonymous` 决定);
+    /// 本方法不清任何本地态。后端返回同一 user id 时 (老后端 / mock 的「真绑定」) 等同原来的绑定, `abandonedUserId` 为 nil。
+    ///
+    /// - Returns: 切换结果; 调用方可忽略 (`@discardableResult`, 原来的 `try await auth.linkApple(...)` 照常编译)。
+    /// - Throws: 服务端拒绝时为 `.backend(原文)` 等, 原文另见 `lastErrorDetail`; 后端仍可能抛 `.identityInUse(.apple)`。
+    @discardableResult
+    public func linkApple(idToken: String, nonce: String) async throws -> ZXAccountSwitch {
+        lastErrorDetail = nil
         let before = try requireUser()
+        let wasAnonymous = state.isAnonymous
+        await drainBeforeSwitch()
         do {
-            let linked = try await backend.linkApple(idToken: idToken, nonce: nonce)
-            try await acceptLinked(linked, before: before)
+            let user = try await backend.linkApple(idToken: idToken, nonce: nonce)
+            return await acceptSwitch(to: user, from: before, previousWasAnonymous: wasAnonymous)
         } catch {
-            throw ZXCoreError(error)
+            throw fail(error)
         }
     }
 
@@ -109,18 +128,20 @@ public final class ZXAuth {
     /// 走的是「改手机号」(phone_change) 而非「短信登录」, 理由见 `ZXSupabaseAuthBackend` 文件头:
     /// 短信登录会换成另一个 user id。
     public func sendPhoneOTP(_ phone: String) async throws {
+        lastErrorDetail = nil
         guard let normalized = Self.normalizePhone(phone) else { throw ZXCoreError.invalidPhone }
         _ = try requireUser()
         do {
             try await backend.requestPhoneLink(phone: normalized)
             pendingPhone = normalized
         } catch {
-            throw ZXCoreError(error)
+            throw fail(error)
         }
     }
 
     /// 用验证码确认绑定。成功后状态变为 `.linked(同一 userId, providers ∋ .phone)`。
     public func verifyPhoneOTP(_ phone: String, code: String) async throws {
+        lastErrorDetail = nil
         guard let normalized = Self.normalizePhone(phone) else { throw ZXCoreError.invalidPhone }
         let digits = try Self.validateCode(code)
         let before = try requireUser()
@@ -129,7 +150,7 @@ public final class ZXAuth {
             try await acceptLinked(linked, before: before)
             pendingPhone = nil
         } catch {
-            throw ZXCoreError(error)
+            throw fail(error)
         }
     }
 
@@ -143,6 +164,8 @@ public final class ZXAuth {
     // 匿名号没有任何可登回去的身份, 放弃就是永久的。所以:
     // 1. 这三个方法只应在收到 `.identityInUse` 之后、由界面明确询问并得到「放弃当前匿名数据」的确认后调用;
     //    不要把它们当作普通的登录入口, 也不要在 `.identityInUse` 时静默自动调用。
+    //    (T43: Apple 走共用服务端换 session 后, `linkApple` 本身就是一次切换, 服务端不再回 `.identityInUse(.apple)`,
+    //    `signInWithApple` 与 `linkApple` 在生产后端上是同一个请求; 手机号仍是上面的两段式。)
     // 2. 成功后自动把离线队列交给新用户 (`outbox.setOwner`), 旧匿名号的待传写入随之丢弃
     //    (它们带着旧 user_id, 以新身份补传要么被 RLS 拒、要么写错人)。
     // 3. 返回 `ZXAccountSwitch`, 其中 `abandonedUserId` 交给 App 清理本地态:
@@ -156,44 +179,83 @@ public final class ZXAuth {
     /// 界面确认后要重新走一次 `ZXAppleSignIn` 拿新凭证。
     @discardableResult
     public func signInWithApple(idToken: String, nonce: String) async throws -> ZXAccountSwitch {
+        lastErrorDetail = nil
         guard backend.isConfigured else { throw ZXCoreError.offline }
         let previous = state.userId
+        let wasAnonymous = state.isAnonymous
+        await drainBeforeSwitch()
         do {
             let user = try await backend.signInWithApple(idToken: idToken, nonce: nonce)
-            return await acceptSwitch(to: user, from: previous)
+            return await acceptSwitch(to: user, from: previous, previousWasAnonymous: wasAnonymous)
         } catch {
-            throw ZXCoreError(error)
+            throw fail(error)
         }
     }
 
     /// 向手机号发「找回账号」的登录验证码。只登录已有账号, 号码下没有账号时抛 `.accountNotFound`。
     /// 调用前提与代价见上方说明 (发码本身不改变任何状态, 真正换人在 `verifyPhoneSignIn`)。
     public func signInWithPhone(_ phone: String) async throws {
+        lastErrorDetail = nil
         guard let normalized = Self.normalizePhone(phone) else { throw ZXCoreError.invalidPhone }
         guard backend.isConfigured else { throw ZXCoreError.offline }
         do {
             try await backend.requestPhoneSignIn(phone: normalized)
             pendingSignInPhone = normalized
         } catch {
-            throw ZXCoreError(error)
+            throw fail(error)
         }
     }
 
     /// 用验证码登录手机号所属的旧账号, **放弃当前匿名账号**。调用前提与代价见上方说明。
     @discardableResult
     public func verifyPhoneSignIn(_ phone: String, code: String) async throws -> ZXAccountSwitch {
+        lastErrorDetail = nil
         guard let normalized = Self.normalizePhone(phone) else { throw ZXCoreError.invalidPhone }
         let digits = try Self.validateCode(code)
         guard backend.isConfigured else { throw ZXCoreError.offline }
         let previous = state.userId
+        let wasAnonymous = state.isAnonymous
+        await drainBeforeSwitch()
         do {
             let user = try await backend.verifyPhoneSignIn(phone: normalized, code: digits)
-            let result = await acceptSwitch(to: user, from: previous)
+            let result = await acceptSwitch(to: user, from: previous, previousWasAnonymous: wasAnonymous)
             pendingSignInPhone = nil
             return result
         } catch {
-            throw ZXCoreError(error)
+            throw fail(error)
         }
+    }
+
+    // MARK: - 资料 (昵称 / 头像样式)
+
+    /// 改个人资料: 写进 GoTrue 的 user_metadata (键名见 `ZXUserMetadata`), 成功后 `user` 即为新值。
+    /// 匿名用户也写得进 (界面是否开放由 App 决定)。
+    ///
+    /// - Parameters:
+    ///   - displayName: nil = 不改; 去首尾空白后为空 = 清掉 (界面回落默认名)。长度限制由 App 做。
+    ///   - avatarStyle: nil = 不改; 样式序号由 App 解释。
+    /// - Throws: `.offline` / `.notSignedIn` / 后端错误 (底层原文见 `lastErrorDetail`)。
+    public func updateProfile(displayName: String? = nil, avatarStyle: Int? = nil) async throws {
+        lastErrorDetail = nil
+        let before = try requireUser()
+        let data = ZXUserMetadata.patch(displayName: displayName, avatarStyle: avatarStyle)
+        guard !data.isEmpty else { return }
+        do {
+            let updated = try await backend.updateUserMetadata(data)
+            try await acceptLinked(updated, before: before)
+        } catch {
+            throw fail(error)
+        }
+    }
+
+    /// 只改昵称。见 `updateProfile(displayName:avatarStyle:)`。
+    public func updateDisplayName(_ name: String) async throws {
+        try await updateProfile(displayName: name)
+    }
+
+    /// 只改头像样式。见 `updateProfile(displayName:avatarStyle:)`。
+    public func updateAvatarStyle(_ style: Int) async throws {
+        try await updateProfile(avatarStyle: style)
     }
 
     // MARK: - 退出与删号
@@ -213,11 +275,12 @@ public final class ZXAuth {
     /// 本地账号级数据 (`ZXLocalUserState`) 由 App 按原 userId 调 `remove(for:)` 清理 —— 删号前先取 `userId`;
     /// 设备级偏好 (如「历注」) 不随之清理。
     public func deleteAccount() async throws {
+        lastErrorDetail = nil
         _ = try requireUser()
         do {
             try await backend.deleteAccount()
         } catch {
-            throw ZXCoreError(error)
+            throw fail(error)
         }
         pendingPhone = nil
         pendingSignInPhone = nil
@@ -225,6 +288,24 @@ public final class ZXAuth {
     }
 
     // MARK: - 内部
+
+    /// 失败的统一出口: 记下底层原文 (`lastErrorDetail`), 交出界面用的 `ZXCoreError`。
+    private func fail(_ error: any Error) -> ZXCoreError {
+        lastErrorDetail = Self.detail(of: error)
+        return ZXCoreError(error)
+    }
+
+    /// 底层原文: 后端包装里的 `detail`; 我们自己的 `ZXCoreError` 没有更多信息 (nil);
+    /// 其它错误 (系统 / 未映射) 取描述。
+    nonisolated static func detail(of error: any Error) -> String? {
+        switch error {
+        case let failure as ZXAuthFailure: return failure.detail
+        case is ZXCoreError, is CancellationError: return nil
+        default:
+            let text = (error as NSError).localizedDescription
+            return text.isEmpty ? String(describing: error) : text
+        }
+    }
 
     private func requireUser() throws -> String {
         guard backend.isConfigured else { throw ZXCoreError.offline }
@@ -241,12 +322,22 @@ public final class ZXAuth {
         }
     }
 
-    /// 找回类操作的共同收尾: 换到新用户 (apply 里会 `outbox.setOwner`), 交出被放弃的旧 id。
-    private func acceptSwitch(to user: ZXAuthUser, from previous: String?) async -> ZXAccountSwitch {
+    /// 可能换号的操作之前: 尽量把当前号排队的写入先传完 —— 换号后 `outbox.setOwner` 会丢弃它们。
+    /// 必须在后端换 session **之前**做: 之后 Bearer 已是新账号, 旧号的行会被 RLS 拒。
+    /// 限时 3 秒, 传不完 / 断网都不挡换号 (本机数据仍在, App 的同步层会把匿名号的本机日课并进新账号再上传)。
+    private func drainBeforeSwitch() async {
+        guard let outbox, state.userId != nil else { return }
+        _ = try? await withTimeout(.seconds(3)) { _ = await outbox.drain(force: true) }
+    }
+
+    /// 找回 / 登录类操作的共同收尾: 换到新用户 (apply 里会 `outbox.setOwner`), 交出被放弃的旧 id。
+    private func acceptSwitch(to user: ZXAuthUser, from previous: String?,
+                              previousWasAnonymous: Bool = false) async -> ZXAccountSwitch {
         pendingPhone = nil
         await apply(user)
         let abandoned = (previous != nil && previous != user.id) ? previous : nil
-        return ZXAccountSwitch(user: user, abandonedUserId: abandoned)
+        return ZXAccountSwitch(user: user, abandonedUserId: abandoned,
+                               abandonedWasAnonymous: abandoned != nil && previousWasAnonymous)
     }
 
     /// 验证码只收 4–10 位 ASCII 数字 (GoTrue 默认 6 位), 两侧空白容忍。
@@ -310,9 +401,13 @@ public struct ZXAccountSwitch: Sendable, Hashable {
     /// 被放弃的前一个 user id (通常是匿名号); App 用它清理本地账号级态。
     /// 之前没有用户、或登进的恰是同一个账号时为 nil —— 此时没有东西要清。
     public let abandonedUserId: String?
+    /// 被放弃的是匿名号 (T43: Apple 登录从匿名号切到统一账号时为 true)。App 可据此把匿名期间的本机数据
+    /// 并进新账号, 而不是当作别人的数据丢掉; `abandonedUserId` 为 nil 时恒为 false。
+    public let abandonedWasAnonymous: Bool
 
-    public init(user: ZXAuthUser, abandonedUserId: String?) {
+    public init(user: ZXAuthUser, abandonedUserId: String?, abandonedWasAnonymous: Bool = false) {
         self.user = user
         self.abandonedUserId = abandonedUserId
+        self.abandonedWasAnonymous = abandonedUserId != nil && abandonedWasAnonymous
     }
 }

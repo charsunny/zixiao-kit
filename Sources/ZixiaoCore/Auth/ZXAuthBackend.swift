@@ -43,4 +43,35 @@ public protocol ZXAuthBackend: Sendable {
 
     /// 删除当前账号 (服务端级联删除所有用户数据), 并清掉本地 session。
     func deleteAccount() async throws
+
+    // MARK: 资料
+
+    /// 把 `data` 合并进当前用户的 user_metadata (GoTrue `PUT /user`, 按顶层键合并, `null` 删键),
+    /// 返回更新后的用户。键名见 `ZXUserMetadata`。
+    func updateUserMetadata(_ data: [String: ZXJSONValue]) async throws -> ZXAuthUser
+}
+
+extension ZXAuthBackend {
+    /// 默认实现: 不支持。老的 mock / 预览后端不必跟着改; 要支持资料编辑的后端自己实现。
+    public func updateUserMetadata(_ data: [String: ZXJSONValue]) async throws -> ZXAuthUser {
+        throw ZXCoreError.providerDisabled
+    }
+}
+
+/// 后端失败 + 底层原文。
+///
+/// `ZXCoreError` 是给界面「该说哪句话」的, 映射时会丢掉 GoTrue 的原始 message / error_code / HTTP 状态
+/// (如 `.providerDisabled`)。排查服务端配置 (比如 Apple provider 没开) 时又恰恰要看原文, 所以后端抛这个包装:
+/// `ZXAuth` 把 `detail` 记进 `lastErrorDetail`, 对外仍只抛 `error` —— App 侧的错误类型契约不变。
+/// `ZXCoreError(_:)` 也认得它 (直接取 `error`), 绕过 `ZXAuth` 直接用后端的地方照样拿到 `ZXCoreError`。
+public struct ZXAuthFailure: Error, Sendable, Hashable {
+    /// 映射后的错误 (界面用)。
+    public let error: ZXCoreError
+    /// 底层原文, 如 `Unsupported provider: provider is not enabled (validation_failed · HTTP 400)`。
+    public let detail: String
+
+    public init(_ error: ZXCoreError, detail: String) {
+        self.error = error
+        self.detail = detail
+    }
 }

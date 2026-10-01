@@ -17,6 +17,12 @@ final class MockAuthBackend: ZXAuthBackend, @unchecked Sendable {
     var verifyPhoneError: ZXCoreError?
     var signOutError: ZXCoreError?
     var restoreDelay: Duration?
+    /// 带底层原文的后端失败 (模拟 `ZXSupabaseAuthBackend` 抛的 `ZXAuthFailure`)。
+    var linkAppleFailure: ZXAuthFailure?
+    var updateMetadataError: (any Error)?
+    /// 最近一次 `updateUserMetadata` 收到的 patch。
+    private var _lastMetadataPatch: [String: ZXJSONValue]?
+    var lastMetadataPatch: [String: ZXJSONValue]? { lock.withLock { _lastMetadataPatch } }
 
     init(configured: Bool = true, stored: ZXAuthUser? = nil) {
         _configured = configured
@@ -51,6 +57,7 @@ final class MockAuthBackend: ZXAuthBackend, @unchecked Sendable {
 
     func linkApple(idToken: String, nonce: String) async throws -> ZXAuthUser {
         record("linkApple:\(idToken):\(nonce)")
+        if let linkAppleFailure { throw linkAppleFailure }
         guard let current = stored else { throw ZXCoreError.notSignedIn }
         if let script = linkAppleResult {
             let user = try script(current).get()
@@ -112,6 +119,16 @@ final class MockAuthBackend: ZXAuthBackend, @unchecked Sendable {
     func deleteAccount() async throws {
         record("deleteAccount")
         setStored(nil)
+    }
+
+    func updateUserMetadata(_ data: [String: ZXJSONValue]) async throws -> ZXAuthUser {
+        record("updateUserMetadata")
+        lock.withLock { _lastMetadataPatch = data }
+        if let updateMetadataError { throw updateMetadataError }
+        guard let current = stored else { throw ZXCoreError.notSignedIn }
+        let user = ZXUserMetadata.applying(data, to: current)
+        setStored(user)
+        return user
     }
 }
 

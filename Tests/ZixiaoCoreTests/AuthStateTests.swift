@@ -114,20 +114,18 @@ final class AuthStateTests: XCTestCase {
         XCTAssertEqual(auth.state, .anonymous(userId: anonId))
     }
 
-    func testLinkAppleDetectsUserIdChange() async {
+    /// T43: Apple 登录走共用服务端换 session, user id 变了是预期 (换到统一账号), 按切换收尾而不是报 identityChanged。
+    func testLinkAppleAcceptsUserIdChangeAsAccountSwitch() async throws {
         let other = ZXAuthUser(id: "cccccccc-0000-0000-0000-000000000003", isAnonymous: false, providers: [.apple])
         let backend = MockAuthBackend()
         backend.linkAppleResult = { _ in .success(other) }
         let auth = ZXAuth(backend: backend)
         await auth.bootstrap()
-        do {
-            try await auth.linkApple(idToken: "tok", nonce: "raw")
-            XCTFail("user id 变了必须报错")
-        } catch {
-            XCTAssertEqual(error as? ZXCoreError, .identityChanged(before: anonId, after: other.id))
-        }
-        // 本地 session 已是另一个人, 状态如实跟过去。
+        let result = try await auth.linkApple(idToken: "tok", nonce: "raw")
+        XCTAssertEqual(result.abandonedUserId, anonId)
+        XCTAssertTrue(result.abandonedWasAnonymous)
         XCTAssertEqual(auth.userId, other.id)
+        XCTAssertEqual(auth.state, .linked(userId: other.id, providers: [.apple]))
     }
 
     func testLinkRequiresSignedInUser() async {
