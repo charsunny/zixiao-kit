@@ -68,13 +68,22 @@ public struct ZXPoemQuote: Hashable, Decodable, Sendable {
     }
 }
 
-/// 一个节气配的一句诗。
+/// 一个节气: 配的一句诗、一句说明, 以及节气详情 (T57)。
 public struct ZXTermVerse: Hashable, Decodable, Sendable {
     public let term: String
     public let line: String
     public let author: String
     public let title: String
     public let gloss: String
+    /// 节气名的古籍释义原句: 优先《月令七十二候集解》(如「立春，正月节。立，建始也…」),
+    /// 集解该条只写「解见某某」的用《淮南子·天文训》。下面四项旧数据里没有, 一律可选。
+    public let source: String?
+    /// `source` 出自哪本书, 如「月令七十二候集解」「淮南子·天文训」(不带书名号)。
+    public let sourceBook: String?
+    /// 节气详解, 140–200 字: 太阳黄经、公历日期区间、气候物候、本节气三候名 (与 hou72 一致) 与串讲。
+    public let explain: String?
+    /// 民俗 / 饮食 / 养生, 80–140 字。
+    public let life: String?
 }
 
 /// 传统节日。按农历日 (`lunarMonth`, `lunarDay`; 日为 -1 表示该月末日) 或按节气

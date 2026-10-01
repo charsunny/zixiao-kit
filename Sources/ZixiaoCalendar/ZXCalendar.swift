@@ -208,6 +208,9 @@ public enum ZXCalendar {
     /// suishi.json 里的全部节日, 按文件顺序。
     public static var allFestivals: [ZXFestival] { ZXCultureData.shared.festivals }
 
+    /// 二十四节气 (诗句、说明与详情), 按 suishi.json 顺序, 立春起。
+    public static var allTermVerses: [ZXTermVerse] { ZXCultureData.shared.termVerses }
+
     /// 某节气配的诗, 没配返回 nil。
     public static func termVerse(_ term: String) -> ZXTermVerse? {
         ZXCultureData.shared.termVerse(term)
