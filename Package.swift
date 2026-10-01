@@ -15,6 +15,7 @@ let package = Package(
         .library(name: "ZixiaoLibrary", targets: ["ZixiaoLibrary"]),
         .library(name: "ZixiaoArt", targets: ["ZixiaoArt"]),
         .library(name: "SwiftPieces", targets: ["SwiftPieces"]),
+        .library(name: "ZixiaoPoet", targets: ["ZixiaoPoet"]),
     ],
     dependencies: [
         .package(url: "https://github.com/supabase/supabase-swift.git", from: "2.0.0"),
@@ -66,6 +67,17 @@ let package = Package(
             dependencies: ["ZixiaoDesign"],
             swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]
         ),
+        // 诗人志内核 (原 PoetKit, 2026-10-01 charsunny 决定并入): 编成、只读数据、用户数据同步、启动层与能力视图。
+        // 不含任何诗人的资源 —— 编成 / 导读 / 书画随各产品 App 包发, 经 PoetComposition.load(from:) / PoetResources 注入。
+        // 直接依赖 Supabase: PoetStore 的只读查询用 ZXSupabase.client (同一份 session)。
+        .target(
+            name: "ZixiaoPoet",
+            dependencies: [
+                "ZixiaoCore", "ZixiaoDesign", "ZixiaoCalendar",
+                .product(name: "Supabase", package: "supabase-swift"),
+            ],
+            swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]
+        ),
         .testTarget(name: "ZixiaoCoreTests", dependencies: ["ZixiaoCore"]),
         .testTarget(name: "ZixiaoDesignTests", dependencies: ["ZixiaoDesign"]),
         // 金标 fixture 在仓库根 Fixtures/, 测试用 #filePath 定位读取 (SPM 不允许 target 外的 resources)。
@@ -73,5 +85,6 @@ let package = Package(
         .testTarget(name: "ZixiaoLibraryTests", dependencies: ["ZixiaoLibrary"], resources: [.process("Resources")]),
         // 对拍金标 (原作 JS 跑出, Tools/zxart-fixtures/generate.cjs) 随测试包拷贝, 用 Bundle.module 读取。
         .testTarget(name: "ZixiaoArtTests", dependencies: ["ZixiaoArt"], resources: [.copy("Fixtures")]),
+        .testTarget(name: "ZixiaoPoetTests", dependencies: ["ZixiaoPoet", "ZixiaoCore", "ZixiaoDesign", "ZixiaoCalendar"]),
     ]
 )
