@@ -6,6 +6,10 @@
 //  与 Flutter 版 `book_cover.dart` 的有意不同: Flutter 版把部类签条放在左边、题签居中;
 //  这里按真线装书来 —— 书从右往左翻, 订口在**右侧** (四眼订: 四个线孔, 线从孔里绕过书脊),
 //  题签贴在**左上**。部类色改画成书脊两端的「包角」(真书上是包在订口两角的绫绢)。
+//
+//  书衣 (`Cloth`) 可由调用方染色 (如 App 按部类给的矿物色纸): 题签仍是纸色、题字仍是墨,
+//  只有压在书衣上的署名、订线、线孔描边改用书衣自带的那支墨 —— 内核不替调用方挑颜色,
+//  只负责「深浅外观各取一支」。
 
 import SwiftUI
 
@@ -32,10 +36,39 @@ public struct BookCoverView: View, Sendable {
         public var height: CGFloat { width * 4 / 3 }
     }
 
+    /// 书衣的颜色, 浅深外观各一组。`nil` (默认) 是素面: 书衣取 `theme.surface`, 与加这个参数之前一致。
+    public struct Cloth: Sendable, Hashable {
+        /// 一种外观下的书衣。
+        public struct Shade: Sendable, Hashable {
+            /// 书衣底色 (不透明)。
+            public let fill: Color
+            /// 压在书衣上的墨: 署名小字用全色, 订线与线孔描边用它的淡色。
+            /// 它与 `fill` 的对比度由调用方保证 (署名是正文级小字, 要 ≥ 4.5:1)。
+            public let ink: Color
+
+            public init(fill: Color, ink: Color) {
+                self.fill = fill
+                self.ink = ink
+            }
+        }
+
+        public let light: Shade
+        public let dark: Shade
+
+        public init(light: Shade, dark: Shade) {
+            self.light = light
+            self.dark = dark
+        }
+
+        /// 按外观取一组。
+        public func shade(isDark: Bool) -> Shade { isDark ? dark : light }
+    }
+
     let title: String
     let byline: String
     let size: Size
     let cornerTint: Color?
+    let cloth: Cloth?
     let isRemote: Bool
 
     @Environment(\.zxTheme) private var theme
@@ -45,13 +78,15 @@ public struct BookCoverView: View, Sendable {
     ///   - author: 作者 / 朝代等署名 (如「春秋 · 孔子弟子」), 横排在封面底部。
     ///   - cornerTint: 包角颜色 (如部类色)。内核不知道「经史子集」各配什么色, 由调用方给;
     ///     nil 不画包角。
+    ///   - cloth: 书衣颜色 (如部类色); nil 是素面 (`theme.surface`)。题签不随它变。
     ///   - isRemote: 云端的书、还没下到本机: 右下角一枚半透明的下载记号。
     public init(title: String, author: String? = nil, size: Size = .shelf,
-                cornerTint: Color? = nil, isRemote: Bool = false) {
+                cornerTint: Color? = nil, cloth: Cloth? = nil, isRemote: Bool = false) {
         self.title = title
         self.byline = author ?? ""
         self.size = size
         self.cornerTint = cornerTint
+        self.cloth = cloth
         self.isRemote = isRemote
     }
 
@@ -65,11 +100,12 @@ public struct BookCoverView: View, Sendable {
         let slipTop = w * 0.09
         let slipPad = w * 0.045
         let slipMaxHeight = h - slipTop - footer - w * 0.12
+        let shade = cloth?.shade(isDark: theme.isDark)
 
         ZStack(alignment: .topLeading) {
             // 书衣
             RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(theme.surface)
+                .fill(shade?.fill ?? theme.surface)
 
             // 包角
             if let cornerTint {
@@ -85,11 +121,11 @@ public struct BookCoverView: View, Sendable {
 
             // 订线与线孔
             BindingThread(bindX: bindX)
-                .stroke(theme.ink(0.28), lineWidth: max(0.6, w * 0.006))
+                .stroke(shade?.ink.opacity(0.4) ?? theme.ink(0.28), lineWidth: max(0.6, w * 0.006))
             BindingHoles(bindX: bindX, diameter: max(2, w * 0.03))
                 .fill(theme.paper())
             BindingHoles(bindX: bindX, diameter: max(2, w * 0.03))
-                .stroke(theme.ink(0.35), lineWidth: 0.5)
+                .stroke(shade?.ink.opacity(0.5) ?? theme.ink(0.35), lineWidth: 0.5)
 
             // 题签: 左上。双线框 —— 外框是签纸的边, 内框一道极淡的墨线, 刻本题签的常见样子。
             VerticalText(title,
@@ -110,7 +146,7 @@ public struct BookCoverView: View, Sendable {
             if !byline.isEmpty {
                 Text(byline)
                     .font(theme.bodyFont(small, relativeTo: nil))
-                    .foregroundStyle(theme.muted)
+                    .foregroundStyle(shade?.ink ?? theme.muted)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(width: bindX - 12)
