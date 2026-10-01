@@ -20,6 +20,12 @@ public struct ZXShichen: Hashable, Sendable {
     public let ancientName: String
     /// 一句古人此时的作息。
     public let gloss: String
+    /// 时辰详解, 100–160 字: 古称由来、更鼓、古人此时在做什么。旧数据无此项时为 nil。
+    public let explain: String?
+    /// 传统养生 (子午流注对应经络与作息), 60–100 字, 只述古人之说。旧数据无此项时为 nil。
+    public let health: String?
+    /// 与此时辰相关的古诗。
+    public let poem: ZXPoemQuote?
     /// 本时辰起止 (墙上时间的整点)。子时跨日: 23:30 查得的子时止于次日 01:00,
     /// 00:30 查得的子时起于前一日 23:00。
     public let start: Date

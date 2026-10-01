@@ -171,6 +171,9 @@ public enum ZXCalendar {
             branchIndex: index,
             ancientName: entry.ancient,
             gloss: entry.gloss,
+            explain: entry.explain,
+            health: entry.health,
+            poem: entry.poem,
             start: startDay.date(hour: startHour, timeZone: timeZone),
             end: endDay.date(hour: endHour, timeZone: timeZone),
             geng: geng

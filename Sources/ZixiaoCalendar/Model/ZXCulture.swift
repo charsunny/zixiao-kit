@@ -17,6 +17,16 @@ public struct ZXHou: Hashable, Decodable, Sendable {
     public let name: String
     /// 自撰解说, 40–80 字。
     public let text: String
+    /// 古籍原句: 优先《月令七十二候集解》, 不足处用《礼记·月令》。下面五项旧数据里没有, 一律可选。
+    public let source: String?
+    /// `source` 出自哪本书, 如「月令七十二候集解」「礼记·月令」(不带书名号)。
+    public let sourceBook: String?
+    /// 物候详解, 120–200 字: 自然现象、为何在此时、古人怎样观察。
+    public let explain: String?
+    /// 农事 / 民俗 / 饮食, 60–120 字。
+    public let life: String?
+    /// 与此候意象相关的古诗; 找不到确切出处的候留空。
+    public let poem: ZXPoemQuote?
 
     public var orderLabel: String { ZXHou.orderLabels[order - 1] }
 
@@ -31,9 +41,31 @@ public struct ZXHuaxin: Hashable, Decodable, Sendable {
     /// 1…3, 初候 / 二候 / 三候。
     public let order: Int
     public let flower: String
+    /// 一句白话小注。
     public let note: String
+    /// 花的详细介绍, 100–160 字: 形态、花期、与节候的对应、文化意象。下面四项旧数据里没有, 一律可选。
+    public let intro: String?
+    /// 花信风出处句; 未能逐花考定的留空。
+    public let source: String?
+    /// 赏花 / 栽培 / 食用药用, 60–100 字。
+    public let life: String?
+    public let poem: ZXPoemQuote?
 
     public var orderLabel: String { ZXHou.orderLabels[order - 1] }
+}
+
+/// 一段古诗引文: 两句或四句原文 (带标点)、作者、篇名 (不带书名号, 组诗写作「饮酒·其五」)。
+/// 《诗经》、乐府等无名氏作品 author 为「佚名」。
+public struct ZXPoemQuote: Hashable, Decodable, Sendable {
+    public let text: String
+    public let author: String
+    public let title: String
+
+    public init(text: String, author: String, title: String) {
+        self.text = text
+        self.author = author
+        self.title = title
+    }
 }
 
 /// 一个节气配的一句诗。
@@ -92,6 +124,10 @@ struct ZXShichenEntry: Decodable, Sendable {
     let start: Int
     let end: Int
     let gloss: String
+    // 以下三项旧数据里没有, 可选。
+    let explain: String?
+    let health: String?
+    let poem: ZXPoemQuote?
 }
 
 /// shichen.json 里的一条更点文案。
