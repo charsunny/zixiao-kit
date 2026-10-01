@@ -73,7 +73,7 @@ let package = Package(
         .target(
             name: "ZixiaoPoet",
             dependencies: [
-                "ZixiaoCore", "ZixiaoDesign", "ZixiaoCalendar",
+                "ZixiaoCore", "ZixiaoDesign", "ZixiaoCalendar", "ZixiaoLibrary",
                 .product(name: "Supabase", package: "supabase-swift"),
             ],
             swiftSettings: [.enableExperimentalFeature("StrictConcurrency")]

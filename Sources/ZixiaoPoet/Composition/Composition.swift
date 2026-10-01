@@ -14,13 +14,15 @@ public struct PoetComposition: Decodable, Sendable {
     public let identity: Identity
     public let data: DataManifest?
     public let editorial: Editorial?
+    /// 书房的云端书架; 缺省时书房不显示。
+    public let library: PoetLibrary?
 
     /// JSON 里 capabilities 的键是字符串；JSONDecoder 不直接支持
     /// RawRepresentable 枚举做字典键，所以先按 String 解，再收敛成枚举。
     public let capabilities: [CapabilityID: Placement]
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, poet, app, identity, data, editorial, capabilities
+        case schemaVersion, poet, app, identity, data, editorial, library, capabilities
     }
 
     public init(from decoder: Decoder) throws {
@@ -31,6 +33,7 @@ public struct PoetComposition: Decodable, Sendable {
         identity = try c.decode(Identity.self, forKey: .identity)
         data = try c.decodeIfPresent(DataManifest.self, forKey: .data)
         editorial = try c.decodeIfPresent(Editorial.self, forKey: .editorial)
+        library = try c.decodeIfPresent(PoetLibrary.self, forKey: .library)
         let raw = try c.decode([String: Placement].self, forKey: .capabilities)
         capabilities = raw.reduce(into: [:]) { acc, kv in
             if let id = CapabilityID(rawValue: kv.key) { acc[id] = kv.value }
@@ -293,4 +296,100 @@ public extension PoetComposition {
     }
 
     var eraName: EraNaming { EraNaming(style: identity.chronology?.style ?? .gregorian) }
+}
+
+/// 书房里的云端书架 (编成的可选 `library` 块)。书目由各产品的编成给出 (id / 地址 / 校验值取自书库目录, 由
+/// 脚本生成), 内核只负责按分组画书架、按 url + sha256 下载、用阅读器打开。没有这个块, 书房就没有书架。
+public struct PoetLibrary: Codable, Sendable, Hashable {
+    /// 书架在书房里的位置; 目前只有 `section` (书房里的一个分区)。
+    public let prominence: String
+    /// 分区标题 (如「东坡著述」)。
+    public let label: String
+    public let books: [Entry]
+
+    public init(prominence: String = "section", label: String, books: [Entry]) {
+        self.prominence = prominence
+        self.label = label
+        self.books = books
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        prominence = try c.decodeIfPresent(String.self, forKey: .prominence) ?? "section"
+        label = try c.decode(String.self, forKey: .label)
+        books = try c.decode([Entry].self, forKey: .books)
+    }
+
+    private enum CodingKeys: String, CodingKey { case prominence, label, books }
+
+    /// 一本书。字段与书库目录一一对应: `hash` 是 `sha256:<hex>` (对解压后的 book.json), `bytes` 是
+    /// `.json.gz` 的大小, `version` 决定本机落盘位置。
+    public struct Entry: Codable, Sendable, Hashable, Identifiable {
+        public let id: String
+        public let title: String
+        /// 封面用短题; 目录原题过长时给。
+        public let shortTitle: String?
+        public let author: String?
+        public let dynasty: String?
+        public let url: String
+        public let hash: String
+        public let version: Int
+        public let bytes: Int?
+        public let group: String
+
+        public init(id: String, title: String, shortTitle: String? = nil, author: String? = nil,
+                    dynasty: String? = nil, url: String, hash: String, version: Int = 1, bytes: Int? = nil,
+                    group: String) {
+            self.id = id; self.title = title; self.shortTitle = shortTitle; self.author = author
+            self.dynasty = dynasty; self.url = url; self.hash = hash; self.version = version
+            self.bytes = bytes; self.group = group
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decode(String.self, forKey: .id)
+            title = try c.decode(String.self, forKey: .title)
+            shortTitle = try c.decodeIfPresent(String.self, forKey: .shortTitle)
+            author = try c.decodeIfPresent(String.self, forKey: .author)
+            dynasty = try c.decodeIfPresent(String.self, forKey: .dynasty)
+            url = try c.decode(String.self, forKey: .url)
+            hash = try c.decode(String.self, forKey: .hash)
+            version = try c.decodeIfPresent(Int.self, forKey: .version) ?? 1
+            bytes = try c.decodeIfPresent(Int.self, forKey: .bytes)
+            group = try c.decode(String.self, forKey: .group)
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, title, shortTitle, author, dynasty, url, hash, version, bytes, group
+        }
+
+        /// 封面与列表用的书名。
+        public var coverTitle: String { shortTitle ?? title }
+
+        /// 「宋 · 苏轼」; 两样都没有为 nil。
+        public var byline: String? {
+            let parts = [dynasty, author].compactMap { $0 }.filter { !$0.isEmpty }
+            return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        }
+
+        public var downloadURL: URL? { URL(string: url) }
+    }
+
+    /// 一行书架: 分组名 + 该组的书。
+    public struct Group: Sendable, Hashable, Identifiable {
+        public let name: String
+        public let books: [Entry]
+        public var id: String { name }
+    }
+
+    /// 按分组首次出现的次序分行, 行内保持 `books` 的次序。
+    public var groups: [Group] {
+        var order: [String] = []
+        var buckets: [String: [Entry]] = [:]
+        for book in books {
+            if buckets[book.group] == nil { order.append(book.group) }
+            buckets[book.group, default: []].append(book)
+        }
+        return order.map { Group(name: $0, books: buckets[$0] ?? []) }
+    }
 }

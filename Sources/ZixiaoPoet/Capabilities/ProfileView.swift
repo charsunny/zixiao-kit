@@ -1,4 +1,4 @@
-//  ProfileView.swift — 书房: 账号卡、最近翻阅、收藏、阅读记录; 设置 / 账号 / 登录 / 注销 / 关于
+//  ProfileView.swift — 书房: 账号卡、最近翻阅、收藏、书架 (编成有 library 时)、阅读记录; 设置 / 账号 / 登录 / 注销 / 关于
 //
 //  账号模型 (D3): 匿名优先。未绑定 Apple / 手机号的用户也有一个云端匿名身份 (`ctx.isSignedIn == false`),
 //  界面上显示「登录以同步」。登录 = 绑定 (或切到该身份已有的统一账号, 本机记录并过去)。
@@ -42,6 +42,9 @@ struct ProfileView: View {
                 }
                 recentSection
                 savedSection
+                if let library = ctx.composition.library, !library.books.isEmpty {
+                    LibraryShelfSection(library: library)
+                }
                 historySection
                 if let message = ctx.userData.userDataError {
                     VStack(alignment: .leading, spacing: theme.space.sm) {

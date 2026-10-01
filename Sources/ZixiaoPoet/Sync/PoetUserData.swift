@@ -119,6 +119,9 @@ public final class PoetUserData {
             await enqueue(result.writes(userId: uid, app: app))
         } catch {
             guard userId == uid, !Task.isCancelled else { return }
+            #if DEBUG
+            print("PoetUserData.pull failed:", error)
+            #endif
             userDataError = "收藏与阅读记录暂时无法同步，请稍后重试。"
         }
     }
