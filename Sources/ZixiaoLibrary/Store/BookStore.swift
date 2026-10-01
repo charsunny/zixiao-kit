@@ -263,6 +263,31 @@ public actor BookStore {
         return book
     }
 
+    // MARK: 外部目录的书 (T35)
+
+    /// 下载一本不在本库目录里的书 (如殆知阁全书目索引里的条目): 给出 book.json(.gz) 地址、id、版本与
+    /// `sha256:<hex>` (对解压后的 book.json)。走与 `download(_:)` 同一条路 —— 同样的 sha256 校验、
+    /// 同样落盘到 `<root>/<id>/<version>/book.json`、同样并发合并; 下完 `book(id:)` /
+    /// `isAvailableOffline(id:)` / `downloadedVersion(id:)` 对这个 id 一样有效。
+    /// `expectedHash` 为 nil 时与目录条目缺 hash 一样拒收 (`.missingHash`)。
+    @discardableResult
+    public func download(from url: URL, id: String, version: Int, expectedHash: String?) async throws -> Book {
+        try Self.validateIdentifier(id)
+        let entry = CatalogEntry(id: id, title: id, version: version, hash: expectedHash, url: url.absoluteString)
+        return try await download(entry)
+    }
+
+    /// 已下载 (落了盘、文件还在) 的书 id, 按 id 排序。外部目录的书不在 `catalog()` 里, 书架靠它找回来。
+    public func downloadedBookIds() -> [String] {
+        let fm = FileManager.default
+        guard let children = try? fm.contentsOfDirectory(at: rootDirectory, includingPropertiesForKeys: nil) else {
+            return []
+        }
+        return children.map(\.lastPathComponent)
+            .filter { (try? Self.validateIdentifier($0)) != nil && downloadedFile(id: $0) != nil }
+            .sorted()
+    }
+
     /// 删掉已下载的书 (随包的删不掉, 删完照样能读随包版)。
     public func remove(id: String) throws {
         try Self.validateIdentifier(id)

@@ -46,7 +46,10 @@ public struct ZXFloatingPill: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// 按钮视觉尺寸。44pt 是最小点按区, 这里就用它 —— 胶囊本来就是给手指的。
-    private let hit: CGFloat = 44
+    /// 收起态胶囊 (无标题) 是 `controlSize` 见方的一粒, 展开后工具条也是这个高度。
+    /// 公开出来给「与胶囊并排、要对称」的浮动件对齐用 (阅读器左下的章目钮)。
+    public static let controlSize: CGFloat = 44
+    private var hit: CGFloat { Self.controlSize }
 
     /// - Parameters:
     ///   - title: 收起时胶囊上的字 (可选; 不给只显示图标)。也是无障碍标签。

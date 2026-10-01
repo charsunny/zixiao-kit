@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import ZixiaoDesign
 
@@ -152,5 +153,18 @@ final class BentoLayoutTests: XCTestCase {
                 }
             }
         }
+    }
+}
+
+/// 浮动胶囊的度量: 收起态是 `controlSize` 见方的一粒 —— 阅读器左下的章目钮按这个数对齐,
+/// 两侧才对称。数一变, 并排的浮动件也得跟着变, 所以钉住「公开的数 = 实际画出来的尺寸」。
+@MainActor
+final class FloatingPillMetricTests: XCTestCase {
+    func testCollapsedPillIsControlSizeSquare() {
+        XCTAssertEqual(ZXFloatingPill.controlSize, 44, "最小点按区")
+        let host = UIHostingController(rootView: ZXFloatingPill(systemImage: "textformat.size", actions: []))
+        let size = host.sizeThatFits(in: CGSize(width: 400, height: 400))
+        XCTAssertEqual(size.width, ZXFloatingPill.controlSize, accuracy: 0.5)
+        XCTAssertEqual(size.height, ZXFloatingPill.controlSize, accuracy: 0.5)
     }
 }
