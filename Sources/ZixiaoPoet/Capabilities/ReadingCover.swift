@@ -1,54 +1,39 @@
-import SwiftUI
+//  ReadingCover.swift — 单篇作品的「书衣」
+//
+//  画法交给 kit 的 `BookCoverView` (代码生成的线装封面: 书衣、左上题签竖排书名、右侧四眼订线)。
+//  这里只决定两件事: 尺寸 (3:4, 由调用方给宽或高), 与「哪一类」—— 体裁画成书脊两端的包角,
+//  色取身份的角色 (印 / 次色 / 淡墨), 内核不写任何色值。
 
-/// Typographic covers for individual works, rather than reproductions of historical editions.
+import SwiftUI
+import ZixiaoDesign
+
 struct ReadingCover: View {
     let title: String
     let author: String
     let genre: Genre
-    var height: CGFloat?
-    @Environment(\.dynamicTypeSize) private var typeSize
+    /// 封面高度; 宽度按 3:4 推出。与 `width` 都不给时用书目页大封面 (随 Dynamic Type 放大)。
+    var height: CGFloat? = nil
+    /// 封面宽度; 给了就以它为准。
+    var width: CGFloat? = nil
+    @Environment(\.zxTheme) private var theme
+    @ScaledMetric(relativeTo: .title3) private var defaultWidth = BookCoverView.Size.page.width
 
-    private var paper: Color {
-        switch genre.id {
-        case "shi": Color.adaptive(light: "#355E59", dark: "#284943")
-        case "ci": Color.adaptive(light: "#795149", dark: "#623F3A")
-        case "wen": Color.adaptive(light: "#EAE0CB", dark: "#4B4435")
-        default: Color.adaptive(light: "#D5E1E6", dark: "#35464F")
-        }
+    private var coverWidth: CGFloat {
+        width ?? height.map { $0 * 3 / 4 } ?? defaultWidth
     }
-    private var ink: Color {
+
+    /// 体裁 → 包角。诗用印色, 词用次色, 文赋用淡墨; 其余素面不画包角。
+    private var cornerTint: Color? {
         switch genre.id {
-        case "shi", "ci": Color(hex: "#FFF9ED")
-        default: Color.adaptive(light: "#333A38", dark: "#F7F1E4")
+        case "shi": theme.color.seal
+        case "ci": theme.color.secondary
+        case "wen", "fu": theme.color.muted
+        default: nil
         }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(genre.label).font(.subheadline.weight(.medium)).foregroundStyle(ink.opacity(0.8))
-            Text(title).font(Font(PoetFont.serif(23, .semibold, .title3)))
-                .lineSpacing(4).lineLimit(typeSize.isAccessibilitySize ? nil : 4)
-                .fixedSize(horizontal: false, vertical: true)
-                .layoutPriority(1)
-            Spacer(minLength: 8)
-            Text(author).font(Font(PoetFont.serif(14, .regular, .footnote)))
-                .foregroundStyle(ink.opacity(0.85))
-        }
-        .padding(.vertical, 22).padding(.leading, 23).padding(.trailing, 18)
-        .frame(maxWidth: .infinity, alignment: .leading).frame(height: height)
-        .foregroundStyle(ink)
-        .background(paper)
-        .overlay(alignment: .leading) {
-            LinearGradient(colors: [.black.opacity(0.12), .white.opacity(0.05), .clear],
-                           startPoint: .leading, endPoint: .trailing)
-                .frame(width: 9).allowsHitTesting(false)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 6).strokeBorder(.primary.opacity(0.06), lineWidth: 0.5)
-                .allowsHitTesting(false)
-        }
-        // 书封是「一本书」不是容器，实物有影子才立得起来
-        .shadow(color: .black.opacity(0.12), radius: 5, x: 0, y: 4)  // lint:allow-shadow
+        BookCoverView(title: title, author: "\(genre.label) · \(author)",
+                      size: .width(coverWidth), cornerTint: cornerTint)
     }
 }

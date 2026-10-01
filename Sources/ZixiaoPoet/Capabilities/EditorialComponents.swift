@@ -1,116 +1,112 @@
-//  EditorialComponents.swift — 编辑版式的小件
+//  EditorialComponents.swift — 主题共读: 入口行与共读页
 //
-//  过渡 shim (M1): `EditorialHeading` / `EditorialRule` 保留 PoetKit 的调用形状,
-//  分隔线由 `ZixiaoDesign.InkDivider` 画, 字由 ZXTheme 解析。M2 换成 kit 组件后删。
-//  `ReadingCollectionLabel` / `ReadingCollectionView` 是能力视图本身, 不是 shim。
+//  能力视图本身。
+//  字、色、间距全部来自 `@Environment(\.zxTheme)`。
 
 import SwiftUI
 import ZixiaoDesign
 
-/// Open page typography, reserved panels, and compact indexes establish different reading rhythms.
-@available(*, deprecated, message: "M2: use theme.type + ZixiaoDesign.SectionLabel")
-struct EditorialHeading: View {
-    let eyebrow: String
-    let title: String
-    var introduction: String? = nil
-    let theme: Theme
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(eyebrow).font(PoetFont.label).foregroundStyle(theme.accent)
-            Text(title).font(PoetFont.display).foregroundStyle(theme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
-            if let introduction {
-                Text(introduction).font(PoetFont.body).lineSpacing(7)
-                    .foregroundStyle(theme.secondaryInk)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }.frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-@available(*, deprecated, message: "M2: use ZixiaoDesign.InkDivider")
-struct EditorialRule: View {
-    let theme: Theme
-    var body: some View {
-        InkDivider()
-    }
-}
-
+/// 一组共读的入口行: 图标 + 题目 + 副题 + 篇数。
 struct ReadingCollectionLabel: View {
     let collection: ReadingCollection
-    let theme: Theme
     var featured = false
+    @Environment(\.zxTheme) private var theme
+
+    init(collection: ReadingCollection, featured: Bool = false) {
+        self.collection = collection
+        self.featured = featured
+    }
+
     var body: some View {
-        HStack(alignment: .top, spacing: 18) {
+        HStack(alignment: .top, spacing: theme.space.lg) {
             Image(systemName: collection.symbol)
-                .font(.title2).foregroundStyle(theme.accent)
-                .frame(width: 36, height: 40).accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 8) {
-                Text(collection.title).font(featured ? PoetFont.cardTitle : PoetFont.entryTitle)
-                    .foregroundStyle(theme.ink)
-                Text(collection.subtitle).font(PoetFont.callout)
-                    .foregroundStyle(theme.secondaryInk).lineSpacing(4)
+                .font(theme.type.title2).foregroundStyle(theme.color.accent)
+                .frame(width: theme.space.xxl + theme.space.xs, height: theme.space.xxl + theme.space.sm)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: theme.space.sm) {
+                Text(collection.title).font(featured ? theme.type.title2 : theme.type.headline)
+                    .foregroundStyle(theme.color.textPrimary)
+                Text(collection.subtitle).font(theme.type.callout)
+                    .foregroundStyle(theme.color.textSecondary).lineSpacing(theme.space.xs)
                 Text("共读 \(collection.works.count) 篇")
-                    .font(PoetFont.meta).foregroundStyle(theme.accent)
+                    .font(theme.type.footnote).foregroundStyle(theme.color.accent)
             }.frame(maxWidth: .infinity, alignment: .leading)
-            Image(systemName: "chevron.right").font(.footnote)
-                .foregroundStyle(theme.accent).padding(.top, 10)
+            Image(systemName: "chevron.right").font(theme.type.footnote)
+                .foregroundStyle(theme.color.accent).padding(.top, theme.space.sm)
         }
-        .padding(.vertical, featured ? 8 : 14)
+        .padding(.vertical, featured ? theme.space.sm : theme.space.md)
         .contentShape(Rectangle())
     }
 }
 
+/// 主题共读页: 导读 → 逐篇按语 + 作品行。正文优先取随包导读, 网络只补缺。
 struct ReadingCollectionView: View {
     let ctx: CompositionContext
     let collection: ReadingCollection
     @State private var poems: [Poem] = []
     @State private var loading = true
     @State private var failed = false
-    private var theme: Theme { ctx.theme }
+    @Environment(\.zxTheme) private var theme
     private var journey: ReadingJourney { ReadingJourney(collection: collection, poems: poems) }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 30) {
-                EditorialHeading(eyebrow: "主题共读 · \(collection.works.count) 篇", title: collection.title,
-                                 introduction: collection.introduction, theme: theme)
-                EditorialRule(theme: theme)
+            VStack(alignment: .leading, spacing: theme.space.xl) {
+                heading
+                InkDivider()
                 if loading { LoadingStateView(label: "正在准备这组诗文…") }
                 else if failed { LoadFailureView(title: "诗文暂未载入", retry: load) }
                 else {
                     ForEach(Array(collection.works.enumerated()), id: \.element.id) { index, selection in
-                        VStack(alignment: .leading, spacing: 14) {
-                            HStack(alignment: .firstTextBaseline, spacing: 14) {
-                                Text(String(format: "%02d", index + 1)).font(PoetFont.label.monospacedDigit())
-                                    .foregroundStyle(theme.accent)
-                                Text(selection.note).font(PoetFont.body).lineSpacing(6)
-                                    .foregroundStyle(theme.secondaryInk)
+                        VStack(alignment: .leading, spacing: theme.space.md) {
+                            HStack(alignment: .firstTextBaseline, spacing: theme.space.md) {
+                                Text(String(format: "%02d", index + 1))
+                                    .font(theme.type.footnote.monospacedDigit().weight(.medium))
+                                    .foregroundStyle(theme.color.accent)
+                                Text(selection.note).font(theme.type.body).lineSpacing(theme.space.xs + theme.space.xxs)
+                                    .foregroundStyle(theme.color.textSecondary)
                             }
                             if let poem = poems.first(where: { $0.id == selection.poemId }) {
                                 NavigationLink { PoemDetailView(ctx: ctx, poem: poem, journey: journey) } label: {
-                                    PoemRow(poem: poem, theme: theme, displayTitle: ctx.workTitle(poem))
-                                        .padding(18).background(theme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                    PoemRow(poem: poem, displayTitle: ctx.workTitle(poem))
+                                        .padding(theme.space.lg)
+                                        .zxSurface(.e1, in: RoundedRectangle(cornerRadius: theme.radius.lg, style: .continuous))
                                 }.buttonStyle(.plain)
                             } else {
                                 Label("这篇正文暂不可用", systemImage: "book.closed")
-                                    .font(PoetFont.meta).foregroundStyle(theme.secondaryInk)
+                                    .font(theme.type.footnote).foregroundStyle(theme.color.textSecondary)
                             }
                         }
                     }
                     if poems.count < collection.works.count {
-                        Button("重新载入缺少的正文") { Task { await load() } }.frame(minHeight: 44)
+                        Button("重新载入缺少的正文") { Task { await load() } }
+                            .font(theme.type.subhead).frame(minHeight: PoetLayout.minHitTarget)
                     }
                 }
                 Text("选篇与导读为编辑整理，原文保留所收录底本。")
-                    .font(PoetFont.meta).foregroundStyle(theme.secondaryInk)
-            }.padding(.horizontal, Metric.gutter).padding(.vertical, 24).poetReadableWidth(640)
+                    .font(theme.type.footnote).foregroundStyle(theme.color.textSecondary)
+            }
+            .padding(.horizontal, theme.space.margin).padding(.vertical, theme.space.xl)
+            .poetReadableWidth(640)
         }
-        .background(theme.paper).foregroundStyle(theme.ink)
-        .navigationTitle("主题共读").navigationBarTitleDisplayMode(.inline)
+        .background(theme.paper()).foregroundStyle(theme.color.textPrimary).tint(theme.color.accent)
+        .zxNavigationTitle("主题共读", role: .secondary)
         .task { await load() }.refreshable { await load() }
     }
+
+    private var heading: some View {
+        VStack(alignment: .leading, spacing: theme.space.md) {
+            ZixiaoDesign.SectionLabel("主题共读 · \(collection.works.count) 篇")
+            Text(collection.title).font(theme.type.title1).tracking(theme.type.tracking(for: .title1))
+                .foregroundStyle(theme.color.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            Text(collection.introduction).font(theme.type.body).lineSpacing(theme.space.sm)
+                .foregroundStyle(theme.color.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func load() async {
         let ids = collection.works.map(\.poemId)
         let bundled = ctx.guide?.poems(ids) ?? []

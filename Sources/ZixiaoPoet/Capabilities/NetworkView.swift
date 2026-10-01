@@ -1,4 +1,5 @@
 import SwiftUI
+import ZixiaoDesign
 
 /// 星图。只渲染 status=visible —— 共现抽出的 397 位 candidate 未经复核，
 /// 混着篇名碎片与同人异称，进图就是把噪声当数据卖。
@@ -16,8 +17,8 @@ struct NetworkView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.zxTheme) private var theme
 
-    private var theme: Theme { ctx.theme }
     private var placement: Placement? { ctx.composition.placement(.network) }
     private var groups: [AssociateGroup] { placement?.groups ?? [] }
     private var people: [Associate] { ctx.visibleAssociates }
@@ -35,20 +36,20 @@ struct NetworkView: View {
     var body: some View {
         Group {
             if people.isEmpty {
-                ContentUnavailableView("暂无交游记录", systemImage: "person.2")
+                LifeUI.Empty(title: "暂无交游记录", systemImage: "person.2")
             } else if showingList || automaticList {
                 peopleList
             } else {
                 graph
-                    .safeAreaInset(edge: .top, spacing: 8) { legend }
-                    .safeAreaInset(edge: .bottom, spacing: 8) {
+                    .safeAreaInset(edge: .top, spacing: theme.space.sm) { legend }
+                    .safeAreaInset(edge: .bottom, spacing: theme.space.sm) {
                         Text("显示 \(graphPeople.count) 人 · 轻点看往来 · 双指缩放")
-                            .font(PoetFont.meta).foregroundStyle(theme.secondaryInk)
-                            .padding(.vertical, 12)
+                            .font(theme.type.footnote).foregroundStyle(theme.color.textSecondary)
+                            .padding(.vertical, theme.space.md)
                     }
             }
         }
-        .background(theme.paper)
+        .background(theme.paper())
         .toolbar {
             if !automaticList {
             ToolbarItem(placement: .topBarTrailing) {
@@ -60,7 +61,7 @@ struct NetworkView: View {
             if !showingList {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("复位交游图", systemImage: "arrow.counterclockwise") {
-                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.22)) {
+                        withAnimation(theme.motion.adapted(theme.motion.smooth, reduceMotion: reduceMotion)) {
                             zoom = 1; committedZoom = 1
                             pan = .zero; committedPan = .zero
                         }
@@ -85,15 +86,19 @@ struct NetworkView: View {
     private var peopleList: some View {
         List(people) { person in
             NavigationLink { AssociateDetailView(ctx: ctx, associate: person) } label: {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(person.name).font(PoetFont.entryTitle)
-                    Text("\(label(person.groupKey)) · 年谱提及 \(person.weight) 次")
-                        .font(PoetFont.meta).foregroundStyle(theme.secondaryInk)
-                }.padding(.vertical, 6)
-            }.listRowBackground(theme.paper).listRowSeparatorTint(theme.rule)
+                HStack(spacing: theme.space.md) {
+                    Circle().fill(color(person.groupKey)).frame(width: theme.space.sm, height: theme.space.sm)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: theme.space.xs) {
+                        Text(person.name).font(theme.type.headline)
+                        Text("\(label(person.groupKey)) · 年谱提及 \(person.weight) 次")
+                            .font(theme.type.footnote).foregroundStyle(theme.color.textSecondary)
+                    }
+                }.padding(.vertical, theme.space.xs)
+            }.listRowBackground(theme.paper()).listRowSeparatorTint(theme.rule)
         }
         .listStyle(.plain).scrollContentBackground(.hidden).poetReadableWidth()
-        .foregroundStyle(theme.ink)
+        .foregroundStyle(theme.color.textPrimary)
     }
 
     private var graph: some View {
@@ -107,6 +112,8 @@ struct NetworkView: View {
             let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
             // Canvas 闭包里不碰 @MainActor 的 theme，颜色先在外面解析好
             let linkColor = theme.rule
+            let nameFont = theme.bodyFont(Self.nodeFontSize, relativeTo: nil)
+            let centerFont = theme.displayFont(Self.centerFontSize, relativeTo: nil)
 
             ZStack {
                 // 连线：所有人都连向中心。他们彼此之间的关系年谱里说不清，
@@ -120,21 +127,25 @@ struct NetworkView: View {
                                                  y: c.y + node.offset.height * scale))
                     }
                     gc.stroke(path, with: .color(linkColor),
-                              style: StrokeStyle(lineWidth: 0.8, lineCap: .round))
+                              style: StrokeStyle(lineWidth: Self.linkWidth, lineCap: .round))
                 }
                 .allowsHitTesting(false)
 
                 ForEach(layout.nodes) { node in
                     let a = node.associate
                     Button {
-                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
+                        withAnimation(theme.motion.adapted(theme.motion.snappy, reduceMotion: reduceMotion)) {
                             selected = a
                         }
                     } label: {
-                        Bubble(text: a.name, tint: color(a.groupKey),
-                               width: StarLayout.labelWidth(a), height: 24,
-                               fontSize: 11, filled: false)
-                            .frame(minWidth: 44, minHeight: 44)
+                        // A04: 视觉胶囊只有 24pt 高, 命中区单独撑到 ≥ 44 × 44 (宽取胶囊宽与 44 的大者)。
+                        // 按钮不随图缩放 (缩放只作用在位置上), 且 `minimumHitScale` 保证任意两个 44pt
+                        // 命中矩形在最终显示坐标里互不覆盖 —— 见 `StarLayout` 与 `StarLayoutTests`。
+                        Bubble(text: a.name, tint: color(a.groupKey), labelColor: color(a.groupKey),
+                               width: StarLayout.labelWidth(a), height: Self.nodeHeight,
+                               font: nameFont, filled: false)
+                            .frame(minWidth: max(LifeUI.minTapTarget, StarLayout.labelWidth(a)),
+                                   minHeight: LifeUI.minTapTarget)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -145,8 +156,9 @@ struct NetworkView: View {
                               y: center.y + node.offset.height * scale)
                 }
 
-                Bubble(text: ctx.composition.poet.name, tint: theme.seal,
-                       width: 54, height: 32, fontSize: 14, filled: true)
+                // 中心是印: 朱底纸字。纸压在印色上与印色压在纸上是同一对对比度, 两种外观都成立。
+                Bubble(text: ctx.composition.poet.name, tint: theme.seal, labelColor: theme.paper(),
+                       width: Self.centerWidth, height: Self.centerHeight, font: centerFont, filled: true)
                     .position(center)
                     .accessibilityHidden(true)
             }
@@ -174,11 +186,11 @@ struct NetworkView: View {
     private var legend: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             PoetGlassGroup {
-                HStack(spacing: 12) {
+                HStack(spacing: theme.space.md) {
                     groupButton("常见", id: "featured")
                     ForEach(groups) { group in groupButton(group.label, id: group.id) }
                     groupButton("全部", id: "all")
-                }.padding(.horizontal, Metric.gutter).padding(.vertical, 6)
+                }.padding(.horizontal, theme.space.margin).padding(.vertical, theme.space.xs)
             }
         }
     }
@@ -191,9 +203,9 @@ struct NetworkView: View {
             activeGroup = id
         } label: {
             Text(title)
-                .font(PoetFont.label)
-                .padding(.horizontal, 4)
-                .frame(minWidth: 44, minHeight: 44)
+                .font(theme.type.footnote.weight(.medium))
+                .padding(.horizontal, theme.space.xs)
+                .frame(minWidth: LifeUI.minTapTarget, minHeight: LifeUI.minTapTarget)
                 .contentShape(Rectangle())
         }
         .poetActionStyle(prominent: activeGroup == id)
@@ -201,35 +213,53 @@ struct NetworkView: View {
         .accessibilityAddTraits(activeGroup == id ? [.isSelected] : [])
     }
 
+    /// 分组色。编成里每组带的 `color` 是浅色下的一支十六进制 (深色一律回落成同一支青灰),
+    /// 进不了 token 体系; 这里按分组在编成里的**顺序**轮取身份的角色色, 浅深两种外观由主题各自解析。
+    /// 顺序对着首个编成 (五组交游) 的原意排: 亲族 = 印、师友 = 次色、门生 = 灰、方外 = 绿、政敌 = 墨。
+    /// 单色身份里次色 / 绿会回落成墨 —— 单色系的分组本来就靠标签与列表区分, 不靠颜色。
     private func color(_ key: String?) -> Color {
-        guard let hex = groups.first(where: { $0.id == key })?.color else {
-            return theme.secondaryInk
+        guard let index = groups.firstIndex(where: { $0.id == key }) else {
+            return theme.color.textSecondary
         }
-        return Color.adaptive(light: hex, dark: "#B6CFC8")
+        let roles: [Color] = [theme.seal, theme.color.secondary, theme.muted, theme.color.success, theme.ink(0.72)]
+        return roles[index % roles.count]
     }
     private func label(_ key: String?) -> String {
         groups.first { $0.id == key }?.label ?? "其他"
     }
 }
 
+private extension NetworkView {
+    // 星图节点是「物」(尺寸由 `StarLayout` 的容量与碰撞计算约束), 不是版面文字:
+    // 字号定长 (`relativeTo: nil`), 不随动态字体放大 —— 放大了胶囊就装不下, 布局也就不成立。
+    // 大字号用户走人物列表 (`automaticList`), 那里是正常的动态字体。
+    static let nodeHeight: CGFloat = 24
+    static let nodeFontSize: CGFloat = 11
+    static let centerWidth: CGFloat = 54
+    static let centerHeight: CGFloat = 32
+    static let centerFontSize: CGFloat = 14
+    static let linkWidth: CGFloat = 0.8
+}
+
 /// 星图上的一个人。中心用实底，其余用淡底描边 —— 层级一眼可分。
 private struct Bubble: View {
     let text: String
     let tint: Color
+    let labelColor: Color
     let width: CGFloat
     let height: CGFloat
-    let fontSize: CGFloat
+    let font: Font
     let filled: Bool
 
     var body: some View {
         ZStack {
             Capsule()
                 .fill(tint.opacity(filled ? 1 : 0.14))
-                .overlay(Capsule().stroke(tint.opacity(filled ? 0 : 0.5), lineWidth: 0.8))
+                .overlay(Capsule().stroke(tint.opacity(filled ? 0 : 0.5), lineWidth: NetworkView.linkWidth))
                 .frame(width: width, height: height)
             Text(text)
-                .font(Font(PoetFont.serif(fontSize, filled ? .semibold : .regular)))
-                .foregroundStyle(filled ? tint.onFill : tint)
+                .font(font)
+                .foregroundStyle(labelColor)
                 .lineLimit(1).fixedSize()
         }
     }

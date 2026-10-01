@@ -2,19 +2,23 @@
 //
 //  这里没有任何 if poet == ... 的分支：胶囊里放什么、分离钮是谁、
 //  哪个能力寄居在哪个能力里，全部由 composition.json 说了算。
+//
+//  根壳交给 kit 的 `ZXTabShell` (与玄览同法): 系统 TabView + iOS 26 悬浮栏, 每个 Tab 一个由壳持有的
+//  NavigationStack, 重选当前 Tab 回根 / 滚到顶, 滚动时收起 Tab 栏。编成里的 hero 能力 (检索类)
+//  映射成 `ZXTab(isSearch: true)` —— iOS 18 起 `Tab(role: .search)`, 26 起是 Tab 栏右侧分离的搜索钮,
+//  17 回退普通 Tab (壳负责)。Tab 的顺序与名字一律取编成。
 
 import SwiftUI
 import ZixiaoDesign
 
 public struct PoetAppRoot: View {
     @State private var ctx: CompositionContext
-    @State private var selection: CapabilityID
-    @State private var searchPath = NavigationPath()
-    @Environment(\.zxTheme) private var zxTheme
+    @State private var selection: String
+    @Environment(\.zxTheme) private var theme
 
     public init(context: CompositionContext) {
         _ctx = State(initialValue: context)
-        _selection = State(initialValue: Self.initialTab(context))
+        _selection = State(initialValue: Self.initialTab(context).rawValue)
     }
 
     /// 设计迭代用：`-tab itinerary` 直接落到某个能力，省去在模拟器里手点。
@@ -22,83 +26,54 @@ public struct PoetAppRoot: View {
     private static func initialTab(_ ctx: CompositionContext) -> CapabilityID {
         #if DEBUG
         if let raw = UserDefaults.standard.string(forKey: "tab"),
-           let id = CapabilityID(rawValue: raw) { return id }
+           let id = CapabilityID(rawValue: raw),
+           ctx.composition.capsuleTabs.contains(where: { $0.id == id }) || ctx.composition.heroTab?.id == id {
+            return id
+        }
         #endif
         return ctx.composition.capsuleTabs.first?.id ?? .daily
     }
 
+    /// 编成 → Tab 列表: 胶囊按 order, hero (至多一个, 只能是检索类) 放最后做搜索 Tab。
+    private var tabs: [ZXTab] {
+        var tabs = ctx.composition.capsuleTabs.map { tab in
+            ZXTab(id: tab.id.rawValue, title: tab.placement.label, systemImage: tab.id.symbol)
+        }
+        if let hero = ctx.composition.heroTab {
+            tabs.append(ZXTab(id: hero.id.rawValue, title: hero.placement.label,
+                              systemImage: hero.id.symbol, isSearch: true))
+        }
+        return tabs
+    }
+
     public var body: some View {
-        content
-            .tint(ctx.theme.accent)
-            // shim 跟着环境里的主题走 (身份 / 强调色 / 粗体文本变化时重建; 浅深由动态色自己解析)。
-            .onChange(of: zxTheme.color, initial: true) { syncTheme() }
-            .onChange(of: zxTheme.type) { syncTheme() }
-            // 账号与用户数据由 PoetAppBoot 启动 (`startSession`); 这里只拉只读骨架。
-            .task { await ctx.store.bootstrap() }
-    }
-
-    private func syncTheme() {
-        PoetThemeResolver.sync(zxTheme)
-        ctx.theme = Theme(zxTheme)
-    }
-
-    @ViewBuilder private var content: some View {
-        #if compiler(>=6.2)
-        if #available(iOS 26.0, *) {
-            TabView(selection: $selection) {
-                // 胶囊：2–4 个，按编成的 order 排
-                ForEach(ctx.composition.capsuleTabs, id: \.id) { tab in
-                    Tab(tab.placement.label, systemImage: tab.id.symbol, value: tab.id) {
-                        CapabilityRegistry.root(tab.id, ctx)
-                    }
-                }
-                // 分离圆钮：系统只由 role: .search 承载，所以它只能是检索类能力。
-                // 搜索零态提供作品、地点、人物和年份的具体线索。
-                if let hero = ctx.composition.heroTab {
-                    Tab(hero.placement.label, systemImage: hero.id.symbol,
-                        value: hero.id, role: .search) {
-                        NavigationStack(path: $searchPath) {
-                            CapabilityRegistry.root(hero.id, ctx)
-                        }
-                    }
-                }
-            }
-            .tabBarMinimizeBehavior(.onScrollDown)
-        } else { legacy }
-        #else
-        legacy
-        #endif
-    }
-
-    /// iOS 25 及以下：没有胶囊也没有分离钮，检索降级成普通 tab。
-    private var legacy: some View {
-        TabView(selection: $selection) {
-            ForEach(ctx.composition.capsuleTabs, id: \.id) { tab in
-                CapabilityRegistry.root(tab.id, ctx)
-                    .tabItem { Label(tab.placement.label, systemImage: tab.id.symbol) }
-                    .tag(tab.id)
-            }
-            if let hero = ctx.composition.heroTab {
-                NavigationStack { CapabilityRegistry.root(hero.id, ctx) }
-                    .tabItem { Label(hero.placement.label, systemImage: hero.id.symbol) }
-                    .tag(hero.id)
+        ZXTabShell(tabs: tabs, selection: $selection) { tab in
+            if let id = CapabilityID(rawValue: tab.id) {
+                CapabilityRegistry.root(id, ctx)
             }
         }
+        // 全局 tint 走身份的 accent, Tab 栏与系统控件的高亮不落回系统蓝。
+        .tint(theme.color.accent)
+        // 账号与用户数据由 PoetAppBoot 启动 (`startSession`); 这里只拉只读骨架。
+        .task { await ctx.store.bootstrap() }
     }
 }
 
 enum CapabilityRegistry {
+    /// 各能力的 Tab 根页。壳已给每个 Tab 一个 NavigationStack, 根页不再自带导航容器 ——
+    /// 包括 NavigationSplitView: 它放进 NavigationStack 里整页不渲染 (iOS 27 模拟器实测空白)。
+    /// 作品 (`CorpusView`) 与生平 / 背景 (`NarrativeWorkspaceView`) 都是栈内的窄屏根页 / 宽屏两栏。
     @MainActor @ViewBuilder
     static func root(_ id: CapabilityID, _ ctx: CompositionContext) -> some View {
         switch id {
-        case .daily:     NavigationStack { DailyView(ctx: ctx) }
+        case .daily:     DailyView(ctx: ctx)
         case .itinerary: ItineraryView(ctx: ctx)
         case .corpus:    CorpusView(ctx: ctx)
         case .search:    SearchZeroStateView(ctx: ctx)
-        case .profile:   NavigationStack { ProfileView(ctx: ctx) }
-        case .network:   NavigationStack { NetworkView(ctx: ctx) }
+        case .profile:   ProfileView(ctx: ctx)
+        case .network:   NetworkView(ctx: ctx)
         case .context:   ContextView(ctx: ctx)
-        case .epochs:    NavigationStack { LifeOverviewView(ctx: ctx) }
+        case .epochs:    LifeOverviewView(ctx: ctx)
         }
     }
 }

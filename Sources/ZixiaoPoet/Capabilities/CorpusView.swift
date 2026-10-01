@@ -1,83 +1,100 @@
 import SwiftUI
+import ZixiaoDesign
 
+/// 作品 Tab 的书架: 每个体裁一排线装封面 (`BookCoverView`), 书画一排图版卡。
 struct CorpusShelfView: View {
     let ctx: CompositionContext
     @Namespace private var shelf
-    @ScaledMetric(relativeTo: .title3) private var coverWidth = 160.0
-    @ScaledMetric(relativeTo: .title3) private var coverHeight = 248.0
+    @Environment(\.zxTheme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
+    /// 书架上一本的宽度 (书目页大封面那一档), 随 Dynamic Type 放大。
+    @ScaledMetric(relativeTo: .title3) private var coverWidth = BookCoverView.Size.page.width
+    /// 横排书画卡的宽度。
+    @ScaledMetric(relativeTo: .title3) private var artCardWidth = 280.0
+
     var body: some View {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 34) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("从名篇读起").font(.title2.bold()).accessibilityAddTraits(.isHeader)
-                        Text(ctx.composition.editorial?.corpusIntroduction ?? "从代表作与主题开始，慢慢读进这位诗人的作品。")
-                            .font(.subheadline).foregroundStyle(.secondary)
-                    }.padding(.horizontal, 20)
-                    ForEach(ctx.literaryGenres) { genre in literaryShelf(genre) }
-                    ForEach(["书法", "绘画"], id: \.self) { kind in
-                        let works = ctx.artworks.filter { $0.kind == kind }
-                        if !works.isEmpty { artShelf(kind, works: works) }
-                    }
-                }.padding(.vertical, 22).poetReadableWidth(1000)
-            }
-            .background(ctx.theme.paper)
-            .navigationTitle(ctx.composition.placement(.corpus)?.label ?? "作品").toolbarTitleDisplayMode(.inlineLarge)
+        ZXShellScrollView {
+            LazyVStack(alignment: .leading, spacing: theme.space.xxl) {
+                VStack(alignment: .leading, spacing: theme.space.sm) {
+                    Text("从名篇读起").font(theme.type.title2).tracking(theme.type.tracking(for: .title2))
+                        .foregroundStyle(theme.color.textPrimary)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(ctx.composition.editorial?.corpusIntroduction ?? "从代表作与主题开始，慢慢读进这位诗人的作品。")
+                        .font(theme.type.subhead).foregroundStyle(theme.color.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }.padding(.horizontal, theme.space.margin)
+                ForEach(ctx.literaryGenres) { genre in literaryShelf(genre) }
+                ForEach(["书法", "绘画"], id: \.self) { kind in
+                    let works = ctx.artworks.filter { $0.kind == kind }
+                    if !works.isEmpty { artShelf(kind, works: works) }
+                }
+            }.padding(.vertical, theme.space.xl).poetReadableWidth(1000)
+        }
+        .background(theme.paper())
+        .zxNavigationTitle(ctx.composition.placement(.corpus)?.label ?? "作品", role: .root)
     }
+
     private func literaryShelf(_ genre: Genre) -> some View {
         let features = ctx.guide?.featured.filter { $0.form == genre.id } ?? []
-        return VStack(alignment: .leading, spacing: 16) {
-            NativeSectionHeader(title: genre.label) {
-                NavigationLink { PoemListView(ctx: ctx, genre: genre, usesWorkspaceSearch: true) } label: { HStack(spacing: 5) { Text("全部"); Image(systemName: "chevron.right").font(.caption) }.font(.subheadline) }
-                    .accessibilityLabel("全部\(genre.label)，可搜索")
-            }.padding(.horizontal, 20)
+        return VStack(alignment: .leading, spacing: theme.space.md) {
+            ShelfHeader(title: genre.label, accessibilityLabel: "全部\(genre.label)，可搜索") {
+                PoemListView(ctx: ctx, genre: genre)
+            }.padding(.horizontal, theme.space.margin)
             if typeSize.isAccessibilitySize {
-                VStack(spacing: 22) { ForEach(features) { feature in featureLink(feature, genre: genre, expanded: true) } }.padding(.horizontal, 20)
+                VStack(alignment: .leading, spacing: theme.space.xl) {
+                    ForEach(features) { feature in featureLink(feature, genre: genre) }
+                }.padding(.horizontal, theme.space.margin)
             } else {
                 ScrollView(.horizontal) {
-                    LazyHStack(alignment: .top, spacing: 22) {
-                        ForEach(features) { feature in featureLink(feature, genre: genre, expanded: false).frame(width: coverWidth) }
-                    }.scrollTargetLayout().padding(.vertical, 5)
-                }.contentMargins(.horizontal, 20, for: .scrollContent).scrollIndicators(.hidden).scrollTargetBehavior(.viewAligned)
+                    LazyHStack(alignment: .top, spacing: theme.space.xl) {
+                        ForEach(features) { feature in featureLink(feature, genre: genre).frame(width: coverWidth) }
+                    }.scrollTargetLayout().padding(.vertical, theme.space.xs)
+                }
+                .contentMargins(.horizontal, theme.space.margin, for: .scrollContent)
+                .scrollIndicators(.hidden).scrollTargetBehavior(.viewAligned)
             }
         }
     }
-    @ViewBuilder private func featureLink(_ feature: FeaturedWork, genre: Genre, expanded: Bool) -> some View {
+
+    @ViewBuilder private func featureLink(_ feature: FeaturedWork, genre: Genre) -> some View {
         if let poem = ctx.guide?.poem(feature.id) {
             NavigationLink {
                 PoemDetailView(ctx: ctx, poem: poem).readingTransition(poem.id, in: shelf)
             } label: {
-                VStack(alignment: .leading, spacing: 13) {
-                    ReadingCover(title: feature.title, author: ctx.composition.poet.name, genre: genre, height: expanded ? nil : coverHeight)
+                VStack(alignment: .leading, spacing: theme.space.md) {
+                    ReadingCover(title: feature.title, author: ctx.composition.poet.name, genre: genre,
+                                 width: coverWidth)
                         .readingTransitionSource(poem.id, in: shelf)
-                    Text(feature.note).font(.subheadline).foregroundStyle(.secondary)
+                    Text(feature.note).font(theme.type.subhead).foregroundStyle(theme.color.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }.contentShape(Rectangle())
             }.buttonStyle(.plain).accessibilityElement(children: .combine)
         }
     }
+
     private func artShelf(_ kind: String, works: [Artwork]) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            NativeSectionHeader(title: kind) {
-                NavigationLink { ArtworkGalleryView(ctx: ctx, initialKind: kind) } label: { HStack(spacing: 5) { Text("全部"); Image(systemName: "chevron.right").font(.caption) }.font(.subheadline) }
-                    .accessibilityLabel("全部\(kind)")
-            }.padding(.horizontal, 20)
+        VStack(alignment: .leading, spacing: theme.space.md) {
+            ShelfHeader(title: kind, accessibilityLabel: "全部\(kind)") {
+                ArtworkGalleryView(ctx: ctx, initialKind: kind)
+            }.padding(.horizontal, theme.space.margin)
             if works.count == 1 || typeSize.isAccessibilitySize {
                 ForEach(works) { work in
                     NavigationLink { ArtworkDetailView(ctx: ctx, artwork: work) } label: {
-                        ArtworkPreview(artwork: work, theme: ctx.theme)
-                    }.buttonStyle(.plain).padding(.horizontal, 20)
+                        ArtworkPreview(artwork: work)
+                    }.buttonStyle(.plain).padding(.horizontal, theme.space.margin)
                 }
             } else {
                 ScrollView(.horizontal) {
-                    LazyHStack(alignment: .top, spacing: 18) {
+                    LazyHStack(alignment: .top, spacing: theme.space.lg) {
                         ForEach(works) { work in
                             NavigationLink { ArtworkDetailView(ctx: ctx, artwork: work) } label: {
-                                ArtworkPreview(artwork: work, theme: ctx.theme)
-                            }.buttonStyle(.plain).frame(width: 280)
+                                ArtworkPreview(artwork: work)
+                            }.buttonStyle(.plain).frame(width: artCardWidth)
                         }
                     }.scrollTargetLayout()
-                }.contentMargins(.horizontal, 20, for: .scrollContent).scrollIndicators(.hidden).scrollTargetBehavior(.viewAligned)
+                }
+                .contentMargins(.horizontal, theme.space.margin, for: .scrollContent)
+                .scrollIndicators(.hidden).scrollTargetBehavior(.viewAligned)
             }
         }
     }
@@ -94,6 +111,7 @@ struct CorpusDirectoryView: View {
     @State private var results: [Poem] = []
     @State private var searching = false
     @State private var failed = false
+    @Environment(\.zxTheme) private var theme
     private var term: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var artResults: [Artwork] { ctx.artworks.filter { $0.matches(term) } }
     private enum SearchResult: Hashable {
@@ -125,81 +143,103 @@ struct CorpusDirectoryView: View {
     private var directory: some View {
         List {
             if term.isEmpty {
-                Section("诗文目录") {
+                Section {
                     ForEach(ctx.literaryGenres) { genre in
                         NavigationLink { PoemListView(ctx: ctx, genre: genre, usesWorkspaceSearch: usesWorkspaceSearch) } label: {
                             LabeledContent(genre.label, value: genre.count.map { "收录 \($0) \(genre.id == "wen" || genre.id == "fu" ? "篇" : "首")" } ?? "浏览")
-                                .frame(minHeight: 40)
+                                .font(theme.type.body)
+                                .frame(minHeight: PoetLayout.minHitTarget)
                         }
                     }
-                }
+                } header: { ListSectionTitle("诗文目录") }
+                .listRowBackground(theme.color.surface)
                 if !ctx.artworks.isEmpty {
-                    Section("书画目录") {
+                    Section {
                         ForEach(["书法", "绘画"], id: \.self) { kind in
                             NavigationLink { ArtworkGalleryView(ctx: ctx, initialKind: kind) } label: {
                                 LabeledContent(kind, value: "\(ctx.artworks.filter { $0.kind == kind }.count) 件")
+                                    .font(theme.type.body)
                             }
                         }
-                    }
+                    } header: { ListSectionTitle("书画目录") }
+                    .listRowBackground(theme.color.surface)
                 }
                 if let collections = ctx.composition.editorial?.collections, !collections.isEmpty {
-                    Section("按主题读") {
+                    Section {
                         ForEach(collections) { collection in
                             NavigationLink { ReadingCollectionView(ctx: ctx, collection: collection) } label: {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(collection.title).font(.headline)
-                                    Text(collection.subtitle).font(.subheadline).foregroundStyle(.secondary)
-                                }.padding(.vertical, 6)
+                                VStack(alignment: .leading, spacing: theme.space.xs) {
+                                    Text(collection.title).font(theme.type.headline)
+                                        .foregroundStyle(theme.color.textPrimary)
+                                    Text(collection.subtitle).font(theme.type.subhead)
+                                        .foregroundStyle(theme.color.textSecondary)
+                                }.padding(.vertical, theme.space.xs)
                             }
                         }
-                    }
+                    } header: { ListSectionTitle("按主题读") }
+                    .listRowBackground(theme.color.surface)
                 }
             } else {
-                if searching { ProgressView("正在查找作品…") }
+                if searching {
+                    ProgressView {
+                        Text("正在查找作品…").font(theme.type.footnote).foregroundStyle(theme.color.textSecondary)
+                    }.listRowBackground(theme.color.surface)
+                }
                 if failed {
                     Section {
-                        Button("重新搜索全部作品") { Task { await search() } }
-                    } footer: { Text("网络暂不可用，以下为已收录的离线代表作与书画资料。") }
+                        Button("重新搜索全部作品") { Task { await search() } }.font(theme.type.body)
+                    } footer: {
+                        Text("网络暂不可用，以下为已收录的离线代表作与书画资料。")
+                            .font(theme.type.footnote).foregroundStyle(theme.color.textSecondary)
+                    }
+                    .listRowBackground(theme.color.surface)
                 }
                 if !results.isEmpty {
-                    Section(failed ? "离线代表作" : "诗文 · \(results.count) 篇\(results.count == 200 ? "（最多显示 200 篇）" : "")") {
+                    Section {
                         ForEach(results) { poem in
                             NavigationLink(value: SearchResult.poem(poem)) {
-                                PoemRow(poem: poem, theme: ctx.theme, showsDisclosure: false, displayTitle: ctx.workTitle(poem))
+                                PoemRow(poem: poem, showsDisclosure: false, displayTitle: ctx.workTitle(poem))
                             }
                         }
+                    } header: {
+                        ListSectionTitle(failed ? "离线代表作" : "诗文 · \(results.count) 篇\(results.count == 200 ? "（最多显示 200 篇）" : "")")
                     }
+                    .listRowBackground(theme.color.surface)
                 }
                 if !artResults.isEmpty {
-                    Section("书画") {
+                    Section {
                         ForEach(artResults) { art in
                             NavigationLink(value: SearchResult.artwork(art.id)) {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(art.title).font(.headline)
-                                    Text("\(art.kind) · \(art.collection)").font(.caption).foregroundStyle(.secondary)
-                                }.padding(.vertical, 5)
+                                VStack(alignment: .leading, spacing: theme.space.xs) {
+                                    Text(art.title).font(theme.type.headline).foregroundStyle(theme.color.textPrimary)
+                                    Text("\(art.kind) · \(art.collection)").font(theme.type.caption)
+                                        .foregroundStyle(theme.color.textSecondary)
+                                }.padding(.vertical, theme.space.xs)
                             }
                         }
-                    }
+                    } header: { ListSectionTitle("书画") }
+                    .listRowBackground(theme.color.surface)
                 }
             }
-        }.listStyle(.insetGrouped).scrollContentBackground(.hidden).poetReadableWidth(680).background(ctx.theme.paper)
-            .navigationTitle("全部作品").toolbarTitleDisplayMode(.inlineLarge)
-            .navigationDestination(for: SearchResult.self) { result in
-                switch result {
-                case .poem(let poem):
-                    PoemDetailView(ctx: ctx, poem: poem)
+        }
+        .listStyle(.insetGrouped).scrollContentBackground(.hidden).poetReadableWidth(680)
+        .background(theme.paper()).tint(theme.color.accent)
+        .zxNavigationTitle("全部作品", role: .secondary)
+        .navigationDestination(for: SearchResult.self) { result in
+            switch result {
+            case .poem(let poem):
+                PoemDetailView(ctx: ctx, poem: poem)
+                    .onAppear { searchPresentation.wrappedValue = false }
+            case .artwork(let id):
+                if let art = ctx.artworks.first(where: { $0.id == id }) {
+                    ArtworkDetailView(ctx: ctx, artwork: art)
                         .onAppear { searchPresentation.wrappedValue = false }
-                case .artwork(let id):
-                    if let art = ctx.artworks.first(where: { $0.id == id }) {
-                        ArtworkDetailView(ctx: ctx, artwork: art)
-                            .onAppear { searchPresentation.wrappedValue = false }
-                    }
                 }
             }
-            .scrollDismissesKeyboard(.interactively)
-            .overlay { if !term.isEmpty && !searching && !failed && results.isEmpty && artResults.isEmpty { ContentUnavailableView.search(text: term) } }
-            .task(id: term) { await search() }
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .overlay { if !term.isEmpty && !searching && !failed && results.isEmpty && artResults.isEmpty { ContentUnavailableView.search(text: term) } }
+        .task(id: term) { await search() }
     }
     private func search() async {
         let requested = term
@@ -224,26 +264,38 @@ struct CorpusDirectoryView: View {
 /// 列表里必须带首句，否则根本认不出是哪一首。
 struct PoemRow: View {
     let poem: Poem
-    let theme: Theme
     var showsDisclosure = true
     var displayTitle: String? = nil
+    @Environment(\.zxTheme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
+
+    /// 作品行的最小高度: 两行字 + 上下留白, 也是点按区。
+    private static let minRowHeight: CGFloat = 52
+
+    init(poem: Poem, showsDisclosure: Bool = true, displayTitle: String? = nil) {
+        self.poem = poem
+        self.showsDisclosure = showsDisclosure
+        self.displayTitle = displayTitle
+    }
+
     var body: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(displayTitle ?? poem.title).font(PoetFont.entryTitle).foregroundStyle(theme.ink)
+        HStack(spacing: theme.space.md) {
+            VStack(alignment: .leading, spacing: theme.space.xs) {
+                Text(displayTitle ?? poem.title).font(theme.type.headline)
+                    .foregroundStyle(theme.color.textPrimary)
                 Text(poem.firstLine)
-                    .font(PoetFont.callout)
-                    .foregroundStyle(theme.secondaryInk)
+                    .font(theme.type.callout)
+                    .foregroundStyle(theme.color.textSecondary)
                     .lineLimit(typeSize.isAccessibilitySize ? nil : 1)
             }
-            Spacer(minLength: 6)
+            Spacer(minLength: theme.space.sm)
             if showsDisclosure {
                 Image(systemName: "chevron.right")
-                    .font(PoetFont.icon(12)).foregroundStyle(theme.accent)
+                    .font(theme.type.caption.weight(.semibold)).foregroundStyle(theme.color.accent)
+                    .accessibilityHidden(true)
             }
         }
-        .frame(minHeight: 52)
+        .frame(minHeight: Self.minRowHeight)
         .contentShape(Rectangle())
     }
 }
@@ -261,6 +313,7 @@ struct PoemListView: View {
     @State private var searching = false
     @State private var pageFailed = false
     @State private var searchFailed = false
+    @Environment(\.zxTheme) private var theme
     private static let pageSize = 100
     private var unit: String { genre.id == "wen" || genre.id == "fu" ? "篇" : "首" }
     private var term: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -286,9 +339,9 @@ struct PoemListView: View {
         List {
             ForEach(shown) { poem in
                 NavigationLink { PoemDetailView(ctx: ctx, poem: poem) } label: {
-                    PoemRow(poem: poem, theme: ctx.theme, showsDisclosure: false, displayTitle: ctx.workTitle(poem))
+                    PoemRow(poem: poem, showsDisclosure: false, displayTitle: ctx.workTitle(poem))
                 }
-                .listRowBackground(ctx.theme.paper).listRowSeparatorTint(ctx.theme.rule)
+                .listRowBackground(theme.paper()).listRowSeparatorTint(theme.rule)
                 .task {
                     guard term.isEmpty, poem.id == poems.last?.id, !pageFailed else { return }
                     await loadNextPage()
@@ -297,27 +350,27 @@ struct PoemListView: View {
             if term.isEmpty && !poems.isEmpty {
                 if pageFailed {
                     Button("载入中断，点击重试") { Task { await loadNextPage() } }
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .listRowBackground(ctx.theme.paper)
+                        .font(theme.type.subhead)
+                        .frame(maxWidth: .infinity, minHeight: PoetLayout.minHitTarget)
+                        .listRowBackground(theme.paper())
                 } else if hasMore {
-                    ProgressView("正在载入更多…").frame(maxWidth: .infinity)
-                        .listRowBackground(ctx.theme.paper).listRowSeparator(.hidden)
+                    LoadingStateView(label: "正在载入更多…")
+                        .listRowBackground(theme.paper()).listRowSeparator(.hidden)
                 } else {
-                    Text("已读到目录末尾").font(PoetFont.meta).foregroundStyle(ctx.theme.secondaryInk)
-                        .frame(maxWidth: .infinity).listRowBackground(ctx.theme.paper).listRowSeparator(.hidden)
+                    Text("已读到目录末尾").font(theme.type.footnote).foregroundStyle(theme.color.textSecondary)
+                        .frame(maxWidth: .infinity).listRowBackground(theme.paper()).listRowSeparator(.hidden)
                 }
             }
         }
         .listStyle(.plain).scrollContentBackground(.hidden).poetReadableWidth()
-        .background(ctx.theme.paper).foregroundStyle(ctx.theme.ink)
+        .background(theme.paper()).foregroundStyle(theme.color.textPrimary).tint(theme.color.accent)
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle(genre.label).toolbarTitleDisplayMode(.inlineLarge)
-        .poetNavigationSubtitle(subtitle)
+        .zxNavigationTitle(genre.label, subtitle: subtitle, role: .secondary)
         .overlay {
             if term.isEmpty {
                 if poems.isEmpty && (!didLoad || loadingPage) { LoadingStateView() }
                 else if poems.isEmpty && pageFailed { LoadFailureView(retry: loadNextPage) }
-                else if poems.isEmpty { ContentUnavailableView("暂无作品", systemImage: "book") }
+                else if poems.isEmpty { EmptyState("暂无作品", systemImage: "book") }
             } else {
                 if searching { LoadingStateView(label: "正在检索…") }
                 else if searchFailed { LoadFailureView(title: "检索暂不可用", retry: search) }

@@ -14,8 +14,6 @@ import ZixiaoDesign
 public final class CompositionContext {
     public let composition: PoetComposition
     public let store: PoetStore
-    /// 过渡 shim (M2 删): 值来自 App 注入的 ZXTheme, `PoetAppRoot` 随环境同步。
-    public var theme: Theme
     public let era: EraNaming
     public let supportsAppleSignIn: Bool
     /// 账号: 匿名优先, 之后绑定 Apple / 手机号。见 `CompositionContext+Account`。
@@ -87,14 +85,12 @@ public final class CompositionContext {
     }
 
     /// - Parameters:
-    ///   - theme: App 注入的主题 (`@Environment(\.zxTheme)`), shim 由它解析。
     ///   - resources: 诗人资源所在的包; 默认主包。
     ///   - auth / outbox: 默认按 ZixiaoCore 的全局配置新建 —— 删号走 `zx_delete_account` (migration 065);
     ///     测试与预览注入自己的。
     ///   - userData: 默认按编成的 appSlug 隔离。
     public init(composition: PoetComposition,
                 store: PoetStore,
-                theme: ZXTheme,
                 resources: PoetResources? = nil,
                 auth: ZXAuth? = nil,
                 outbox: ZXOutbox? = nil,
@@ -125,12 +121,10 @@ public final class CompositionContext {
         for issue in issues { print("ZixiaoPoet: \(issue.localizedDescription)") }
         #endif
         store.lifespan = (composition.poet.birth, composition.poet.death)
-        PoetThemeResolver.sync(theme)
-        self.theme = Theme(theme)
         self.era = composition.eraName
     }
 
-    /// 全库删号 RPC (migration 065): 删 poetkit_* / 微诗 / 玄览 里 auth.uid() 自己的行, 再删 auth.users。
+    /// 全库删号 RPC (migration 065): 删 poetkit_* 及系列其他应用表里 auth.uid() 自己的行, 再删 auth.users。
     public static let deleteAccountRPC = "zx_delete_account"
 
     private static func resourceIssue(_ error: any Error, resources: PoetResources) -> PoetResourceError {

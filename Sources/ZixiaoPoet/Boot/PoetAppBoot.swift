@@ -19,7 +19,6 @@ public struct PoetAppBoot: View {
     @State private var ctx: CompositionContext?
     @State private var productName: String?
     @State private var bootError: String?
-    @Environment(\.zxTheme) private var theme
 
     public init(supportsAppleSignIn: Bool = false, splashTitle: String? = nil, bundle: Bundle = .main) {
         self.supportsAppleSignIn = supportsAppleSignIn
@@ -49,7 +48,6 @@ public struct PoetAppBoot: View {
             ctx = CompositionContext(
                 composition: composition,
                 store: PoetStore(client: client, poetName: composition.poet.name),
-                theme: theme,
                 resources: PoetResources(bundle: bundle, composition: composition),
                 supportsAppleSignIn: supportsAppleSignIn)
         } catch {
@@ -73,10 +71,11 @@ struct PoetBootView: View {
             if error != nil {
                 ContentUnavailableView {
                     Label(title.map { "暂时无法打开\($0)" } ?? "暂时无法打开", systemImage: "book.closed")
+                        .font(theme.type.title3).foregroundStyle(theme.ink())
                 } description: {
-                    Text("应用资料未能载入，请重试。")
+                    Text("应用资料未能载入，请重试。").font(theme.type.subhead).foregroundStyle(theme.color.textSecondary)
                 } actions: {
-                    Button("重新打开", action: retry).buttonStyle(.borderedProminent)
+                    Button("重新打开", action: retry).font(theme.type.headline).buttonStyle(.borderedProminent)
                 }
             } else {
                 VStack(spacing: theme.space.xl) {
@@ -85,8 +84,9 @@ struct PoetBootView: View {
                             .font(theme.displayFont(34, relativeTo: .largeTitle))
                             .tracking(theme.type.tracking(for: .display))
                     }
-                    ProgressView("正在翻开诗文…")
-                        .font(theme.type.footnote)
+                    ProgressView {
+                        Text("正在翻开诗文…").font(theme.type.footnote).foregroundStyle(theme.color.textSecondary)
+                    }
                 }
                 .foregroundStyle(theme.ink())
             }

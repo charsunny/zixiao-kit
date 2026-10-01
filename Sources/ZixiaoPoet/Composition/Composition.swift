@@ -78,6 +78,24 @@ public struct Poet: Decodable, Sendable {
 public struct AppMeta: Decodable, Sendable {
     public let bundleId: String, displayName: String
     public let tagline: String?, thesis: String?
+    /// 隐私政策页 (书房 → 关于)。App Store 审核要求 App 内可达; 缺省时关于页不放这一条。
+    public let privacyURL: String?
+    /// 支持与反馈页 (书房 → 关于)。
+    public let supportURL: String?
+    /// 「内容来源」署名, 逐条显示在关于页 (底本、开放语料库及其许可)。署名写在各 App 的编成里,
+    /// 内核不认识任何一家来源。
+    public let credits: [String]?
+
+    /// `privacyURL` 解析成 URL; 写错 (解析不出 http/https) 时为 nil, 界面不放这条链接。
+    public var privacyLink: URL? { Self.webURL(privacyURL) }
+    /// `supportURL` 解析成 URL。
+    public var supportLink: URL? { Self.webURL(supportURL) }
+
+    private static func webURL(_ raw: String?) -> URL? {
+        guard let raw, let url = URL(string: raw), let scheme = url.scheme?.lowercased(),
+              scheme == "https" || scheme == "http" else { return nil }
+        return url
+    }
 
     /// 用户数据的隔离键。取 bundle id 的末段：
     /// com.example.poetapp → "poetapp"。
