@@ -96,12 +96,17 @@ public struct PoetScreenArt: Sendable, Hashable {
     /// ZixiaoArt 能否画 (生成器 / 版本 / variant 都认识)。画不出时视图只留纸。
     public var isSupported: Bool { procedural.isSupported }
 
-    /// 浅色纸墨 / 深色夜色, 纸按季节极淡地偏一点 (与 `ZXColorTokens` 的季节偏色同一算法、同一比例)。
+    /// 画屏季节偏色比例 (纸向 `ZXSeasonTint.bias` 揉的量), 比界面 token 大。
+    public static let lightTintAmount: Double = 0.10
+    public static let darkTintAmount: Double = 0.06
+
+    /// 浅色纸墨 / 深色夜色, 纸按季节偏一点 (与 `ZXColorTokens` 同一算法, 比例见上)。
     public func palette(dark: Bool) -> ZXArt.Palette {
         let base: ZXArt.Palette = dark ? .night : .paperInk
         guard let season else { return base }
         let bias = dark ? season.bias.dark : season.bias.light
-        let amount = dark ? ZXSeasonTint.darkMixAmount : ZXSeasonTint.lightMixAmount
+        // 画屏比界面 token 偏得更明显 (charsunny 2026-10-02: 「加深一点」): 界面是 3.5% / 2%, 画屏 10% / 6%。
+        let amount = dark ? Self.darkTintAmount : Self.lightTintAmount
         return ZXArt.Palette(paper: base.paper.mixed(with: bias, amount: amount), ink: base.ink)
     }
 

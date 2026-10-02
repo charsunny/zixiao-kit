@@ -72,7 +72,7 @@ final class PoetScreenArtTests: XCTestCase {
                 let base = plain.palette(dark: dark)
                 let p = tinted.palette(dark: dark)
                 let bias = dark ? season.bias.dark : season.bias.light
-                let amount = dark ? ZXSeasonTint.darkMixAmount : ZXSeasonTint.lightMixAmount
+                let amount = dark ? PoetScreenArt.darkTintAmount : PoetScreenArt.lightTintAmount
                 XCTAssertEqual(p.ink, base.ink)
                 XCTAssertEqual(p.paper, base.paper.mixed(with: bias, amount: amount))
                 XCTAssertNotEqual(p.paper, base.paper)
