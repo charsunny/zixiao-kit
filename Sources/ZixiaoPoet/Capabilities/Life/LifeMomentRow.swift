@@ -37,12 +37,22 @@ struct LifeMomentRow: View {
     let namespace: Namespace.ID
     @State private var expanded = false
     @State private var showsSources = false
+    /// 这一刻在屏幕中段 (墨点亮成印色)。
+    @State private var lit = false
     @Environment(\.zxTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     /// 年份一栏的宽, 随字号放大 (四位数字 + 余量)。
     @ScaledMetric(relativeTo: .footnote) private var yearColumn: CGFloat = 38
     /// 墨点一栏的宽。
     @ScaledMetric(relativeTo: .footnote) private var dotColumn: CGFloat = 14
+
+    /// 墨点亮起的探线: 视口这一比例处 (略偏上, 读的位置)。行与行首尾相接, 同一时刻只亮一点。
+    nonisolated static let litProbe: CGFloat = 0.45
+    /// 进场: 从下沿露出到露出这一比例, 透明度 0.6 → 1、下移 12pt → 0。
+    nonisolated static let entranceThreshold: Double = 0.3
+    nonisolated static let entranceOffset: CGFloat = 12
+    nonisolated static let entranceOpacity: Double = 0.6
 
     private var railSpacing: CGFloat { theme.space.xs }
     /// 发丝线的 x: 年份栏 + 间距 + 墨点栏的一半。
@@ -53,12 +63,14 @@ struct LifeMomentRow: View {
             yearLabel.frame(width: yearColumn, alignment: .trailing)
             Image(systemName: "circle.fill")
                 .font(theme.uiFont(8, relativeTo: .footnote))
-                .foregroundStyle(theme.seal)
+                .foregroundStyle(lit ? theme.seal : theme.muted)
+                .scaleEffect(lit && !reduceMotion ? 1.25 : 1)
+                .animation(theme.motion.adapted(theme.motion.snappy, reduceMotion: reduceMotion), value: lit)
                 .padding(theme.space.xxs)
                 .background(theme.paper(), in: Circle())
                 .frame(width: dotColumn)
                 .accessibilityHidden(true)
-            content.padding(.leading, theme.space.sm)
+            entering(content).padding(.leading, theme.space.sm)
         }
         .padding(.bottom, theme.space.xxl)
         .background(alignment: .topLeading) {
@@ -66,7 +78,30 @@ struct LifeMomentRow: View {
                 .offset(x: lineX - 0.5)
                 .accessibilityHidden(true)
         }
-        .id(LifeAnchor.moment(moment.id))
+        // 滚动锚点: 行顶一条零高的空条。零高的视图按 `UnitPoint(y: f)` 滚, 正好落在视口 f 处 ——
+        // 长卷用它把刻的上沿放到导航栏之下 (`LifeMetrics.momentAnchor`), 不被栏压住。
+        .background(alignment: .top) {
+            Color.clear.frame(width: 1, height: 0)
+                .id(LifeAnchor.moment(moment.id))
+                .accessibilityHidden(true)
+        }
+        .onGeometryChange(for: Bool.self) { geometry in
+            let frame = geometry.frame(in: .scrollView)
+            guard let viewport = geometry.bounds(of: .scrollView)?.height else { return false }
+            let probe = viewport * Self.litProbe
+            return frame.minY <= probe && frame.maxY > probe
+        } action: { lit = $0 }
+    }
+
+    /// 进场: 从下沿露出时由淡与低处升到位, 跟着滚动走 (interactive); 离开上沿不变。减少动态时不动。
+    private func entering(_ view: some View) -> some View {
+        let reduce = reduceMotion
+        return view.scrollTransition(.interactive.threshold(.visible(Self.entranceThreshold)), axis: .vertical) { content, phase in
+            let t = reduce ? 0 : max(phase.value, 0)
+            return content
+                .opacity(1 - (1 - Self.entranceOpacity) * t)
+                .offset(y: Self.entranceOffset * t)
+        }
     }
 
     @ViewBuilder private var yearLabel: some View {

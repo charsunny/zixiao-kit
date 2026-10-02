@@ -1,12 +1,16 @@
 //  LifeScrollView.swift — 一生长卷: 叙事 Tab 的根页 (有刻时)
 //
 //  一条 `ZXShellScrollView` 从第一卷滚到最后一卷: 每卷 封面 → 刻 → 卷末。前沿一条年轨 (覆盖层)
-//  拖动跳卷; 刻旁的年份点开是当年的年谱 sheet。工具栏两个下钻: 行迹 (地图) 与 年谱 (编年目录)。
-//  宽屏 (iPad) 同一条长卷, 栏宽 720 居中, 年轨仍贴屏幕前沿, 不分栏。
+//  标着年份, 点年份跳到那一年, 按住拖动跳卷; 刻旁的年份点开是当年的年谱 sheet。工具栏两个下钻:
+//  行迹 (地图) 与 年谱 (编年目录)。宽屏 (iPad) 同一条长卷, 栏宽 720 居中, 年轨仍贴屏幕前沿, 不分栏。
+//
+//  滚动视图忽略顶端安全区 (卷封面的画伸进导航栏下; 刻与卷末自己让出栏高, 见 `LifeMetrics`),
+//  卷封面吸附 (`LifeCoverSnap`), 封面视差与刻的进场在各自的视图里 (`LifeScrollEffects`)。
 //
 //  包里没有刻 (`ctx.moments == nil`) 时根本不会到这里: `CapabilityRegistry` 退回 `NarrativeWorkspaceView`。
 
 import SwiftUI
+import UIKit
 import ZixiaoDesign
 
 struct LifeScrollView: View {
@@ -18,9 +22,20 @@ struct LifeScrollView: View {
     @State private var sheetYear: LifeYear?
     /// 当前看到的卷 (epochSequence), 由各卷的位置算出; 年轨据此高亮。
     @State private var current: Int?
-    /// 一卷的顶边落在视口这一比例之上, 就算「看到了这一卷」。
+    /// 各卷封面在内容坐标里的位置, 给吸附用 (引用, 见 `LifeCoverStore`)。
+    @State private var coverStore = LifeCoverStore()
+    /// 此刻压在导航栏底下的卷封面 (epochSequence)。有就收起顶端的滚动边缘效果, 让画透到栏下。
+    @State private var coversUnderBar: Set<Int> = []
+    /// 年轨: 刻度、在窗口里的框、正在拖经过的卷、刚点中的年份。
+    @State private var railLayout: LifeRailLayout?
+    @State private var railFrame: CGRect = .zero
+    @State private var scrubbing: Int?
+    @State private var flashYear: Int?
+    @State private var feedback = UISelectionFeedbackGenerator()
+    /// 一卷的顶边落在栏下可见高度这一比例之上, 就算「看到了这一卷」。
     private static let currentProbe: CGFloat = 0.4
-    private nonisolated static let space = "life.scroll"
+    /// 长卷内容的坐标空间 (卷封面在内容里的位置)。
+    nonisolated static let contentSpace = "life.content"
     @Namespace private var readings
     @Environment(\.zxTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -38,38 +53,59 @@ struct LifeScrollView: View {
         }.flatMap { $0 }
         return fromMoments + fromShelves
     }
-
     var body: some View {
         GeometryReader { outer in
             let metrics = metrics(for: outer)
-            let probe = outer.size.height * Self.currentProbe
+            let probe = metrics.coverBleed + outer.size.height * Self.currentProbe
             ScrollViewReader { proxy in
-                ZXShellScrollView(showsIndicators: false) {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        // ForEach 的身份就是锚点: 懒加载里还没实例化的卷, scrollTo 只认得 ForEach 的 id。
-                        ForEach(Array(chapters.enumerated()), id: \.element.anchor) { index, chapter in
-                            LifeChapterSection(ctx: ctx, chapter: chapter, position: index + 1, metrics: metrics,
-                                               model: model, actions: actions, namespace: readings)
-                                .onGeometryChange(for: Bool.self) { geometry in
-                                    let frame = geometry.frame(in: .named(Self.space))
-                                    return frame.minY <= probe && frame.maxY > probe
-                                } action: { isCurrent in
-                                    if isCurrent { current = chapter.epochSequence }
-                                }
+                ZStack(alignment: .leading) {
+                    ZXShellScrollView(showsIndicators: false) {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            // ForEach 的身份就是锚点: 懒加载里还没实例化的卷, scrollTo 只认得 ForEach 的 id。
+                            ForEach(Array(chapters.enumerated()), id: \.element.anchor) { index, chapter in
+                                LifeChapterSection(ctx: ctx, chapter: chapter, position: index + 1, metrics: metrics,
+                                                   model: model, actions: actions, namespace: readings,
+                                                   isFirst: index == 0,
+                                                   onCoverFrame: { coverStore.set($0, for: chapter.epochSequence) })
+                                    .onGeometryChange(for: Bool.self) { geometry in
+                                        let frame = geometry.frame(in: .scrollView)
+                                        return frame.minY <= probe && frame.maxY > probe
+                                    } action: { isCurrent in
+                                        if isCurrent { current = chapter.epochSequence }
+                                    }
+                                    .onGeometryChange(for: Bool.self) { geometry in
+                                        // 封面 (在卷的最上面) 的画盖住导航栏: 顶已到屏顶, 下沿垫字的那层纸
+                                        // (`LifeChapterCover.scrimFraction`) 还没升到栏下。字一到栏下就交还系统的边缘效果。
+                                        let minY = geometry.frame(in: .scrollView).minY
+                                        let art = metrics.coverHeight * (1 - LifeChapterCover.scrimFraction)
+                                        return minY <= 0.5 && minY + art > 0
+                                    } action: { underBar in
+                                        if underBar { coversUnderBar.insert(chapter.epochSequence) }
+                                        else { coversUnderBar.remove(chapter.epochSequence) }
+                                    }
+                            }
+                            footer(metrics)
                         }
-                        footer(metrics)
+                        .frame(maxWidth: LifeLayout.contentWidth)
+                        .frame(maxWidth: .infinity)
+                        .coordinateSpace(.named(Self.contentSpace))
+                        .background {
+                            if chapters.count > 1 {
+                                LifeRailGestureHook(railFrame: railFrame,
+                                                    onTap: { tapRail(at: $0, proxy: proxy) },
+                                                    onScrub: { scrub($0, at: $1, proxy: proxy) })
+                                    .accessibilityHidden(true)
+                            }
+                        }
                     }
-                    .frame(maxWidth: LifeLayout.contentWidth)
-                    .frame(maxWidth: .infinity)
+                    .scrollTargetBehavior(LifeCoverSnap(store: coverStore))
+                    .modifier(LifeTopEdgeEffect(hidden: !coversUnderBar.isEmpty))
+                    .ignoresSafeArea(.container, edges: .top)
+                    if chapters.count > 1 { rail(proxy) }
                 }
-                .coordinateSpace(.named(Self.space))
-                .overlay(alignment: .leading) {
-                    if chapters.count > 1 {
-                        LifeYearTrack(chapters: chapters, current: current) { sequence in
-                            proxy.scrollTo(LifeAnchor.chapter(sequence), anchor: .top)
-                        }
-                        .padding(.vertical, theme.space.lg)
-                    }
+                .onChange(of: metrics, initial: true) { _, metrics in
+                    coverStore.bleed = metrics.coverBleed
+                    coverStore.momentAnchor = metrics.momentAnchor
                 }
                 .task { await debugLaunch(proxy) }
             }
@@ -86,14 +122,83 @@ struct LifeScrollView: View {
     // MARK: 版面
 
     private func metrics(for proxy: GeometryProxy) -> LifeMetrics {
+        let bleed = proxy.safeAreaInsets.top.rounded()
         let screenHeight = proxy.size.height + proxy.safeAreaInsets.top + proxy.safeAreaInsets.bottom
         let column = min(proxy.size.width, LifeLayout.contentWidth)
-        // 封面约占屏高 3/4; 横屏 / 分屏时以栏宽为界, 不让一幅画比它宽得多或窄得多。
+        // 封面 (出血带以下) 约占屏高 3/4; 横屏 / 分屏时以栏宽为界, 不让一幅画比它宽得多或窄得多。
         let cover = min(max(screenHeight * 0.75, column * 0.75), column * 1.8)
         // 栏贴着屏幕前沿 (窄屏) 时让出年轨; 宽屏栏居中, 年轨在栏外, 照常留页边。
         let gutter = (proxy.size.width - column) / 2
         let leading = gutter >= LifeLayout.trackInset ? theme.space.margin : LifeLayout.trackInset + theme.space.xs
-        return LifeMetrics(coverHeight: cover.rounded(), leadingInset: leading, trailingInset: theme.space.margin)
+        return LifeMetrics(coverBleed: bleed, coverHeight: cover.rounded(), viewport: screenHeight.rounded(),
+                           readingInset: bleed + theme.space.md,
+                           leadingInset: leading, trailingInset: theme.space.margin)
+    }
+
+    // MARK: 年轨
+
+    private func rail(_ proxy: ScrollViewProxy) -> some View {
+        LifeYearTrack(chapters: chapters, current: current, scrubbing: scrubbing, flashYear: flashYear,
+                      onLayout: { railLayout = $0 },
+                      select: { scroll(proxy, to: .chapter($0)) },
+                      selectYear: { jump(toYear: $0, proxy: proxy) })
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { railFrame = $0 }
+            .padding(.vertical, theme.space.lg)
+    }
+
+    /// 程序跳转: 先让吸附让开 (`LifeCoverStore.holdSnapping`), 再滚。
+    private func scroll(_ proxy: ScrollViewProxy, to anchor: LifeAnchor, at unit: UnitPoint = .top) {
+        coverStore.holdSnapping()
+        proxy.scrollTo(anchor, anchor: unit)
+    }
+
+    /// 点年轨: 最近的年份标签 → 那一年。
+    private func tapRail(at y: CGFloat, proxy: ScrollViewProxy) {
+        guard let label = railLayout?.label(near: y) else { return }
+        feedback.selectionChanged()
+        flashYear = label.year
+        Task {
+            try? await Task.sleep(for: .milliseconds(900))
+            if flashYear == label.year { flashYear = nil }
+        }
+        jump(toYear: label.year, proxy: proxy)
+    }
+
+    /// 跳到一年 (`LifeJump`): 同一卷里平滑滚过去; 跨卷先无动画落到那一卷 (懒加载的卷先建出来),
+    /// 再滚到那一刻。
+    private func jump(toYear year: Int, proxy: ScrollViewProxy) {
+        guard let target = LifeJump.resolve(year: year, in: chapters) else { return }
+        let anchor = coverStore.momentAnchor
+        guard let moment = target.moment else {
+            scroll(proxy, to: .chapter(target.chapter))
+            return
+        }
+        let animation = theme.motion.adapted(theme.motion.smooth, reduceMotion: reduceMotion)
+        if current == target.chapter {
+            withAnimation(animation) { scroll(proxy, to: .moment(moment), at: anchor) }
+            return
+        }
+        scroll(proxy, to: .chapter(target.chapter))
+        Task {
+            try? await Task.sleep(for: .milliseconds(80))
+            withAnimation(animation) { scroll(proxy, to: .moment(moment), at: anchor) }
+        }
+    }
+
+    /// 按住年轨拖动: y 落在哪一卷的段里就跳到哪一卷 (不带动画, 跟手); 换卷一下选择反馈。
+    private func scrub(_ phase: LifeRailScrubPhase, at y: CGFloat, proxy: ScrollViewProxy) {
+        guard let layout = railLayout, !chapters.isEmpty else { return }
+        switch phase {
+        case .began, .changed:
+            if phase == .began { feedback.prepare() }
+            let sequence = chapters[layout.chapterIndex(at: y)].epochSequence
+            guard scrubbing != sequence else { return }
+            scrubbing = sequence
+            feedback.selectionChanged()
+            scroll(proxy, to: .chapter(sequence))
+        case .ended:
+            scrubbing = nil
+        }
     }
 
     // MARK: 动作
@@ -184,7 +289,7 @@ struct LifeScrollView: View {
 
     /// 截图用的启动参数 (与 `-tab` / `-lens` 同法, 只在 DEBUG 生效):
     /// `-chapter N` 滚到分期序号为 N 的卷 (`-lifeAnchor bottom` 则卷尾贴底); `-lifeMoment <id>` 滚到某一刻; `-lifeYear <年>` 打开当年年谱;
-    /// `-lifeWork <刻 id>` 推入该刻的作品。
+    /// `-lifeWork <刻 id>` 推入该刻的作品; `-lifeNudge <pt>` / `-lifeNudgeUp <pt>` 落定后再往下 / 往回推若干点 (拍视差)。
     private func debugLaunch(_ proxy: ScrollViewProxy) async {
         #if DEBUG
         let defaults = UserDefaults.standard
@@ -198,11 +303,21 @@ struct LifeScrollView: View {
         // 冷启动时懒加载的卷高还是估计值, 第一次可能落空; 隔一会儿再对一次。
         for delay in [0, 1000] {
             try? await Task.sleep(for: .milliseconds(delay))
-            proxy.scrollTo(LifeAnchor.chapter(sequence), anchor: bottom ? .bottom : .top)
+            scroll(proxy, to: .chapter(sequence), at: bottom ? .bottom : .top)
             if let momentID {
                 try? await Task.sleep(for: .milliseconds(600))
-                proxy.scrollTo(LifeAnchor.moment(momentID), anchor: .top)
+                scroll(proxy, to: .moment(momentID), at: coverStore.momentAnchor)
             }
+        }
+        // `-lifeNudge <pt>` / `-lifeNudgeUp <pt>`: 落定后再往下 / 往回推若干点, 拍封面视差的中间态
+        // (启动参数的值不能以 - 开头, 会被当成下一个键, 所以往回推单用一个键)。
+        let down = defaults.string(forKey: "lifeNudge").flatMap(Double.init)
+        let up = defaults.string(forKey: "lifeNudgeUp").flatMap(Double.init).map { -$0 }
+        // 只在推完不再触发懒加载时可靠: iOS 18 起程序滚动后 SwiftUI 按视图记位置, 之后任何一次重排
+        // (下一卷建出来、当前卷 / 墨点状态变了) 都会把它钉回 scrollTo 的锚位。拍进场视差用 UI 测试拖住。
+        if let nudge = down ?? up {
+            try? await Task.sleep(for: .milliseconds(400))
+            NotificationCenter.default.post(name: LifeRailGestureHook.Coordinator.debugNudge, object: CGFloat(nudge))
         }
         await debugOpen()
         #endif
@@ -220,5 +335,19 @@ struct LifeScrollView: View {
             if let poem = await model.resolve(work, store: ctx.store) { route = .poem(poem, source: moment.id) }
         }
         #endif
+    }
+}
+
+/// 卷封面在导航栏底下时收起顶端的滚动边缘效果 (iOS 26 的玻璃栏下默认会给内容垫一层),
+/// 画直接透到栏下; 封面离开后交还系统。iOS 26 以前没有这层效果, 不用管。
+private struct LifeTopEdgeEffect: ViewModifier {
+    let hidden: Bool
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.scrollEdgeEffectHidden(hidden, for: .top)
+        } else {
+            content
+        }
     }
 }
