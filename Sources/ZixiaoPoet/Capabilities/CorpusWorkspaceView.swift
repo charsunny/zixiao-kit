@@ -1,15 +1,15 @@
 import SwiftUI
 import ZixiaoDesign
 
-/// 作品 Tab 的工作区。
+/// 诗文 Tab 的工作区。
 ///
 /// 根壳 (`ZXTabShell`) 给每个 Tab 一个 NavigationStack; NavigationSplitView 放进 NavigationStack
 /// 里不渲染 (iOS 27 模拟器实测整页空白), 所以这里不用分栏容器:
-/// - 窄屏 (iPhone): 书架就是根页; 右上角「搜索」推入全部作品目录并直接进入检索。
-/// - 宽屏 (iPad): 左侧目录 + 右侧内容并排; 从内容里再推的页面进壳的栈, 盖住两栏, 返回即回到两栏。
+/// - 窄屏 (iPhone): 根页 (`CorpusRootView`: 选读 → 按年读 → 全集 → 墨迹); 右上角「搜索」推入全部作品目录并直接进入检索。
+/// - 宽屏 (iPad): 左侧目录 (同样四节) + 右侧内容并排; 从内容里再推的页面进壳的栈, 盖住两栏, 返回即回到两栏。
 struct CorpusView: View {
     let ctx: CompositionContext
-    @State private var selection: Destination = .featured
+    @State private var selection: Destination = .overview
     @State private var showingSearch = false
     @State private var searchPresented = false
     @State private var searchQuery = ""
@@ -19,15 +19,13 @@ struct CorpusView: View {
     private static let sidebarWidth: CGFloat = 310
 
     private enum Destination: Hashable {
-        case featured
+        case overview
+        case selection(String)
+        case years
         case genre(String)
-        case poem(Poem)
-        case collection(ReadingCollection)
         case art(String)
         case search
     }
-
-    private var title: String { ctx.composition.placement(.corpus)?.label ?? "作品" }
 
     var body: some View {
         Group {
@@ -39,7 +37,7 @@ struct CorpusView: View {
                 }
                 .background(theme.paper())
             } else {
-                CorpusShelfView(ctx: ctx)
+                CorpusRootView(ctx: ctx)
                     .navigationDestination(isPresented: $showingSearch) {
                         CorpusDirectoryView(ctx: ctx, searchPresented: $searchPresented, query: $searchQuery)
                     }
@@ -69,44 +67,47 @@ struct CorpusView: View {
         }
     }
 
-    /// 宽屏左栏: 精选 / 搜索 / 各体裁 (全部 + 精选篇目) / 主题共读 / 书画。
+    /// 宽屏左栏: 总览 / 搜索, 然后与根页同序的四节 —— 选读 (各合集) / 按年读 / 全集 (各体裁) / 墨迹 (书法 · 绘画)。
     private var catalogue: some View {
         List {
             Section {
-                row(.featured) { Label("精选与共读", systemImage: "book") }
+                row(.overview) { Label("诗文总览", systemImage: "book") }
                 row(.search) { Label("搜索全部作品", systemImage: "magnifyingglass") }
             }
-            ForEach(ctx.literaryGenres) { genre in
+            let selections = ctx.corpusSelections
+            if !selections.isEmpty {
                 Section {
-                    row(.genre(genre.id)) {
-                        LabeledContent("全部\(genre.label)", value: genre.count.map { String($0) } ?? "浏览")
-                    }
-                    ForEach(ctx.guide?.featured.filter { $0.form == genre.id } ?? []) { feature in
-                        if let poem = ctx.guide?.poem(feature.id) {
-                            row(.poem(poem)) {
-                                VStack(alignment: .leading, spacing: theme.space.xs) {
-                                    Text(feature.title).font(theme.type.headline)
-                                    Text(poem.firstLine).font(theme.type.subhead)
-                                        .foregroundStyle(theme.color.textSecondary)
-                                }.padding(.vertical, theme.space.xs)
-                            }
+                    ForEach(selections) { item in
+                        row(.selection(item.id)) {
+                            VStack(alignment: .leading, spacing: theme.space.xxs) {
+                                Text(item.title).font(theme.type.body)
+                                Text(item.thesis).font(theme.type.footnote)
+                                    .foregroundStyle(theme.color.textSecondary).lineLimit(2)
+                            }.padding(.vertical, theme.space.xs)
                         }
                     }
-                } header: { ListSectionTitle(genre.label) }
+                } header: { ListSectionTitle("选读") }
             }
-            if let collections = ctx.composition.editorial?.collections, !collections.isEmpty {
+            Section {
+                row(.years) { Label("年份轴", systemImage: "calendar") }
+            } header: { ListSectionTitle("按年读") }
+            if !ctx.literaryGenres.isEmpty {
                 Section {
-                    ForEach(collections) { collection in
-                        row(.collection(collection)) { Text(collection.title) }
+                    ForEach(ctx.literaryGenres) { genre in
+                        row(.genre(genre.id)) {
+                            LabeledContent(genre.label, value: genre.count.map { $0.formatted(.number) } ?? "浏览")
+                        }
                     }
-                } header: { ListSectionTitle("按主题读") }
+                } header: { ListSectionTitle("全集") }
             }
             if !ctx.artworks.isEmpty {
                 Section {
                     ForEach(["书法", "绘画"].filter { kind in ctx.artworks.contains { $0.kind == kind } }, id: \.self) { kind in
-                        row(.art(kind)) { Text(kind) }
+                        row(.art(kind)) {
+                            LabeledContent(kind, value: "\(ctx.artworks.filter { $0.kind == kind }.count) 件")
+                        }
                     }
-                } header: { ListSectionTitle("书画") }
+                } header: { ListSectionTitle("墨迹") }
             }
         }
         .listStyle(.sidebar)
@@ -130,20 +131,22 @@ struct CorpusView: View {
 
     @ViewBuilder private var destination: some View {
         switch selection {
-        case .featured:
-            CorpusShelfView(ctx: ctx)
+        case .overview:
+            AnyView(CorpusRootView(ctx: ctx))
+        case .selection(let id):
+            if let item = ctx.corpusSelections.first(where: { $0.id == id }) {
+                AnyView(CollectionReadingView(ctx: ctx, selection: item))
+            }
+        case .years:
+            AnyView(CorpusYearPage(ctx: ctx))
         case .genre(let id):
             if let genre = ctx.literaryGenres.first(where: { $0.id == id }) {
-                PoemCatalogView(ctx: ctx, genre: genre)
+                AnyView(PoemCatalogView(ctx: ctx, genre: genre))
             }
-        case .poem(let poem):
-            PoemDetailView(ctx: ctx, poem: poem)
-        case .collection(let collection):
-            ReadingCollectionView(ctx: ctx, collection: collection)
         case .art(let kind):
-            ArtworkGalleryView(ctx: ctx, initialKind: kind)
+            AnyView(ArtworkGalleryView(ctx: ctx, initialKind: kind))
         case .search:
-            CorpusDirectoryView(ctx: ctx, searchPresented: $searchPresented, query: $searchQuery)
+            AnyView(CorpusDirectoryView(ctx: ctx, searchPresented: $searchPresented, query: $searchQuery))
         }
     }
 }

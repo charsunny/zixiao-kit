@@ -50,6 +50,7 @@ public struct PoetResources: Sendable {
     public var guideResourceName: String { "guide-\(slug).json" }
     public var artworksResourceName: String { "artworks-\(slug).json" }
     public var momentsResourceName: String { "moments-\(slug).json" }
+    public var collectionsResourceName: String { "collections-\(slug).json" }
 
     private var bundle: Bundle? { Bundle(url: bundleURL) }
 
@@ -77,6 +78,13 @@ public struct PoetResources: Sendable {
     public func moments() throws -> PoetMoments? {
         guard url(forAsset: momentsResourceName) != nil else { return nil }
         return try decode(momentsResourceName, PoetMoments.decode)
+    }
+
+    /// 选读合集 (诗文 Tab 门面)。只有编过合集的诗人有, 缺失不算错 (返回 nil, 选读退回编成与导读);
+    /// 有但解不开才抛错。
+    public func collections() throws -> PoetCollections? {
+        guard url(forAsset: collectionsResourceName) != nil else { return nil }
+        return try decode(collectionsResourceName, PoetCollections.decode)
     }
 
     private func decode<T>(_ name: String, _ decoder: (Data) throws -> T) throws -> T {
