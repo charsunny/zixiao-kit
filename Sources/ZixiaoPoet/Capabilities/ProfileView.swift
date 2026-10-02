@@ -1,4 +1,4 @@
-//  ProfileView.swift — 书房: 账号卡、最近翻阅、收藏、书架 (编成有 library 时)、阅读记录; 设置 / 账号 / 登录 / 注销 / 关于
+//  ProfileView.swift — 书房: 账号卡、在读 (最近三篇大封面)、收藏、书架 (编成有 library 时)、阅读记录; 设置 / 账号 / 登录 / 注销 / 关于
 //
 //  账号模型 (D3): 匿名优先。未绑定 Apple / 手机号的用户也有一个云端匿名身份 (`ctx.isSignedIn == false`),
 //  界面上显示「登录以同步」。登录 = 绑定 (或切到该身份已有的统一账号, 本机记录并过去)。
@@ -19,13 +19,11 @@ struct ProfileView: View {
     @State private var showingDirectory = false
     @Namespace private var books
     @Environment(\.zxTheme) private var theme
-    @Environment(\.dynamicTypeSize) private var typeSize
-    /// 最近翻阅里那本书的宽度 (「正在阅读」一档), 随 Dynamic Type。
-    @ScaledMetric(relativeTo: .title3) private var coverWidth = BookCoverView.Size.reading.width
     private var savedIDs: [UUID] { ctx.userData.bookmarks.filter { $0.targetType == "poem" }.map(\.targetId) }
-    private var previewIDs: [UUID] { Array(savedIDs.prefix(6)) + ctx.userData.reading.prefix(4).map(\.poemId) }
+    private var previewIDs: [UUID] { Array(savedIDs.prefix(6)) + ctx.userData.reading.prefix(Self.historyPreview).map(\.poemId) }
     private var saved: [Poem] { savedIDs.prefix(6).compactMap { indexed[$0] } }
-    private var recent: Poem? { ctx.userData.reading.first.flatMap { indexed[$0.poemId] } }
+    /// 在读 (3 篇) + 阅读记录里露出的几条, 一起预取。
+    private static let historyPreview = ProfileReadingNow.limit + 3
 
     var body: some View {
         ZXShellScrollView {
@@ -40,7 +38,8 @@ struct ProfileView: View {
                             .font(theme.type.subhead).frame(minHeight: PoetLayout.minHitTarget)
                     }
                 }
-                recentSection
+                ProfileReadingNow(ctx: ctx, records: Array(ctx.userData.reading.prefix(ProfileReadingNow.limit)),
+                                  poems: indexed, loading: loading, namespace: books) { showingDirectory = true }
                 savedSection
                 if let library = ctx.composition.library, !library.books.isEmpty {
                     LibraryShelfSection(library: library)
@@ -66,53 +65,6 @@ struct ProfileView: View {
         .sheet(isPresented: $showingLogin) { LoginSheet(ctx: ctx) }
         .task(id: previewIDs) { await load() }
         .refreshable { await ctx.userData.refresh(); await load() }
-    }
-
-    // MARK: 最近翻阅
-
-    private var recentSection: some View {
-        VStack(alignment: .leading, spacing: theme.space.md) {
-            ZixiaoDesign.SectionLabel("最近翻阅")
-            if let recent {
-                NavigationLink { PoemDetailView(ctx: ctx, poem: recent).readingTransition(recent.id, in: books) } label: {
-                    Group {
-                        if typeSize.isAccessibilitySize {
-                            recentDescription(recent)
-                        } else {
-                            HStack(alignment: .center, spacing: theme.space.margin) {
-                                ReadingCover(title: ctx.workTitle(recent), author: ctx.composition.poet.name,
-                                             genre: ctx.genre(for: recent), width: coverWidth)
-                                    .readingTransitionSource(recent.id, in: books).accessibilityHidden(true)
-                                recentDescription(recent).frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(theme.space.margin)
-                    .zxSurface(.e1, in: RoundedRectangle(cornerRadius: theme.radius.xl, style: .continuous))
-                }.buttonStyle(.plain)
-            } else if !loading && ctx.userData.reading.isEmpty {
-                ZXGhostState("你的阅读，从这里留下。",
-                             message: "最近打开的作品会回到这里。读到喜欢的篇章，轻点书签，留在自己的书房。",
-                             actionTitle: "挑一篇开始阅读", systemImage: "book") {
-                    showingDirectory = true
-                }
-            }
-        }
-    }
-
-    private func recentDescription(_ poem: Poem) -> some View {
-        VStack(alignment: .leading, spacing: theme.space.md) {
-            Text(ctx.workTitle(poem)).font(theme.type.title3).foregroundStyle(theme.color.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(poem.firstLine).font(theme.type.subhead).foregroundStyle(theme.color.textSecondary)
-            if let date = ctx.userData.reading.first?.readDate {
-                Text(date, format: .dateTime.month().day().hour().minute()).font(theme.type.caption)
-                    .foregroundStyle(theme.color.textTertiary)
-            }
-            Label("再读一会儿", systemImage: "arrow.right").font(theme.type.subhead.weight(.semibold))
-                .foregroundStyle(theme.color.accent).padding(.top, theme.space.xs)
-        }
     }
 
     // MARK: 我的收藏
@@ -145,11 +97,11 @@ struct ProfileView: View {
             ShelfHeader(title: "阅读记录", linkTitle: "查看全部", accessibilityLabel: "查看全部阅读记录") {
                 LibraryView(ctx: ctx, kind: .history)
             }
-            if ctx.userData.reading.count < 2 {
-                Text(ctx.userData.reading.isEmpty ? "开始阅读后，这里会按时间留下记录。" : "最近的一篇在上方，之后的阅读会依次留在这里。")
+            if ctx.userData.reading.count <= ProfileReadingNow.limit {
+                Text(ctx.userData.reading.isEmpty ? "开始阅读后，这里会按时间留下记录。" : "在读的几篇在上方，更早的阅读会依次留在这里。")
                     .font(theme.type.subhead).foregroundStyle(theme.color.textSecondary)
             }
-            ForEach(ctx.userData.reading.dropFirst().prefix(3)) { record in
+            ForEach(ctx.userData.reading.dropFirst(ProfileReadingNow.limit).prefix(3)) { record in
                 if let poem = indexed[record.poemId] {
                     NavigationLink { PoemDetailView(ctx: ctx, poem: poem) } label: {
                         VStack(alignment: .leading, spacing: theme.space.xs) {
