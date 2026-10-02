@@ -163,7 +163,7 @@ public struct Epoch: Decodable, Sendable, Identifiable, Hashable {
 
 /// 库里的一首作品。translation / appreciation / highlights 是 PoetryHub
 /// 的 AI 增强管线已经填好的 —— 分层阅读的料是现成的，不用另建。
-public struct Poem: Decodable, Sendable, Identifiable, Hashable {
+public struct Poem: Codable, Sendable, Identifiable, Hashable {
     public let id: UUID
     public let title: String
     public let form: String
@@ -174,6 +174,26 @@ public struct Poem: Decodable, Sendable, Identifiable, Hashable {
     public let appreciation: String?
     public let translation: [String]?
     public let highlights: [String]?
+    /// 细体裁 (文): 尺牍 / 书后 / 奏议 …。诗词与早先入库的文为空。
+    public let genre: String?
+    /// 体裁大类 (文): 书简 / 制诰 / 题跋 …。为空的归入「其他」(`PoetGenreIndex.otherGroup`)。
+    public let genreGroup: String?
+    /// 出处 (jsonb)。只解码界面要用的书名与章名, 其余键 (互校、flags、notes …) 忽略。
+    public let provenance: Provenance?
+
+    public struct Provenance: Codable, Sendable, Hashable {
+        public let bookTitle: String?
+        public let chapterTitle: String?
+        enum CodingKeys: String, CodingKey {
+            case bookTitle = "book_title", chapterTitle = "chapter_title"
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, form, content, paragraphs, cipai, summary, appreciation, translation, highlights
+        case genre, provenance
+        case genreGroup = "genre_group"
+    }
 
     public var lines: [String] {
         paragraphs?.isEmpty == false ? paragraphs! : content.components(separatedBy: "\n")
@@ -181,6 +201,14 @@ public struct Poem: Decodable, Sendable, Identifiable, Hashable {
     /// 词的标题只有词牌，靠首句才认得出是哪一首。
     public var firstLine: String {
         (lines.first ?? "").prefix(16).description
+    }
+    /// 读本标题下的出处小字:「细体裁 · 书名 章名」。三样都没有时为 nil (诗词不显示)。
+    public var sourceLine: String? {
+        let book = [provenance?.bookTitle, provenance?.chapterTitle]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }.joined(separator: " ")
+        let parts = [genre?.trimmingCharacters(in: .whitespacesAndNewlines), book].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
 
@@ -348,7 +376,7 @@ public final class PoetStore {
         guard let total = response.count else { throw URLError(.badServerResponse) }
         guard let index = DailyRotation.index(on: date, count: total) else { return nil }
         let rows: [Poem] = try await client.from("poems")
-            .select("id,title,form,content,paragraphs,cipai,summary,appreciation,translation,highlights")
+            .select(Self.poemCols)
             .eq("author_id", value: id.uuidString).eq("form", value: form)
             .order("id").range(from: index, to: index).execute().value
         return rows.first
@@ -358,7 +386,7 @@ public final class PoetStore {
     public func poems(ids: [UUID]) async throws -> [Poem] {
         guard !ids.isEmpty else { return [] }
         let fetched: [Poem] = try await client.from("poems")
-            .select("id,title,form,content,paragraphs,cipai,summary,appreciation,translation,highlights")
+            .select(Self.poemCols)
             .in("id", values: ids.map(\.uuidString)).execute().value
         let index = Dictionary(uniqueKeysWithValues: fetched.map { ($0.id, $0) })
         return ids.compactMap { index[$0] }
@@ -366,27 +394,82 @@ public final class PoetStore {
 
     /// 读本的作品列表。按体裁分页取；range 两端都包含，所以末端要减一。
     public func poems(form: String, limit: Int = 400, offset: Int = 0) async throws -> [Poem] {
+        try await poems(form: form, genreGroup: nil, genre: nil, limit: limit, offset: offset)
+    }
+
+    /// 按大类 / 细体裁筛的作品列表。genreGroup 为 nil 不筛; 为「其他」时取大类为空或字面「其他」的。
+    public func poems(form: String, genreGroup: String?, genre: String? = nil,
+                      limit: Int = 400, offset: Int = 0) async throws -> [Poem] {
         guard limit > 0 else { return [] }
         let id = try await resolvePoetId()
         let start = max(0, offset)
-        return try await client.from("poems")
-            .select("id,title,form,content,paragraphs,cipai,summary,appreciation,translation,highlights")
+        var request = client.from("poems")
+            .select(Self.poemCols)
             .eq("author_id", value: id.uuidString).eq("form", value: form)
+        if let genreGroup { request = Self.filter(request, genreGroup: genreGroup) }
+        if let genre { request = request.eq("genre", value: genre) }
+        return try await request
             .order("title").order("id")
             .range(from: start, to: start + limit - 1).execute().value
     }
 
+    /// 「其他」既收大类为空的 (早先入库的文), 也收入库时就标成「其他」的。
+    private static func filter(_ request: PostgrestFilterBuilder, genreGroup: String) -> PostgrestFilterBuilder {
+        genreGroup == PoetGenreIndex.otherGroup
+            ? request.or("genre_group.is.null,genre_group.eq.\(PoetGenreIndex.otherGroup)")
+            : request.eq("genre_group", value: genreGroup)
+    }
+
+    /// 体裁大类与篇数 (按篇数从多到少, 「其他」殿后)。
+    public func genreGroups(form: String) async throws -> [(group: String, count: Int)] {
+        try await genreIndex(form: form).groups.map { ($0.label, $0.count) }
+    }
+
+    /// 大类 → 细体裁目录。走 RPC `poet_genre_groups` (migration 069); 它还没部署 (PGRST202) 或调用失败时,
+    /// 退回客户端: 逐页取这位作者该体裁的 genre_group,genre 两列 (每页 1,000 行, 服务端 max-rows 的默认值;
+    /// 最多 5,000 行) 在本地数。
+    public func genreIndex(form: String) async throws -> PoetGenreIndex {
+        let id = try await resolvePoetId()
+        do {
+            let rows: [PoetRPC.GenreCount] = try await client
+                .rpc(PoetRPC.genreGroups, params: PoetRPC.GenreGroupsParams(poetId: id, form: form))
+                .execute().value
+            return PoetGenreIndex(rows: rows)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            return PoetGenreIndex(rows: try await genreRowsFallback(poetId: id, form: form))
+        }
+    }
+
+    private func genreRowsFallback(poetId: UUID, form: String) async throws -> [PoetRPC.GenreCount] {
+        let page = 1_000, cap = 5_000
+        var rows: [PoetRPC.GenreCount] = []
+        while rows.count < cap {
+            let chunk: [PoetRPC.GenreCount] = try await client.from("poems")
+                .select("genre_group,genre")
+                .eq("author_id", value: poetId.uuidString).eq("form", value: form)
+                .order("id").range(from: rows.count, to: rows.count + page - 1).execute().value
+            rows += chunk
+            if chunk.count < page { break }
+        }
+        return rows
+    }
+
     /// 列表内检索必须查完整体裁，不能只筛已经翻到的页。上限 200，避免宽泛词拉回过多正文。
-    public func searchPoems(form: String? = nil, query raw: String, limit: Int = 200) async throws -> [Poem] {
+    /// genreGroup 非空时只在该大类里找 (大类列表页的检索)。
+    public func searchPoems(form: String? = nil, genreGroup: String? = nil,
+                            query raw: String, limit: Int = 200) async throws -> [Poem] {
         let query = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let cappedLimit = min(max(0, limit), 200)
         guard !query.isEmpty, cappedLimit > 0 else { return [] }
         let id = try await resolvePoetId()
         let pattern = Self.literalSearchPattern(query)
         var request = client.from("poems")
-            .select("id,title,form,content,paragraphs,cipai,summary,appreciation,translation,highlights")
+            .select(Self.poemCols)
             .eq("author_id", value: id.uuidString)
         if let form { request = request.eq("form", value: form) }
+        if let genreGroup { request = Self.filter(request, genreGroup: genreGroup) }
         return try await request.or("title.ilike.\(pattern),content.ilike.\(pattern)")
             .order("title").order("id").limit(cappedLimit).execute().value
     }
@@ -434,7 +517,7 @@ public final class PoetStore {
         let id = try await resolvePoetId()
         let pattern = Self.literalSearchPattern(q)
         let poems: [Poem] = try await client.from("poems")
-            .select("id,title,form,content,paragraphs,cipai,summary,appreciation,translation,highlights")
+            .select(Self.poemCols)
             .eq("author_id", value: id.uuidString)
             .or("title.ilike.\(pattern),content.ilike.\(pattern)")
             .order("title").order("id").limit(40).execute().value
@@ -453,6 +536,10 @@ public final class PoetStore {
     /// 供 search 判定年份区间。store 不该知道编成，所以只存生卒。
     private var composition0: (birth: Int, death: Int) { lifespan }
     public var lifespan: (birth: Int, death: Int) = (0, 9999)
+
+    /// 作品行的列。provenance 整列取回 (相比正文很小), 客户端只解码书名与章名。
+    static let poemCols =
+        "id,title,form,content,paragraphs,cipai,summary,appreciation,translation,highlights,genre,genre_group,provenance"
 
     private static let eventCols =
         "id,station_id,year,month,day,is_leap_month,date_precision,content,work_titles,full_text,source_ref"

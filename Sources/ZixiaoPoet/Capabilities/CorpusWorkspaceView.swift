@@ -134,7 +134,7 @@ struct CorpusView: View {
             CorpusShelfView(ctx: ctx)
         case .genre(let id):
             if let genre = ctx.literaryGenres.first(where: { $0.id == id }) {
-                PoemListView(ctx: ctx, genre: genre)
+                PoemCatalogView(ctx: ctx, genre: genre)
             }
         case .poem(let poem):
             PoemDetailView(ctx: ctx, poem: poem)

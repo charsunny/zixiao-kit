@@ -49,8 +49,14 @@ struct PoemDetailView: View {
                         .foregroundStyle(theme.color.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
-                    Text("\(ctx.composition.poet.name) · \(genre)")
-                        .font(theme.type.footnote).foregroundStyle(theme.color.textSecondary)
+                    VStack(alignment: .leading, spacing: theme.space.xxs) {
+                        Text("\(ctx.composition.poet.name) · \(genre)")
+                        // 文的出处:「细体裁 · 书名 章名」。诗词没有这些字段, 不显示。
+                        if let source = poem.sourceLine {
+                            Text(source).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .font(theme.type.footnote).foregroundStyle(theme.color.textSecondary)
                 }.padding(.top, theme.space.xl + theme.space.xs)
                 if readingOrientation == .vertical {
                     verticalText
