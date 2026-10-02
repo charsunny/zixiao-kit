@@ -71,7 +71,7 @@ private struct ScreenArtSurface: View {
 
     /// 当前该上屏的图: 内存里正好有就用; 否则沿用同配方同外观的旧图 (尺寸变化中)。
     private func displayed(for key: PoetScreenArtCache.Key?) -> CGImage? {
-        guard let key, redactionReasons.isEmpty else { return nil }
+        guard let key, !redactionReasons.contains(.placeholder) else { return nil }
         if let hit = cache.cachedImage(key) { return hit }
         guard let shown, shown.key.recipe == key.recipe, shown.key.dark == key.dark else { return nil }
         return shown.image
@@ -81,7 +81,7 @@ private struct ScreenArtSurface: View {
         let key = key
         ZStack(alignment: .topLeading) {
             theme.paper()
-            if !redactionReasons.isEmpty {
+            if redactionReasons.contains(.placeholder) {
                 theme.color.fill
             } else if let image = displayed(for: key) {
                 Image(decorative: image, scale: displayScale)
@@ -101,7 +101,7 @@ private struct ScreenArtSurface: View {
     }
 
     private func load(_ key: PoetScreenArtCache.Key?) async {
-        guard let key, redactionReasons.isEmpty else { return }
+        guard let key, !redactionReasons.contains(.placeholder) else { return }
         if let hit = cache.cachedImage(key) {
             shown = Shown(key: key, image: hit)
             return

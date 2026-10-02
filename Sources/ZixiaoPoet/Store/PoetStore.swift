@@ -392,6 +392,11 @@ public final class PoetStore {
         return ids.compactMap { index[$0] }
     }
 
+    /// 按 id 取一篇。库里没有返回 nil。
+    public func poem(id: UUID) async throws -> Poem? {
+        try await poems(ids: [id]).first
+    }
+
     /// 读本的作品列表。按体裁分页取；range 两端都包含，所以末端要减一。
     public func poems(form: String, limit: Int = 400, offset: Int = 0) async throws -> [Poem] {
         try await poems(form: form, genreGroup: nil, genre: nil, limit: limit, offset: offset)

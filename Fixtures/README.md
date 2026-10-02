@@ -9,3 +9,6 @@
 
 脚本会自行以 TZ=Asia/Shanghai 重跑 (Flutter 版逐日前进用本地 DateTime, 有夏令时的时区会算错)。
 Swift 测试经 `#filePath` 直接读本目录, 不经测试包资源。
+- moments-trimmed.json: 诗人志「刻」(moments-<slug>.json, 格式见 zhi/poetkit/moments.schema.json) 的裁剪样本 —— 取自东坡志随包的
+  moments 数据: 一个桩卷 + 一个已编卷的三刻 (日 / 月精度、既望写法、墨迹、人物各一例), 去掉调试字段 `_workTitle`。
+  裁剪后不满足 schema 的「已编卷 8–12 刻」, 只用来测解码与日期行。ZixiaoPoetTests/MomentsTests 经 `#filePath` 读取。

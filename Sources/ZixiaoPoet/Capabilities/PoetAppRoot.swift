@@ -67,7 +67,13 @@ enum CapabilityRegistry {
     static func root(_ id: CapabilityID, _ ctx: CompositionContext) -> some View {
         switch id {
         case .daily:     DailyView(ctx: ctx)
-        case .itinerary: ItineraryView(ctx: ctx)
+        case .itinerary:
+            // 有刻 (moments-<slug>.json) 就是一生长卷; 没有的诗人仍是原来的叙事工作区。
+            if let moments = ctx.moments, !moments.chapters.isEmpty {
+                LifeScrollView(ctx: ctx, moments: moments, capability: .itinerary)
+            } else {
+                ItineraryView(ctx: ctx)
+            }
         case .corpus:    CorpusView(ctx: ctx)
         case .search:    SearchZeroStateView(ctx: ctx)
         case .profile:   ProfileView(ctx: ctx)

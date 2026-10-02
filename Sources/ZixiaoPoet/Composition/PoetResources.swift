@@ -49,6 +49,7 @@ public struct PoetResources: Sendable {
 
     public var guideResourceName: String { "guide-\(slug).json" }
     public var artworksResourceName: String { "artworks-\(slug).json" }
+    public var momentsResourceName: String { "moments-\(slug).json" }
 
     private var bundle: Bundle? { Bundle(url: bundleURL) }
 
@@ -69,6 +70,13 @@ public struct PoetResources: Sendable {
     func artworks() throws -> [Artwork] {
         guard url(forAsset: artworksResourceName) != nil else { return [] }
         return try decode(artworksResourceName, Artwork.decodeList)
+    }
+
+    /// 刻 (一生长卷)。只有编过长卷的诗人有, 缺失不算错 (返回 nil, 能力退回叙事工作区);
+    /// 有但解不开才抛错。
+    public func moments() throws -> PoetMoments? {
+        guard url(forAsset: momentsResourceName) != nil else { return nil }
+        return try decode(momentsResourceName, PoetMoments.decode)
     }
 
     private func decode<T>(_ name: String, _ decoder: (Data) throws -> T) throws -> T {

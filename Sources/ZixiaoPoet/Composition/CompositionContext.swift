@@ -28,6 +28,8 @@ public final class CompositionContext {
     public let resourceIssues: [PoetResourceError]
     let artworks: [Artwork]
     let guide: PoetGuide?
+    /// 刻 (一生长卷)。包里没有 `moments-<slug>.json` 时为 nil: 叙事 Tab 用旧的工作区。
+    public let moments: PoetMoments?
     @ObservationIgnored var phoneFlow: PhoneFlow = .link
 
     func chapterIntroduction(_ epoch: Epoch) -> String? {
@@ -113,6 +115,10 @@ public final class CompositionContext {
         }
         do { self.artworks = try resources.artworks() } catch {
             self.artworks = []
+            issues.append(Self.resourceIssue(error, resources: resources))
+        }
+        do { self.moments = try resources.moments() } catch {
+            self.moments = nil
             issues.append(Self.resourceIssue(error, resources: resources))
         }
         self.resourceIssues = issues
