@@ -213,6 +213,9 @@ struct ArtworkDetailView: View {
                         .font(theme.type.body).frame(minHeight: PoetLayout.minHitTarget)
                     Text(artwork.imageCredit).font(theme.type.footnote).foregroundStyle(theme.color.textSecondary)
                         .textSelection(.enabled)
+                    if let license = artwork.license {
+                        Text("授权 · \(license.name)").font(theme.type.footnote).foregroundStyle(theme.color.textSecondary)
+                    }
                     HStack(spacing: theme.space.xl) {
                         Link("图像来源", destination: artwork.imageSourceURL)
                         Link("图像使用说明", destination: artwork.licenseURL)

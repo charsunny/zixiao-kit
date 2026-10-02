@@ -12,8 +12,11 @@ extension View {
     func readingTransitionSource<ID: Hashable>(_ id: ID, in namespace: Namespace.ID) -> some View {
         modifier(ReadingTransitionSource(id: id, namespace: namespace))
     }
-    func readingTransition<ID: Hashable>(_ id: ID, in namespace: Namespace.ID) -> some View {
-        modifier(ReadingTransition(id: id, namespace: namespace))
+    /// 作为 NavigationLink 目的页的根修饰。**必须**在这里用 AnyView 切断类型嵌套: 真机 (非模拟器) 上
+    /// NavigationStack 推入时会按 mangled name 解码目的页的完整泛型类型, 读本页 + 过渡修饰的类型深度
+    /// 足以让 swift 运行时的 TypeDecoder 递归栈溢出 (EXC_BAD_ACCESS "stack guard", 2026-10-02 XiPhone 实测)。
+    func readingTransition<ID: Hashable>(_ id: ID, in namespace: Namespace.ID) -> AnyView {
+        AnyView(modifier(ReadingTransition(id: id, namespace: namespace)))
     }
 }
 

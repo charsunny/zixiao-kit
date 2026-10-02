@@ -1,6 +1,6 @@
 import Foundation
 
-struct Artwork: Decodable, Identifiable, Sendable {
+struct Artwork: Codable, Identifiable, Sendable {
     let id: String
     let title: String
     let kind: String
@@ -21,6 +21,12 @@ struct Artwork: Decodable, Identifiable, Sendable {
     let images: [ArtworkImage]
     let relatedPoemID: UUID?
     let relatedPoemTitle: String?
+    /// 对应导读章节的序号 (`guide.chapters[].epoch.sequence`)。未定年段的作品不写。
+    let epochSequence: Int?
+    /// 与作品相关的诗文 id (可多首; 单值 `relatedPoemID` 仍保留)。
+    let relatedPoemIDs: [UUID]?
+    /// 图像授权的简要标示 (如 CC BY 4.0)。完整出处与链接仍看 `imageCredit` / `licenseURL`。
+    let license: ArtworkLicense?
 
     func matches(_ query: String) -> Bool {
         [title, kind, subtitle, introduction, collection, attribution].joined(separator: " ")
@@ -31,8 +37,13 @@ struct Artwork: Decodable, Identifiable, Sendable {
         try JSONDecoder().decode([Artwork].self, from: data)
     }
 }
-struct ArtworkImage: Decodable, Identifiable, Sendable {
+struct ArtworkImage: Codable, Identifiable, Sendable {
     var id: String { asset }
     let asset: String
     let caption: String
+}
+struct ArtworkLicense: Codable, Sendable, Equatable {
+    let name: String
+    let url: URL
+    let holder: String?
 }
