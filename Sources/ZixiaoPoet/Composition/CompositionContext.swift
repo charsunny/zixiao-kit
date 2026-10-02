@@ -30,6 +30,8 @@ public final class CompositionContext {
     let guide: PoetGuide?
     /// 刻 (一生长卷)。包里没有 `moments-<slug>.json` 时为 nil: 叙事 Tab 用旧的工作区。
     public let moments: PoetMoments?
+    /// 跨 Tab 的程序导航: 别的 Tab 请一生长卷滚到某一刻 (见 `LifeNavigationState`)。
+    public let lifeNavigation = LifeNavigationState()
     @ObservationIgnored var phoneFlow: PhoneFlow = .link
 
     func chapterIntroduction(_ epoch: Epoch) -> String? {
@@ -137,4 +139,38 @@ public final class CompositionContext {
         (error as? PoetResourceError)
             ?? .unreadable(product: resources.productName, resource: "?", detail: String(describing: error))
     }
+}
+
+// MARK: - 跨 Tab 导航
+
+/// 「看这一天」: 今日 (或任何别的 Tab) 请一生长卷滚到某一刻。
+///
+/// 两半各有主人: `PoetAppRoot` 看 `tabRequest`, 切到那个 Tab 后调 `didSwitchTab()` 清掉;
+/// 一生长卷 (`LifeScrollView`) 看 `pendingMomentID` (`onChange(of:initial: true)`), 滚到那一刻后调
+/// `consumeMoment()` 清掉 —— 长卷还没建出来时请求留着, 建好后 `initial: true` 那一次照样接得到。
+@MainActor
+@Observable
+public final class LifeNavigationState {
+    /// 等长卷去滚的刻 id (`PoetMoments.Moment.id`)。
+    public private(set) var pendingMomentID: String?
+    /// 等根壳去切的 Tab。
+    public private(set) var tabRequest: CapabilityID?
+
+    public init() {}
+
+    /// 请一生 Tab 滚到某一刻 (一生长卷挂在 `itinerary` 能力上)。
+    public func show(moment id: String) {
+        pendingMomentID = id
+        tabRequest = .itinerary
+    }
+
+    /// 长卷接手: 取走待滚的刻 id 并清掉。
+    @discardableResult
+    public func consumeMoment() -> String? {
+        defer { pendingMomentID = nil }
+        return pendingMomentID
+    }
+
+    /// 根壳已切到请求的 Tab。
+    public func didSwitchTab() { tabRequest = nil }
 }

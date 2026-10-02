@@ -108,6 +108,20 @@ struct LifeScrollView: View {
                     coverStore.momentAnchor = metrics.momentAnchor
                 }
                 .task { await debugLaunch(proxy) }
+                // 今日页「看这一天」: ctx.lifeNavigation 留下的那一刻。initial: true 让长卷晚于请求建出来时也能接到。
+                .onChange(of: ctx.lifeNavigation.pendingMomentID, initial: true) { _, id in
+                    guard let id, let chapter = chapters.first(where: { $0.moments.contains { $0.id == id } }) else { return }
+                    _ = ctx.lifeNavigation.consumeMoment()
+                    Task { @MainActor in
+                        // 冷启动时懒加载的卷高还是估计值, 与 debugLaunch 同法: 先到卷, 再对一次刻。
+                        for delay in [0, 1000] {
+                            try? await Task.sleep(for: .milliseconds(delay))
+                            scroll(proxy, to: .chapter(chapter.epochSequence), at: .top)
+                            try? await Task.sleep(for: .milliseconds(600))
+                            scroll(proxy, to: .moment(id), at: coverStore.momentAnchor)
+                        }
+                    }
+                }
             }
         }
         .background(theme.paper())

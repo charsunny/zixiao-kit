@@ -56,6 +56,13 @@ public struct PoetAppRoot: View {
         .tint(theme.color.accent)
         // 账号与用户数据由 PoetAppBoot 启动 (`startSession`); 这里只拉只读骨架。
         .task { await ctx.store.bootstrap() }
+        // 跨 Tab 导航 (今日「看这一天」→ 一生长卷): 请求的 Tab 在编成里才切; 滚到哪一刻由长卷自己看
+        // `ctx.lifeNavigation.pendingMomentID`。
+        .onChange(of: ctx.lifeNavigation.tabRequest) { _, request in
+            guard let request else { return }
+            if tabs.contains(where: { $0.id == request.rawValue }) { selection = request.rawValue }
+            ctx.lifeNavigation.didSwitchTab()
+        }
     }
 }
 

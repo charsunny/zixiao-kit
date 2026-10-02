@@ -1,89 +1,83 @@
+//  DailyView.swift — 今日: 一张报纸的头版
+//
+//  整页只有一个主角 —— 今日一刻 (`TodayHeroView`, 选法见 `TodayPick`)。其下三个配角各占一行:
+//  此刻在哪 (小地图 → 本卷行迹) / 继续读 (有阅读记录才出现) / 本周 (七个小格, 点一天就地换成那天的一刻)。
+//  年谱联不上、又没有缓存时, 画面退成当前一卷的卷封面画 + 一句「今日的一页暂时翻不开」。
+
+import CoreLocation
 import SwiftUI
 import ZixiaoDesign
 
 struct DailyView: View {
     let ctx: CompositionContext
-    @State private var todayEvents: [PoetEvent] = []
-    @State private var lunar = PoetLunarDay.of()
-    @State private var works: [String: Poem] = [:]
-    @State private var loadingForms: Set<String> = []
-    @State private var failedForms: Set<String> = []
-    @State private var historyFailed = false
-    @State private var historyLoading = true
-    @State private var resumePoem: Poem?
-    @State private var pickedDate = Date.now
-    @State private var picking = false
+
+    /// 正在看的日子 (今天, 或本周 / 日历里点开的那天)。
+    @State private var selectedDate = Date.now
     @State private var followingToday = true
-    /// 每日选读的封面宽。起点取 kit 封面的「书目页」档, 随动态字体放大 (封面上的字按宽度定)。
-    @ScaledMetric(relativeTo: .body) private var coverWidth = BookCoverView.Size.page.width
+    @State private var lunar = PoetLunarDay.of()
+    @State private var pick: TodayPick?
+    @State private var phase: Phase = .loading
+    @State private var otherCount: Int?
+    @State private var weekMarks: Set<String> = []
+    @State private var linkedDays: [Int: Set<Int>] = [:]
+    @State private var resumePoem: Poem?
+    @State private var openingWork = false
+    @State private var route: TodayRoute?
+    @State private var sheet: TodaySheet?
+    @State private var picking = false
     @Namespace private var readings
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.zxTheme) private var theme
-    private var isToday: Bool { DailyRotation.calendar.isDateInToday(pickedDate) }
+
+    enum Phase: Equatable { case loading, loaded, empty, failed }
+
     private var title: String { ctx.composition.placement(.daily)?.label ?? "今日" }
     /// 干支年与农历 (如「丙午年 · 八月十九」)。iOS 26 起进导航栏副标题槽位, 以下由 `DailySubtitleFallback` 顶在内容上。
     private var subtitle: String { "\(lunar.sexagenary)年 · \(lunar.label)" }
-    private var genres: [Genre] {
-        let configured = ctx.composition.placement(.corpus)?.genres ?? []
-        return ["shi", "ci", "wen", "fu"].compactMap { id in configured.first { $0.id == id && $0.isBrowsable } }
-    }
-    private var collection: ReadingCollection? {
-        guard let choices = ctx.composition.editorial?.collections,
-              let index = DailyRotation.index(on: pickedDate, count: choices.count) else { return nil }
-        return choices[index]
-    }
-    private var dailyArt: [Artwork] {
-        ["书法", "绘画"].compactMap { kind in
-            let choices = ctx.artworks.filter { $0.kind == kind }
-            guard let index = DailyRotation.index(on: pickedDate, count: choices.count) else { return nil }
-            return choices[index]
-        }
-    }
-    private var dailyChapter: LifeChapter? {
-        guard let chapters = ctx.guide?.chapters,
-              let index = DailyRotation.index(on: pickedDate, count: chapters.count) else { return nil }
-        return chapters[index]
-    }
+    private var isToday: Bool { DailyRotation.calendar.isDateInToday(selectedDate) }
+    private var selectedKey: String { TodayPickStore.dateKey(selectedDate) }
+    private var app: String { ctx.composition.app.appSlug }
+    private var usesArchive: Bool { ctx.composition.enabledDailyCards.contains(.onThisDay) }
+    private var week: [TodayWeekDay] { TodayWeekDay.week(containing: .now) }
 
     var body: some View {
+        ScrollViewReader { proxy in
         ZXShellScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: theme.space.xl) {
-                ForEach(ctx.visibleDailyCards, id: \.self) { card in
-                    dailySection(card)
+            VStack(alignment: .leading, spacing: theme.space.xxl) {
+                VStack(alignment: .leading, spacing: theme.space.sm) {
+                    if !isToday { previewBar }
+                    hero
                 }
-                if !dailyArt.isEmpty {
-                    VStack(alignment: .leading, spacing: theme.space.md) {
-                        HStack(alignment: .firstTextBaseline) {
-                            ZixiaoDesign.SectionLabel("今日看书画")
-                            NavigationLink { ArtworkGalleryView(ctx: ctx) } label: {
-                                Text("全部").font(theme.type.footnote)
-                                    .frame(minWidth: LifeUI.minTapTarget, minHeight: LifeUI.minTapTarget, alignment: .trailing)
-                                    .contentShape(Rectangle())
-                            }.tint(theme.accent)
-                        }
-                        ForEach(dailyArt) { artwork in
-                            NavigationLink {
-                                ArtworkDetailView(ctx: ctx, artwork: artwork)
-                                    .readingTransition(artwork.id, in: readings)
-                            } label: {
-                                DailyArtworkCard(artwork: artwork)
-                                    .readingTransitionSource(artwork.id, in: readings)
-                            }.buttonStyle(.plain)
-                        }
-                    }.padding(.horizontal, theme.space.margin)
+                if let pick, phase == .loaded, let coordinate = coordinate(of: pick), let place = pick.placeLabel {
+                    Button { route = .map(pick.chapter) } label: {
+                        TodayPlaceRow(coordinate: coordinate, place: place, chapterTitle: pick.chapterTitle)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!ctx.hasItineraryData)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("此刻在哪，\(place)\(pick.chapterTitle.map { "，\($0)" } ?? "")")
+                    .accessibilityHint(ctx.hasItineraryData ? "打开本卷行迹地图" : "")
                 }
-                if let collection {
-                    VStack(alignment: .leading, spacing: theme.space.md) {
-                        ZixiaoDesign.SectionLabel("一起读")
-                        NavigationLink { ReadingCollectionView(ctx: ctx, collection: collection) } label: {
-                            ZixiaoDesign.GlazePanel(padding: theme.space.lg) {
-                                DailyCollectionLabel(collection: collection)
-                            }
-                        }.buttonStyle(.plain)
-                    }.padding(.horizontal, theme.space.margin)
+                if let resume = ctx.userData.reading.first, let poem = resumePoem, poem.id == resume.poemId {
+                    Button { route = .poem(poem, source: "resume") } label: {
+                        TodayResumeRow(title: ctx.workTitle(poem), progress: resume.progress, finished: resume.finished)
+                    }
+                    .buttonStyle(.plain)
+                    .readingTransitionSource("resume", in: readings)
                 }
-            }.padding(.top, theme.space.sm).padding(.bottom, theme.space.xxl).poetReadableWidth()
+                if phase != .failed || pick != nil {
+                    TodayWeekStrip(days: week, todayKey: TodayPickStore.dateKey(.now), selectedKey: selectedKey,
+                                   marked: weekMarks) { day in selectDate(day.date) }
+                    .id(Self.weekAnchor)
+                }
+            }
+            .padding(.horizontal, theme.space.margin)
+            .padding(.top, theme.space.sm)
+            .padding(.bottom, theme.space.xxl)
+            .poetReadableWidth()
+        }
+        .task { await debugScroll(proxy) }
         }
         .background(theme.paper())
         .zxNavigationTitle(title, subtitle: subtitle, role: .root)
@@ -95,258 +89,355 @@ struct DailyView: View {
                 }.accessibilityLabel("选择日子")
             }
         }
-        .sheet(isPresented: $picking) { DateSelectionView(date: $pickedDate) }
+        .sheet(isPresented: $picking) { DateSelectionView(date: $selectedDate) }
+        .sheet(item: $sheet) { sheetContent($0) }
+        .navigationDestination(item: $route) { destination($0) }
         .refreshable { await loadDay() }
-        .onChange(of: pickedDate) { _, date in followingToday = DailyRotation.calendar.isDateInToday(date) }
+        .onChange(of: selectedDate) { _, date in followingToday = DailyRotation.calendar.isDateInToday(date) }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active, followingToday, !isToday { pickedDate = .now }
+            if phase == .active, followingToday, !isToday { selectedDate = .now }
         }
-        .task(id: ctx.userData.reading.first?.poemId) {
-            guard ctx.visibleDailyCards.contains(.resume),
-                  let id = ctx.userData.reading.first?.poemId else { resumePoem = nil; return }
-            let bundled = ctx.guide?.poem(id)
-            resumePoem = bundled
-            if let fetched = try? await ctx.store.poems(ids: [id]).first, !Task.isCancelled {
-                resumePoem = fetched
-            }
-        }
-        .task(id: pickedDate) { await loadDay() }
+        .task(id: ctx.userData.reading.first?.poemId) { await loadResume() }
+        .task(id: selectedKey) { await loadDay() }
+        .task { await loadWeekMarks() }
+        .task { debugLaunch() }
     }
 
-    @ViewBuilder
-    private func dailySection(_ card: DailyCard) -> some View {
-        switch card {
-        case .workOfDay:
-            dailyWorks
-        case .resume:
-            if let poem = resumePoem, !works.values.contains(where: { $0.id == poem.id }) {
-                VStack(alignment: .leading, spacing: theme.space.md) {
-                    ZixiaoDesign.SectionLabel("接着读")
-                    NavigationLink { PoemDetailView(ctx: ctx, poem: poem) } label: {
-                        ZixiaoDesign.GlazePanel(padding: theme.space.lg) {
-                            LifeUI.PoemRow(poem: poem, displayTitle: ctx.workTitle(poem))
-                        }
-                    }.buttonStyle(.plain)
-                }.padding(.horizontal, theme.space.margin)
-            }
-        case .onThisDay:
-            historyPreview.padding(.horizontal, theme.space.margin)
-        case .epochNote:
-            if let chapter = dailyChapter {
-                VStack(alignment: .leading, spacing: theme.space.md) {
-                    ZixiaoDesign.SectionLabel("今日导读")
-                    NavigationLink { EpochDetailView(ctx: ctx, epoch: chapter.epoch) } label: {
-                        ZixiaoDesign.GlazePanel {
-                            VStack(alignment: .leading, spacing: theme.space.sm) {
-                                Text(chapter.epoch.label).font(theme.type.title2)
-                                    .foregroundStyle(theme.color.textPrimary)
-                                Text(chapter.introduction).font(theme.type.body).lineSpacing(theme.space.xs)
-                                    .foregroundStyle(theme.color.textSecondary).lineLimit(3)
-                                Label("进入\(ctx.narrativeLabel)篇章", systemImage: "arrow.right")
-                                    .font(theme.type.footnote).foregroundStyle(theme.accent)
-                            }
-                        }
-                    }.buttonStyle(.plain)
-                }.padding(.horizontal, theme.space.margin)
-            }
-        case .anecdote:
-            EmptyView()
-        }
-    }
+    // MARK: 主角
 
-    private var dailyWorks: some View {
-        VStack(alignment: .leading, spacing: theme.space.md) {
-            ZixiaoDesign.SectionLabel("每日选读", trailing: genres.map(\.label).joined(separator: " · "))
-                .padding(.horizontal, theme.space.margin)
-            if typeSize.isAccessibilitySize {
-                ForEach(genres) { genre in dailyCard(genre).padding(.horizontal, theme.space.margin) }
-            } else {
-                ScrollView(.horizontal) {
-                    LazyHStack(alignment: .top, spacing: theme.space.lg) {
-                        ForEach(genres) { genre in
-                            dailyCard(genre).frame(width: coverWidth).id(genre.id)
-                        }
-                    }.padding(.vertical, theme.space.sm).scrollTargetLayout()
-                }
-                .contentMargins(.horizontal, theme.space.margin, for: .scrollContent)
-                .scrollTargetBehavior(.viewAligned)
-                .scrollIndicators(.hidden)
+    @ViewBuilder private var hero: some View {
+        if let pick {
+            TodayHeroView(ctx: ctx, pick: pick, referenceYear: lunar.lunar.year, isToday: isToday,
+                          otherCount: otherCount, namespace: readings, isOpeningWork: openingWork,
+                          read: { Task { await openWork(pick) } },
+                          seeDay: seeDayAction(pick),
+                          showOthers: {
+                              if let month = pick.month, let day = pick.day {
+                                  sheet = .day(month: month, day: day, excluding: pick.eventIDs)
+                              }
+                          })
+            .id(pick.id)
+            .transition(.opacity)
+        } else {
+            switch phase {
+            case .failed: offline
+            case .empty: emptyDay
+            case .loading, .loaded: loadingPlate
             }
         }
     }
 
-    /// 大字号下封面不跟着字号无限放大 (一张封面撑出屏幕就不是「书」了), 回到「正在阅读」档。
-    private var cardCoverWidth: CGFloat {
-        typeSize.isAccessibilitySize ? BookCoverView.Size.reading.width : coverWidth
+    private var loadingPlate: some View {
+        RoundedRectangle(cornerRadius: theme.radius.lg, style: .continuous)
+            .fill(theme.color.fill)
+            .aspectRatio(4.0 / 3.0, contentMode: .fit)
+            .overlay {
+                ProgressView {
+                    Text("正在翻阅年谱…").font(theme.type.footnote).foregroundStyle(theme.color.textSecondary)
+                }.tint(theme.muted)
+            }
     }
 
-    /// 封面包角按体裁染色 —— 内核不替体裁挑色, 色从身份的角色里取, 浅深各自解析。
-    private func genreTint(_ genre: Genre) -> Color {
-        switch genre.id {
-        case "shi": theme.seal
-        case "ci": theme.color.secondary
-        case "wen": theme.muted
-        default: theme.ink(0.72)
-        }
-    }
-
-    private func dailyCard(_ genre: Genre) -> some View {
-        let width = cardCoverWidth
-        return Group {
-            if let poem = works[genre.id] {
-                NavigationLink {
-                    PoemDetailView(ctx: ctx, poem: poem).readingTransition(genre.id, in: readings)
-                } label: {
-                    VStack(alignment: .leading, spacing: theme.space.md) {
-                        BookCoverView(title: ctx.workTitle(poem), author: ctx.composition.poet.name,
-                                      size: .width(width), cornerTint: genreTint(genre))
-                            .readingTransitionSource(genre.id, in: readings)
-                        VStack(alignment: .leading, spacing: theme.space.xs) {
-                            Text("每日一\(genre.label)").font(theme.type.subhead.weight(.semibold))
-                                .foregroundStyle(theme.color.textPrimary)
-                            Text(poem.lines.first ?? poem.title)
-                                .font(theme.type.subhead)
-                                .foregroundStyle(theme.color.textSecondary)
-                                .lineSpacing(theme.space.xxs)
-                                .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
-                        }
-                    }.contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("每日一\(genre.label)，\(ctx.workTitle(poem))，\(ctx.composition.poet.name)")
-                .accessibilityHint("打开全文阅读")
-            } else {
-                VStack(alignment: .leading, spacing: theme.space.md) {
-                    VStack(alignment: .leading, spacing: theme.space.md) {
-                        Text(genre.label).font(theme.type.subhead.weight(.semibold))
-                        Spacer(minLength: theme.space.md)
-                        if loadingForms.contains(genre.id) {
-                            ProgressView {
-                                Text("正在选读…").font(theme.type.footnote).foregroundStyle(theme.color.textSecondary)
-                            }.tint(theme.muted)
-                        } else if failedForms.contains(genre.id) {
-                            Text("这一篇暂未载入").font(theme.type.headline)
-                            Button { Task { await loadForm(genre.id, on: pickedDate) } } label: {
-                                Label("重试", systemImage: "arrow.clockwise")
-                                    .font(theme.type.footnote)
-                                    .frame(minWidth: LifeUI.minTapTarget, minHeight: LifeUI.minTapTarget)
-                                    .contentShape(Rectangle())
-                            }
-                                .poetActionStyle()
-                        } else {
-                            Text("作品整理中").font(theme.type.subhead).foregroundStyle(theme.color.textSecondary)
-                        }
-                        Spacer(minLength: theme.space.md)
+    /// 离线又没有缓存: 当前一卷的卷封面画 + 幽灵空态。
+    private var offline: some View {
+        VStack(alignment: .leading, spacing: theme.space.xl) {
+            if let cover = coverChapter {
+                ScreenArtView(.forPlace(cover.seed, epoch: cover.epoch, season: cover.season), aspect: 4.0 / 3.0)
+                    .overlay(alignment: .bottomLeading) {
+                        Text(cover.title)
+                            .font(theme.uiFont(13, weight: .medium))
+                            .foregroundStyle(theme.color.textSecondary)
+                            .padding(theme.space.lg)
+                            .accessibilityHidden(true)
                     }
-                    .padding(theme.space.lg).frame(maxWidth: .infinity, alignment: .leading)
-                    .frame(height: typeSize.isAccessibilitySize ? nil : BookCoverView.Size.width(width).height)
-                    .background(theme.surface, in: RoundedRectangle(cornerRadius: theme.radius.xs, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: theme.radius.xs, style: .continuous)
-                            .strokeBorder(theme.border, lineWidth: ZXMetric.hairline)
-                    }
-                    Text("每日一\(genre.label)").font(theme.type.subhead.weight(.semibold))
-                }
+                    .clipShape(RoundedRectangle(cornerRadius: theme.radius.lg, style: .continuous))
+                    .accessibilityHidden(true)
             }
-        }.foregroundStyle(theme.color.textPrimary)
+            ZXGhostState("今日的一页暂时翻不开", message: "年谱需要联网翻检。连上网络后再试一次。",
+                         actionTitle: "重试", systemImage: "arrow.clockwise") {
+                Task { await loadDay() }
+            }
+            .frame(maxWidth: .infinity)
+        }
     }
 
-    private var historyPreview: some View {
-        VStack(alignment: .leading, spacing: theme.space.md) {
-            ZixiaoDesign.SectionLabel("旧日此时", trailing: lunar.label)
-            VStack(alignment: .leading, spacing: theme.space.md) {
-                if historyLoading {
-                    ProgressView {
-                        Text("正在翻阅年谱…").font(theme.type.footnote).foregroundStyle(theme.color.textSecondary)
-                    }.tint(theme.muted)
-                } else if historyFailed {
-                    Text("年谱暂未载入").font(theme.type.body).foregroundStyle(theme.color.textSecondary)
-                    Button { Task { await loadHistory(on: pickedDate) } } label: {
-                        Text("重试").font(theme.type.callout)
-                            .frame(minWidth: LifeUI.minTapTarget, minHeight: LifeUI.minTapTarget)
-                            .contentShape(Rectangle())
-                    }.tint(theme.accent)
-                } else if let event = todayEvents.first {
-                    if todayEvents.contains(where: { $0.month != lunar.month || $0.day != lunar.day }) {
-                        Text("当日未见记载，为你选一则相近日子的年谱。")
-                            .font(theme.type.caption).foregroundStyle(theme.color.textSecondary)
-                    }
-                    NavigationLink { EventDetailView(ctx: ctx, event: event) } label: {
-                        VStack(alignment: .leading, spacing: theme.space.md) {
-                            HStack {
-                                Text("\(ctx.era.label(event.year)) · \(String(event.year))")
-                                    .font(theme.type.subhead.weight(.semibold))
-                                Spacer()
-                                Image(systemName: "chevron.right").font(theme.type.caption.weight(.semibold))
-                            }.foregroundStyle(theme.accent)
-                            Text(event.narrative).font(theme.type.body).lineSpacing(theme.space.xs).lineLimit(3)
-                                .foregroundStyle(theme.color.textPrimary)
-                        }.contentShape(Rectangle())
-                    }.buttonStyle(.plain)
-                    if todayEvents.count > 1 {
-                        InkDivider()
-                        NavigationLink {
-                            DailyArchiveView(ctx: ctx, events: todayEvents, dateLabel: lunar.label)
-                        } label: {
-                            Text("另有 \(todayEvents.count - 1) 条记载")
-                                .frame(minWidth: LifeUI.minTapTarget, minHeight: LifeUI.minTapTarget)
-                                .contentShape(Rectangle())
-                        }
-                        .font(theme.type.subhead).tint(theme.accent)
-                    }
-                } else {
-                    Text("年谱未留下这一天的记载，明日再来翻一页。")
-                        .font(theme.type.body).foregroundStyle(theme.color.textSecondary)
+    private var emptyDay: some View {
+        VStack(alignment: .leading, spacing: theme.space.sm) {
+            Text("年谱未留下这几天的记载").font(theme.type.title3).foregroundStyle(theme.color.textPrimary)
+            Text("明日再来翻一页，或在本周里换一天。")
+                .font(theme.type.body).foregroundStyle(theme.color.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 看的不是今天: 一行说明 + 「回到今天」。
+    private var previewBar: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("在看\(lunar.label)这一天")
+                .font(theme.type.footnote).foregroundStyle(theme.color.textSecondary)
+            Spacer()
+            Button { selectDate(.now) } label: {
+                Label("回到今天", systemImage: "arrow.uturn.backward")
+                    .font(theme.type.footnote.weight(.semibold))
+                    .frame(minHeight: LifeUI.minTapTarget)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(theme.color.textPrimary)
+        }
+    }
+
+    /// 离线态的卷封面: 最近一次的一刻所在的卷; 没有就按日轮换。
+    private var coverChapter: (seed: String, epoch: Int, season: ZXSeasonTint?, title: String)? {
+        let recent = TodayPickStore.latest(app: app)
+        if let chapters = ctx.moments?.chapters, !chapters.isEmpty {
+            let chapter = chapters.first { $0.epochSequence == recent?.chapter }
+                ?? chapters[DailyRotation.dayNumber(selectedDate) % chapters.count]
+            return (chapter.placeSeed, chapter.epochSequence,
+                    chapter.seasonTint.flatMap(ZXSeasonTint.init(rawValue:)), chapter.title)
+        }
+        let epochs = ctx.lifeEpochs
+        guard !epochs.isEmpty else { return nil }
+        let epoch = epochs.first { $0.sequence == recent?.chapter }
+            ?? epochs[DailyRotation.dayNumber(selectedDate) % epochs.count]
+        return ("\(ctx.composition.poet.slug)-\(epoch.sequence)", epoch.sequence, nil, epoch.label)
+    }
+
+    // MARK: 动作
+
+    private func seeDayAction(_ pick: TodayPick) -> (() -> Void)? {
+        switch pick.kind {
+        case .moment:
+            if let id = pick.momentID, ctx.moments != nil,
+               ctx.composition.capsuleTabs.contains(where: { $0.id == .itinerary }) {
+                return { ctx.lifeNavigation.show(moment: id) }
+            }
+            fallthrough
+        case .event:
+            guard let year = pick.year, ctx.hasChronicleData else { return nil }
+            return { sheet = .year(year) }
+        case .reading:
+            return nil
+        }
+    }
+
+    private func openWork(_ pick: TodayPick) async {
+        if let poem = pick.poem { route = .poem(poem, source: pick.id); return }
+        guard let id = pick.workID, !openingWork else { return }
+        openingWork = true
+        defer { openingWork = false }
+        if let poem = try? await ctx.store.poem(id: id) { route = .poem(poem, source: pick.id) }
+    }
+
+    private func selectDate(_ date: Date) {
+        withAnimation(theme.motion.adapted(theme.motion.smooth, reduceMotion: reduceMotion)) { selectedDate = date }
+    }
+
+    /// 地图的落点: 合成时记下的经纬度; 没有 (驻点当时还没拉回) 就按驻点 id / 地名现查。
+    private func coordinate(of pick: TodayPick) -> CLLocationCoordinate2D? {
+        if let lat = pick.latitude, let lon = pick.longitude { return .init(latitude: lat, longitude: lon) }
+        if let id = pick.stationID, let station = ctx.store.stations.first(where: { $0.id == id }) {
+            return .init(latitude: station.latitude, longitude: station.longitude)
+        }
+        return TodayPicker.guidePlace(named: pick.placeLabel, ctx: ctx).map { .init(latitude: $0.lat, longitude: $0.lon) }
+    }
+
+    // MARK: 推入与 sheet
+
+    @ViewBuilder private func destination(_ route: TodayRoute) -> some View {
+        switch route {
+        case .poem(let poem, let source):
+            // `readingTransition` 已用 AnyView 切断目的页类型 (真机 TypeDecoder 栈溢出)。
+            PoemDetailView(ctx: ctx, poem: poem).readingTransition(source, in: readings)
+        case .map(let epoch):
+            AnyView(LifeMapView(ctx: ctx, focusEpoch: epoch).zxNavigationTitle("行迹", role: .secondary))
+        }
+    }
+
+    @ViewBuilder private func sheetContent(_ sheet: TodaySheet) -> some View {
+        NavigationStack {
+            Group {
+                switch sheet {
+                case .year(let year):
+                    AnyView(ChronicleEventsView(ctx: ctx, year: year))
+                case .day(let month, let day, let excluding):
+                    AnyView(TodayDayArchiveView(ctx: ctx, month: month, day: day, excluding: Set(excluding)))
                 }
             }
-            .padding(ZXMetric.panelPadding).frame(maxWidth: .infinity, alignment: .leading)
-            .zxSurface(.e1, in: RoundedRectangle(cornerRadius: theme.radius.xl, style: .continuous))
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("完成") { self.sheet = nil } }
+            }
         }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .tint(theme.color.textPrimary)
     }
 
-    private func loadForm(_ form: String, on date: Date) async {
-        loadingForms.insert(form); failedForms.remove(form)
-        let bundled = ctx.guide?.workOfDay(date, form: form)
-        if let bundled {
-            works[form] = bundled
-            loadingForms.remove(form)
-        }
-        do {
-            let poem = try await ctx.store.workOfDay(date, form: form)
-            guard !Task.isCancelled, date == pickedDate else { return }
-            // Bundled selections keep the reviewed home → guide path stable. Remote data
-            // fills forms that have no bundled selection; it never erases local content.
-            if bundled == nil, let poem { works[form] = poem }
-        } catch {
-            guard !Task.isCancelled, date == pickedDate else { return }
-            if bundled == nil { failedForms.insert(form) }
-        }
-        loadingForms.remove(form)
-    }
-    private func loadHistory(on date: Date) async {
-        historyLoading = true; historyFailed = false
-        do {
-            let events = try await ctx.store.onThisDay(PoetLunarDay.of(date).lunar, fallback: ctx.composition.placement(.daily)?.onThisDay?.fallback ?? .nearestDay)
-            guard !Task.isCancelled, date == pickedDate else { return }
-            todayEvents = events
-        } catch {
-            guard !Task.isCancelled, date == pickedDate else { return }
-            historyFailed = true
-        }
-        historyLoading = false
-    }
+    // MARK: 取数
+
     private func loadDay() async {
-        let date = pickedDate
-        lunar = PoetLunarDay.of(date); works = [:]; todayEvents = []; failedForms = []
-        let cards = ctx.visibleDailyCards
-        loadingForms = cards.contains(.workOfDay) ? Set(genres.map(\.id)) : []
-        if cards.contains(.workOfDay) {
-            await withTaskGroup(of: Void.self) { group in
-                for genre in genres { group.addTask { await loadForm(genre.id, on: date) } }
+        let date = selectedDate
+        let key = TodayPickStore.dateKey(date)
+        lunar = PoetLunarDay.of(date)
+        otherCount = nil
+        if let cached = TodayPickStore.cached(for: date, app: app) {
+            pick = cached
+            phase = .loaded
+        } else {
+            if pick != nil { pick = nil }
+            phase = .loading
+            do {
+                let chosen = try await TodayPicker.pick(for: date, ctx: ctx)
+                guard !Task.isCancelled, key == selectedKey else { return }
+                withAnimation(theme.motion.adapted(theme.motion.smooth, reduceMotion: reduceMotion)) {
+                    pick = chosen
+                    phase = chosen == nil ? .empty : .loaded
+                }
+                if let chosen { TodayPickStore.save(chosen, for: date, app: app) }
+            } catch {
+                guard !Task.isCancelled, key == selectedKey else { return }
+                phase = .failed
+                return
             }
         }
-        if cards.contains(.onThisDay) { await loadHistory(on: date) }
-        else { historyLoading = false; historyFailed = false }
+        await loadOtherCount(for: key)
+        if weekMarks.isEmpty { await loadWeekMarks() }
+        #if DEBUG
+        // `-todaySeeDay YES`: 载入后替读者点一下「看这一天」(验跨 Tab 导航)。
+        if UserDefaults.standard.bool(forKey: "todaySeeDay"), let pick { seeDayAction(pick)?() }
+        #endif
+    }
+
+    private func loadOtherCount(for key: String) async {
+        guard usesArchive, let pick, let month = pick.month, let day = pick.day, pick.kind != .reading else { return }
+        guard let total = try? await ctx.store.eventCount(month: month, day: day),
+              !Task.isCancelled, key == selectedKey else { return }
+        otherCount = max(total - pick.eventIDs.count, 0)
+    }
+
+    /// 本周哪几天有刻 / 有可读的年谱记载。刻在包里; 年谱按农历月各取一次。
+    private func loadWeekMarks() async {
+        let days = week
+        let momentDays = Set((ctx.moments?.chapters ?? []).flatMap(\.moments)
+            .filter { $0.date.precision == .day }
+            .compactMap { m in m.date.month.flatMap { month in m.date.day.map { "\(month)-\($0)" } } })
+        if usesArchive {
+            for month in Set(days.map(\.lunarMonth)) where linkedDays[month] == nil {
+                if let found = try? await ctx.store.linkedEventDays(month: month) { linkedDays[month] = found }
+            }
+        }
+        weekMarks = Set(days.filter { day in
+            momentDays.contains("\(day.lunarMonth)-\(day.lunarDay)")
+                || linkedDays[day.lunarMonth]?.contains(day.lunarDay) == true
+        }.map(\.key))
+    }
+
+    private func loadResume() async {
+        guard let id = ctx.userData.reading.first?.poemId else { resumePoem = nil; return }
+        if let bundled = ctx.guide?.poem(id) { resumePoem = bundled; return }
+        if let fetched = try? await ctx.store.poems(ids: [id]).first, !Task.isCancelled { resumePoem = fetched }
+    }
+
+    // MARK: 设计迭代 (DEBUG)
+
+    private static let weekAnchor = "today.week"
+
+    /// `-todayScroll bottom`: 载入后滚到本周 (截图用)。
+    private func debugScroll(_ proxy: ScrollViewProxy) async {
+        #if DEBUG
+        guard UserDefaults.standard.string(forKey: "todayScroll") == "bottom" else { return }
+        try? await Task.sleep(for: .seconds(4))
+        proxy.scrollTo(Self.weekAnchor, anchor: .bottom)
+        #endif
+    }
+
+    /// 截图用的启动参数 (与 `-tab` 同法, 只在 DEBUG 生效):
+    /// `-todayDate yyyy-MM-dd` 打开那一天 (本周预览态); `-todayFresh YES` 先清掉缓存的一刻 (看选法 / 离线态);
+    /// `-todayScroll bottom` 滚到本周; `-todaySeeDay YES` 载入后点「看这一天」。
+    private func debugLaunch() {
+        #if DEBUG
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: "todayFresh") { TodayPickStore.clear(app: app) }
+        if let raw = defaults.string(forKey: "todayDate") {
+            let parts = raw.split(separator: "-").compactMap { Int($0) }
+            if parts.count == 3, let date = DailyRotation.calendar.date(
+                from: DateComponents(year: parts[0], month: parts[1], day: parts[2], hour: 12)) {
+                selectedDate = date
+            }
+        }
+        #endif
+    }
+}
+
+/// 今日页推入的页。经一个 `navigationDestination(item:)` 推, 目的页类型由 AnyView 切断。
+enum TodayRoute: Hashable {
+    case poem(Poem, source: String)
+    /// 本卷行迹 (分期序号; nil = 全部)。
+    case map(Int?)
+}
+
+enum TodaySheet: Identifiable, Hashable {
+    /// 某一年的年谱。
+    case year(Int)
+    /// 某个农历月日 (各年) 的其他记载。
+    case day(month: Int, day: Int, excluding: [UUID])
+
+    var id: String {
+        switch self {
+        case .year(let year): "year-\(year)"
+        case .day(let month, let day, _): "day-\(month)-\(day)"
+        }
+    }
+}
+
+/// 「另有 N 条记载」: 年谱里同一农历月日 (各年) 的事目, 扣掉今日一刻用掉的那几条。
+private struct TodayDayArchiveView: View {
+    let ctx: CompositionContext
+    let month: Int
+    let day: Int
+    let excluding: Set<UUID>
+    @State private var events: [PoetEvent] = []
+    @State private var loading = true
+    @State private var failed = false
+    @Environment(\.zxTheme) private var theme
+
+    var body: some View {
+        Group {
+            if loading {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if failed {
+                LoadFailureView(title: "年谱暂未载入", message: "检查网络后再试一次。") { await load() }
+            } else {
+                List(events) { event in
+                    NavigationLink { EventDetailView(ctx: ctx, event: event) } label: {
+                        VStack(alignment: .leading, spacing: theme.space.xs) {
+                            Text("\(ctx.era.label(event.year)) · \(String(event.year))")
+                                .font(theme.type.subhead.weight(.semibold)).foregroundStyle(theme.color.textPrimary)
+                            Text(event.narrative).font(theme.type.body).lineLimit(3)
+                                .foregroundStyle(theme.color.textSecondary)
+                        }
+                    }
+                    .listRowBackground(theme.paper()).listRowSeparatorTint(theme.rule)
+                }
+                .listStyle(.plain).scrollContentBackground(.hidden)
+            }
+        }
+        .background(theme.paper())
+        .foregroundStyle(theme.color.textPrimary)
+        .zxNavigationTitle("旧日此时",
+                           subtitle: "\(TodayText.monthDay(month: month, day: day)) · \(loading ? "正在翻检…" : "\(events.count) 条记载")",
+                           role: .secondary)
+        .task { await load() }
+    }
+
+    private func load() async {
+        loading = true; failed = false
+        do {
+            events = try await ctx.store.onThisDay(month: month, day: day).filter { !excluding.contains($0.id) }
+        } catch {
+            if !Task.isCancelled { failed = true }
+        }
+        loading = false
     }
 }
 
@@ -373,94 +464,6 @@ private struct DailySubtitleFallback: ViewModifier {
     }
 }
 
-/// 今日页的书画条目。书画页的 `ArtworkPreview` 还收旧主题参数, 这里只取它的缩略图件, 版式用 token。
-private struct DailyArtworkCard: View {
-    let artwork: Artwork
-    @Environment(\.zxTheme) private var theme
-    @Environment(\.dynamicTypeSize) private var typeSize
-
-    var body: some View {
-        ZixiaoDesign.GlazePanel(padding: theme.space.md) {
-            if typeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: theme.space.md) {
-                    thumbnail.frame(maxWidth: .infinity).frame(height: theme.space.xxxl * 4)
-                    caption
-                }
-            } else {
-                HStack(spacing: theme.space.lg) {
-                    thumbnail.frame(width: theme.space.xxxl * 2, height: theme.space.xxxl * 2)
-                    caption.frame(maxWidth: .infinity, alignment: .leading)
-                    Image(systemName: "chevron.right").font(theme.type.caption.weight(.semibold))
-                        .foregroundStyle(theme.color.textTertiary)
-                }
-            }
-        }
-        .contentShape(RoundedRectangle(cornerRadius: ZXMetric.panelRadius, style: .continuous))
-    }
-
-    private var thumbnail: some View {
-        ArtworkThumbnail(asset: artwork.cover)
-            .clipShape(RoundedRectangle(cornerRadius: theme.radius.md, style: .continuous))
-            .accessibilityHidden(true)
-    }
-
-    private var caption: some View {
-        VStack(alignment: .leading, spacing: theme.space.sm) {
-            Text(artwork.kind).font(theme.type.caption.weight(.semibold)).foregroundStyle(theme.accent)
-            Text(artwork.title).font(theme.type.headline).foregroundStyle(theme.color.textPrimary)
-            Text(artwork.subtitle).font(theme.type.subhead).foregroundStyle(theme.color.textSecondary)
-                .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
-        }
-    }
-}
-
-/// 「一起读」卡的内容。共读页的 `ReadingCollectionLabel` 还收旧主题参数, 这里是 token 版。
-private struct DailyCollectionLabel: View {
-    let collection: ReadingCollection
-    @Environment(\.zxTheme) private var theme
-
-    var body: some View {
-        HStack(alignment: .top, spacing: theme.space.lg) {
-            Image(systemName: collection.symbol)
-                .font(theme.type.title2).foregroundStyle(theme.accent)
-                .frame(width: theme.space.xxl + theme.space.xs).accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: theme.space.sm) {
-                Text(collection.title).font(theme.type.headline).foregroundStyle(theme.color.textPrimary)
-                Text(collection.subtitle).font(theme.type.callout)
-                    .foregroundStyle(theme.color.textSecondary).lineSpacing(theme.space.xs)
-                Text("共读 \(collection.works.count) 篇")
-                    .font(theme.type.footnote).foregroundStyle(theme.accent)
-            }.frame(maxWidth: .infinity, alignment: .leading)
-            Image(systemName: "chevron.right").font(theme.type.footnote)
-                .foregroundStyle(theme.accent).padding(.top, theme.space.sm)
-        }
-        .contentShape(Rectangle())
-    }
-}
-
-private struct DailyArchiveView: View {
-    let ctx: CompositionContext
-    let events: [PoetEvent]
-    let dateLabel: String
-    @Environment(\.zxTheme) private var theme
-    var body: some View {
-        List {
-            ForEach(events.dropFirst()) { event in
-                Section {
-                    NavigationLink { EventDetailView(ctx: ctx, event: event) } label: {
-                        EventRow(ctx: ctx, event: event)
-                    }.listRowBackground(theme.surface)
-                } header: {
-                    ZixiaoDesign.SectionLabel("\(ctx.era.label(event.year)) · \(String(event.year))")
-                }
-            }
-        }
-        .scrollContentBackground(.hidden).poetReadableWidth().background(theme.paper())
-        .foregroundStyle(theme.color.textPrimary)
-        .zxNavigationTitle("旧日此时", subtitle: "\(dateLabel) · 其他 \(events.count - 1) 条记载", role: .secondary)
-    }
-}
-
 private struct DateSelectionView: View {
     @Binding var date: Date
     @State private var draft: Date
@@ -477,7 +480,7 @@ private struct DateSelectionView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: theme.space.lg) {
-                    Text("选一个日子，读诗文，也看书画。每日内容按北京时间换新。")
+                    Text("选一个日子，看旧日此时的一刻。按北京时间换日。")
                         .font(theme.type.body).foregroundStyle(theme.color.textSecondary)
                     DatePicker("选择日期", selection: $draft, displayedComponents: .date)
                         .datePickerStyle(.graphical)

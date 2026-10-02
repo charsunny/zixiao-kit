@@ -16,13 +16,16 @@ public struct PoetComposition: Decodable, Sendable {
     public let editorial: Editorial?
     /// 书房的云端书架; 缺省时书房不显示。
     public let library: PoetLibrary?
+    /// 画屏的地望 seed 表: 驻点的地名 (古地名, 即 `Station.displayName`) → seed (如 `huangzhou`)。
+    /// 今日一刻由事目合成时按驻点地名查; 查不到退回所在卷的 seed。缺省为空 —— 地名只写在编成里, 内核不认识。
+    public let placeSeeds: [String: String]?
 
     /// JSON 里 capabilities 的键是字符串；JSONDecoder 不直接支持
     /// RawRepresentable 枚举做字典键，所以先按 String 解，再收敛成枚举。
     public let capabilities: [CapabilityID: Placement]
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, poet, app, identity, data, editorial, library, capabilities
+        case schemaVersion, poet, app, identity, data, editorial, library, placeSeeds, capabilities
     }
 
     public init(from decoder: Decoder) throws {
@@ -34,6 +37,7 @@ public struct PoetComposition: Decodable, Sendable {
         data = try c.decodeIfPresent(DataManifest.self, forKey: .data)
         editorial = try c.decodeIfPresent(Editorial.self, forKey: .editorial)
         library = try c.decodeIfPresent(PoetLibrary.self, forKey: .library)
+        placeSeeds = try c.decodeIfPresent([String: String].self, forKey: .placeSeeds)
         let raw = try c.decode([String: Placement].self, forKey: .capabilities)
         capabilities = raw.reduce(into: [:]) { acc, kv in
             if let id = CapabilityID(rawValue: kv.key) { acc[id] = kv.value }
@@ -296,6 +300,12 @@ public extension PoetComposition {
     }
 
     var eraName: EraNaming { EraNaming(style: identity.chronology?.style ?? .gregorian) }
+
+    /// 地名 → 画屏 seed (编成的 `placeSeeds`)。空串视同未配。
+    func placeSeed(for placeName: String?) -> String? {
+        guard let placeName, let seed = placeSeeds?[placeName], !seed.isEmpty else { return nil }
+        return seed
+    }
 }
 
 /// 书房里的云端书架 (编成的可选 `library` 块)。书目由各产品的编成给出 (id / 地址 / 校验值取自书库目录, 由

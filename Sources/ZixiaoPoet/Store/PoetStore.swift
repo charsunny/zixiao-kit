@@ -232,6 +232,57 @@ public struct Occasion: Decodable, Sendable, Identifiable, Hashable {
     public let poet_events: Event?
 }
 
+/// 一条事目连同它的驻点与「库里读得到的」关联作品 (poet_event_works → poems)。今日一刻由它合成。
+/// 只解码一层: 事目本身照 `PoetEvent` 的列, 另加内嵌的 `poet_stations` 与 `poet_event_works`。
+public struct PoetLinkedEvent: Decodable, Sendable, Identifiable, Hashable {
+    public let event: PoetEvent
+    public let station: StationRef?
+    /// 至少一篇 (查询用 `!inner`, 没有可读作品的事目不回来)。
+    public let works: [LinkedWork]
+    public var id: UUID { event.id }
+
+    /// 事目所在驻点 (`poet_stations`) 的一小截: 地名与经纬度。
+    public struct StationRef: Decodable, Sendable, Hashable {
+        public let id: UUID
+        public let sourceName: String
+        public let latitude: Double
+        public let longitude: Double
+        public let places: Station.PlaceRef?
+        /// 与 `Station.displayName` 同一规则: 有古地名用古地名, 否则现代名去行政后缀。
+        public var displayName: String {
+            places?.name ?? sourceName.replacingOccurrences(of: "[市县区]$", with: "", options: .regularExpression)
+        }
+        enum CodingKeys: String, CodingKey {
+            case id, latitude, longitude, places
+            case sourceName = "source_name"
+        }
+    }
+
+    /// 一篇关联作品: 年谱写法的篇名、体裁、匹配置信度, 以及库里的那一篇。
+    public struct LinkedWork: Decodable, Sendable, Hashable {
+        public let title: String
+        public let genre: String?
+        public let matchScore: Double?
+        public let ordinal: Int
+        public let poem: Poem
+        enum CodingKeys: String, CodingKey {
+            case title, genre, ordinal
+            case matchScore = "match_score", poem = "poems"
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case station = "poet_stations", works = "poet_event_works"
+    }
+
+    public init(from decoder: Decoder) throws {
+        event = try PoetEvent(from: decoder)
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        station = try c.decodeIfPresent(StationRef.self, forKey: .station)
+        works = try c.decodeIfPresent([LinkedWork].self, forKey: .works) ?? []
+    }
+}
+
 // MARK: - Store
 
 @MainActor
@@ -366,6 +417,46 @@ public final class PoetStore {
         return try await client.from("poet_events").select(Self.eventCols)
             .eq("poet_id", value: id.uuidString).ilike("content", pattern: "%\(literal)%")
             .order("year").order("month").order("day").order("id").limit(60).execute().value
+    }
+
+    // MARK: 今日一刻
+
+    /// 某个农历月里、日落在 `days` 之间、并且关联了「库里读得到的作品」的日精度事目 (连驻点与作品)。
+    /// 今日一刻的候选: 一次取一个窗口, 当天没有就在窗口里就近取。两层 `!inner` 把没有作品、
+    /// 或作品读不到 (未入库 / RLS 不放) 的事目滤在服务端。
+    public func linkedEvents(month: Int, days: ClosedRange<Int>) async throws -> [PoetLinkedEvent] {
+        let id = try await resolvePoetId()
+        return try await client.from("poet_events")
+            .select("""
+                \(Self.linkedEventCols),\
+                poet_stations(id,source_name,latitude,longitude,places(name,modern_name)),\
+                poet_event_works!inner(title,genre,match_score,ordinal,poems!inner(\(Self.poemCols)))
+                """)
+            .eq("poet_id", value: id.uuidString).eq("date_precision", value: "day")
+            .eq("month", value: month)
+            .gte("day", value: days.lowerBound).lte("day", value: days.upperBound)
+            .order("day").order("year").order("id").execute().value
+    }
+
+    /// 某个农历月里有「可读关联作品」的日子 (本周小格下的点)。只取日, 不取正文。
+    public func linkedEventDays(month: Int) async throws -> Set<Int> {
+        struct Row: Decodable { let day: Int? }
+        let id = try await resolvePoetId()
+        let rows: [Row] = try await client.from("poet_events")
+            .select("day,poet_event_works!inner(poems!inner(id))")
+            .eq("poet_id", value: id.uuidString).eq("date_precision", value: "day")
+            .eq("month", value: month).execute().value
+        return Set(rows.compactMap(\.day))
+    }
+
+    /// 某个农历月日 (各年) 的日精度事目条数。只数不取 (`head`)。
+    public func eventCount(month: Int, day: Int) async throws -> Int {
+        let id = try await resolvePoetId()
+        let response = try await client.from("poet_events").select("id", head: true, count: .exact)
+            .eq("poet_id", value: id.uuidString).eq("date_precision", value: "day")
+            .eq("month", value: month).eq("day", value: day).execute()
+        guard let total = response.count else { throw URLError(.badServerResponse) }
+        return total
     }
 
     /// Fetch only the selected row. The exact count keeps every work eligible, beyond the first page.
@@ -548,6 +639,9 @@ public final class PoetStore {
 
     private static let eventCols =
         "id,station_id,year,month,day,is_leap_month,date_precision,content,work_titles,full_text,source_ref"
+    /// 今日一刻候选的事目列: 不取 `full_text` (内嵌全文很长, 合成一刻用不到)。
+    private static let linkedEventCols =
+        "id,station_id,year,month,day,is_leap_month,date_precision,content,work_titles,source_ref"
 
     /// 同名同朝代可能有多份 NER 副本，取 poems_count 最大的主行。
     private func resolvePoetId() async throws -> UUID {
