@@ -64,6 +64,8 @@ struct PoemDetailView: View {
                     poemText.textSelection(.enabled)
                 }
                 InkDivider().padding(.top, theme.space.sm)
+                // 下半页: 此时 → 同年作品 → 相关墨迹 → 再读深一层 → 接着读 / 合集。
+                ReaderLifeSections(ctx: ctx, poem: poem)
                 supplementaryReading
                 onwardReading
             }

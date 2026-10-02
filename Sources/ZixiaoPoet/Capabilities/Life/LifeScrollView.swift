@@ -112,6 +112,7 @@ struct LifeScrollView: View {
                 .onChange(of: ctx.lifeNavigation.pendingMomentID, initial: true) { _, id in
                     guard let id, let chapter = chapters.first(where: { $0.moments.contains { $0.id == id } }) else { return }
                     _ = ctx.lifeNavigation.consumeMoment()
+                    route = nil   // 从长卷自己推出的读本里点「看这一天」: 先收回读本
                     Task { @MainActor in
                         // 冷启动时懒加载的卷高还是估计值, 与 debugLaunch 同法: 先到卷, 再对一次刻。
                         for delay in [0, 1000] {
