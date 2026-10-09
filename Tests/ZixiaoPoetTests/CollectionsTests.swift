@@ -1,3 +1,4 @@
+@testable import ZixiaoPoetCore
 import Foundation
 import XCTest
 @testable import ZixiaoPoet
@@ -108,9 +109,7 @@ final class CollectionsTests: XCTestCase {
 
     /// 旁边的 zhi 仓库里已有正式合集文件时, 整份解一遍 (没有就跳过)。
     func testBundledCollectionsDecodeWhenPresent() throws {
-        let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent()
+        let url = PoetFixtures.workspaceRoot
             .appendingPathComponent("zhi/DongpoZhi/App/Resources")
         let files = (try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []
         let collections = files.filter { $0.hasPrefix("collections-") && $0.hasSuffix(".json") }

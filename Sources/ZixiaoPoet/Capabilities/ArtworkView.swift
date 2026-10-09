@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 import SwiftUI
 import UIKit
 import ZixiaoDesign
@@ -5,26 +6,38 @@ import ZixiaoDesign
 @MainActor
 enum ArtworkImages {
     static let cache = NSCache<NSString, UIImage>()
-    /// 书画图片随 App 包发, 由 `CompositionContext` 启动时指过来 (`PoetResources`)。
-    static var resources: PoetResources?
-    static func image(_ asset: String) -> UIImage? {
-        if let image = cache.object(forKey: asset as NSString) { return image }
-        guard let url = resources?.url(forAsset: asset),
-              let image = UIImage(contentsOfFile: url.path) else { return nil }
+    /// Resources follow the view's composition; equal asset names in different bundles cannot collide.
+    static func image(_ asset: String, resources: PoetResources?) -> UIImage? {
+        guard let url = resources?.url(forAsset: asset) else { return nil }
+        let key = url.standardizedFileURL.absoluteString as NSString
+        if let image = cache.object(forKey: key) { return image }
+        guard let image = UIImage(contentsOfFile: url.path) else { return nil }
         cache.countLimit = 8
         cache.totalCostLimit = 64 * 1024 * 1024
         let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
-        cache.setObject(image, forKey: asset as NSString, cost: cost)
+        cache.setObject(image, forKey: key, cost: cost)
         return image
+    }
+}
+
+private struct PoetResourcesKey: EnvironmentKey {
+    static let defaultValue: PoetResources? = nil
+}
+
+extension EnvironmentValues {
+    var poetResources: PoetResources? {
+        get { self[PoetResourcesKey.self] }
+        set { self[PoetResourcesKey.self] = newValue }
     }
 }
 
 struct ArtworkThumbnail: View {
     let asset: String
+    @Environment(\.poetResources) private var resources
     @Environment(\.zxTheme) private var theme
     var body: some View {
         GeometryReader { geometry in
-            if let image = ArtworkImages.image(asset) {
+            if let image = ArtworkImages.image(asset, resources: resources) {
                 Image(uiImage: image).resizable().scaledToFill()
                     .frame(width: geometry.size.width, height: geometry.size.height).clipped()
             } else {
@@ -256,6 +269,7 @@ struct ArtworkDetailView: View {
 
 private struct ArtworkImageViewer: View {
     let artwork: Artwork
+    @Environment(\.poetResources) private var resources
     @Environment(\.dismiss) private var dismiss
     @Environment(\.zxTheme) private var theme
     @State private var page = 0
@@ -265,7 +279,7 @@ private struct ArtworkImageViewer: View {
         NavigationStack {
             TabView(selection: $page) {
                 ForEach(Array(artwork.images.enumerated()), id: \.element.id) { index, panel in
-                    ZoomableArtwork(asset: panel.asset, label: panel.caption, backdrop: UIColor(theme.color.night),
+                    ZoomableArtwork(asset: panel.asset, resources: resources, label: panel.caption, backdrop: UIColor(theme.color.night),
                                     command: zoomCommands[index, default: 0], action: zoomAction)
                         .tag(index)
                 }
@@ -304,6 +318,7 @@ private struct ArtworkImageViewer: View {
 
 private struct ZoomableArtwork: UIViewRepresentable {
     let asset: String
+    let resources: PoetResources?
     let label: String
     /// 暗场底色 (由主题解析好传进来, UIKit 这层不认识主题)。
     let backdrop: UIColor
@@ -312,7 +327,7 @@ private struct ZoomableArtwork: UIViewRepresentable {
     func makeUIView(context: Context) -> ArtworkScrollView {
         let view = ArtworkScrollView()
         view.backgroundColor = backdrop
-        view.setImage(ArtworkImages.image(asset), label: label)
+        view.setImage(ArtworkImages.image(asset, resources: resources), label: label)
         return view
     }
     func updateUIView(_ view: ArtworkScrollView, context: Context) {

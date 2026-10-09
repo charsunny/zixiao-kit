@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  LifeScrollEffects.swift — 长卷的滚动手感: 卷封面吸附、封面视差、点年份落到哪一刻
 //
 //  - 吸附 (`LifeCoverSnap`): 只有卷封面是吸附目标, 刻照常自由滚。手指离开时系统给出惯性落点,
@@ -151,13 +152,14 @@ struct LifeJump: Equatable {
         guard let first = chapters.first else { return nil }
         // 那一年有刻: 第一刻。
         for chapter in chapters {
-            if let moment = chapter.moments.first(where: { $0.date.year == year }) {
+            if let moment = chapter.moments.first(where: { $0.workDating != .contextual && $0.date.year == year }) {
                 return LifeJump(chapter: chapter.epochSequence, moment: moment.id)
             }
         }
         // 没有刻: 所在卷 (起始年不晚于这一年的最后一卷), 卷里那年之后的第一刻, 否则最近的一刻。
         let chapter = chapters.last { $0.startYear <= year } ?? first
-        let moment = chapter.moments.first { $0.date.year > year } ?? chapter.moments.last
+        let dated = chapter.moments.filter { $0.workDating != .contextual }
+        let moment = dated.first { $0.date.year > year } ?? dated.last
         return LifeJump(chapter: chapter.epochSequence, moment: moment?.id)
     }
 }

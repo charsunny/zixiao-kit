@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  LifeChapterCover.swift — 卷封面: 全幅画屏 (伸进导航栏下) + 竖排卷名 + 一枚印 + 卷次 / 年份 / 一句旨
 //
 //  画屏按本卷地望 seed 生成 (`PoetScreenArt.forPlace`), 同一卷永远同一幅。

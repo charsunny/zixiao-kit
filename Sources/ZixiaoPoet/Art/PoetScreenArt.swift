@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  PoetScreenArt.swift — 画屏: 按 seed 出一幅程序化山水 / 花卉, 带季节偏色, 缓存成位图
 //
 //  卷封面 (全幅)、今日一刻 (半幅)、合集卡 (小幅) 共用一张「配方」(`PoetScreenArt`) 与一个缓存

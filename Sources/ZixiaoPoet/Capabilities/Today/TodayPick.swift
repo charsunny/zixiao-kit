@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  TodayPick.swift — 今日一刻: 选哪一刻、怎么记住
 //
 //  一天只有一个主角。按优先级:

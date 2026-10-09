@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  ReadingCover.swift — 单篇作品的「书衣」
 //
 //  画法交给 kit 的 `BookCoverView` (代码生成的线装封面: 书衣、左上题签竖排书名、右侧四眼订线)。

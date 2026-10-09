@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  CorpusYearAxis.swift — 「按年读」年份轴的纯值模型
 //
 //  生年到卒年每年一格 (系年数据越出生卒的年份也收进来), 有作品的格子带篇数; 分期 (卷) 的起始年

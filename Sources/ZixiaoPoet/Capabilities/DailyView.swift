@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  DailyView.swift — 今日: 一张报纸的头版
 //
 //  整页只有一个主角 —— 今日一刻 (`TodayHeroView`, 选法见 `TodayPick`)。其下三个配角各占一行:
@@ -22,6 +23,7 @@ struct DailyView: View {
     @State private var linkedDays: [Int: Set<Int>] = [:]
     @State private var resumePoem: Poem?
     @State private var openingWork = false
+    @State private var openingWorkError: String?
     @State private var route: TodayRoute?
     @State private var sheet: TodaySheet?
     @State private var picking = false
@@ -48,6 +50,7 @@ struct DailyView: View {
                 VStack(alignment: .leading, spacing: theme.space.sm) {
                     if !isToday { previewBar }
                     hero
+                    if let openingWorkError { PoetErrorLine(message: openingWorkError) }
                 }
                 if let pick, phase == .loaded, let coordinate = coordinate(of: pick), let place = pick.placeLabel {
                     Button { route = .map(pick.chapter) } label: {
@@ -222,11 +225,20 @@ struct DailyView: View {
     }
 
     private func openWork(_ pick: TodayPick) async {
+        openingWorkError = nil
         if let poem = pick.poem { route = .poem(poem, source: pick.id); return }
         guard let id = pick.workID, !openingWork else { return }
         openingWork = true
         defer { openingWork = false }
-        if let poem = try? await ctx.store.poem(id: id) { route = .poem(poem, source: pick.id) }
+        do {
+            let poem = try await ctx.store.poem(id: id)
+            guard !Task.isCancelled, self.pick?.id == pick.id else { return }
+            if let poem { route = .poem(poem, source: pick.id) }
+            else { openingWorkError = "这篇作品的正文暂未收录，请先看看写作线索。" }
+        } catch {
+            guard !Task.isCancelled, self.pick?.id == pick.id else { return }
+            openingWorkError = "正文暂未载入，请检查网络后再点“读这一篇”。"
+        }
     }
 
     private func selectDate(_ date: Date) {
@@ -276,6 +288,7 @@ struct DailyView: View {
     // MARK: 取数
 
     private func loadDay() async {
+        openingWorkError = nil
         let date = selectedDate
         let key = TodayPickStore.dateKey(date)
         lunar = PoetLunarDay.of(date)

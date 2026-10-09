@@ -10,7 +10,7 @@
 
 import CoreGraphics
 import Foundation
-import ZixiaoDesign
+import ZixiaoColor
 
 extension ShanShuiEngine {
     // MARK: water

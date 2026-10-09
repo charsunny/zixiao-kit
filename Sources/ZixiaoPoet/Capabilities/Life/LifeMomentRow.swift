@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  LifeMomentRow.swift — 一刻: 年轨上的一个墨点 + 日期与地 + 题 + 按语 + 处境 + 作品 / 墨迹 + 人 + 出处
 //
 //  年轨: 每行在同一个 x 上画一条全高的发丝线, 行与行之间不留外边距 (间距算在行内的底边),
@@ -105,7 +106,10 @@ struct LifeMomentRow: View {
     }
 
     @ViewBuilder private var yearLabel: some View {
-        if showsYear {
+        if moment.workDating == .contextual {
+            Text(showsYear ? "读" : " ")
+                .font(theme.type.footnote).foregroundStyle(theme.muted).accessibilityHidden(true)
+        } else if showsYear {
             Button { actions.openYear(moment.date.year) } label: {
                 Text(String(moment.date.year))
                     .font(theme.type.footnote.monospacedDigit())
@@ -125,7 +129,7 @@ struct LifeMomentRow: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: theme.space.sm) {
-            Text("\(moment.date.displayLabel) · \(moment.placeLabel)")
+            Text(ReaderTimeline.momentLine(moment))
                 .font(theme.type.footnote)
                 .foregroundStyle(theme.color.textSecondary)
             Text(moment.title)

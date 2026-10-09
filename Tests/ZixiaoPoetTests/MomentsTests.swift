@@ -1,3 +1,4 @@
+@testable import ZixiaoPoetCore
 import Foundation
 import XCTest
 @testable import ZixiaoPoet
@@ -8,10 +9,7 @@ import XCTest
 /// 测试目标不声明资源); 完整数据随产品 App 包发, 在旁边的 zhi 仓库里时顺带整份解一遍。
 final class MomentsTests: XCTestCase {
     private static var repoRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent() // ZixiaoPoetTests
-            .deletingLastPathComponent() // Tests
-            .deletingLastPathComponent() // 仓库根
+        PoetFixtures.workspaceRoot.appendingPathComponent("zixiao-kit")
     }
 
     private func fixture() throws -> Data {

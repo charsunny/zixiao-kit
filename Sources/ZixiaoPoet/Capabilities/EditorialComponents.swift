@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  EditorialComponents.swift — 主题共读: 入口行与共读页
 //
 //  能力视图本身。

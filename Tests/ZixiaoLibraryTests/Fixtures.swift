@@ -1,3 +1,4 @@
+@testable import ZixiaoLibraryCore
 import Foundation
 
 /// 测试样书的位置: 从 testTarget 的资源 bundle (`Bundle.module`) 取。

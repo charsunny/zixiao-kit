@@ -8,7 +8,7 @@
 //  while 逐轮重取, 保持消耗次数一致。
 
 import Foundation
-import ZixiaoDesign
+import ZixiaoColor
 
 extension ShanShuiEngine {
     // MARK: foot

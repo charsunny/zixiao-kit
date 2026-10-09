@@ -5,7 +5,7 @@
 //  刷新都会重画, 花卉的滤镜层很贵)。
 
 import SwiftUI
-import ZixiaoDesign
+import ZixiaoColor
 
 public struct ZXArtCanvas: View {
     private let drawing: ZXArt.Drawing

@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 import SwiftUI
 import SwiftPieces
 import ZixiaoDesign
@@ -130,12 +131,10 @@ struct CorpusDirectoryView: View {
         .navigationDestination(for: SearchResult.self) { result in
             switch result {
             case .poem(let poem):
-                PoemDetailView(ctx: ctx, poem: poem)
-                    .onAppear { searchPresentation.wrappedValue = false }
+                            PoemDetailView(ctx: ctx, poem: poem)
             case .artwork(let id):
                 if let art = ctx.artworks.first(where: { $0.id == id }) {
-                    ArtworkDetailView(ctx: ctx, artwork: art)
-                        .onAppear { searchPresentation.wrappedValue = false }
+                                ArtworkDetailView(ctx: ctx, artwork: art)
                 }
             }
         }

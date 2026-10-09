@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  LifeScrollView.swift — 一生长卷: 叙事 Tab 的根页 (有刻时)
 //
 //  一条 `ZXShellScrollView` 从第一卷滚到最后一卷: 每卷 封面 → 刻 → 卷末。前沿一条年轨 (覆盖层)
@@ -26,6 +27,9 @@ struct LifeScrollView: View {
     @State private var coverStore = LifeCoverStore()
     /// 此刻压在导航栏底下的卷封面 (epochSequence)。有就收起顶端的滚动边缘效果, 让画透到栏下。
     @State private var coversUnderBar: Set<Int> = []
+    #if DEBUG
+    @State private var didRunDebugLaunch = false
+    #endif
     /// 年轨: 刻度、在窗口里的框、正在拖经过的卷、刚点中的年份。
     @State private var railLayout: LifeRailLayout?
     @State private var railFrame: CGRect = .zero
@@ -307,6 +311,8 @@ struct LifeScrollView: View {
     /// `-lifeWork <刻 id>` 推入该刻的作品; `-lifeNudge <pt>` / `-lifeNudgeUp <pt>` 落定后再往下 / 往回推若干点 (拍视差)。
     private func debugLaunch(_ proxy: ScrollViewProxy) async {
         #if DEBUG
+        guard !didRunDebugLaunch else { return }
+        didRunDebugLaunch = true
         let defaults = UserDefaults.standard
         let chapter = defaults.string(forKey: "chapter").flatMap(Int.init)
         let momentID = defaults.string(forKey: "lifeMoment")

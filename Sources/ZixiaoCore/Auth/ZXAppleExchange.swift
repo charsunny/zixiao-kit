@@ -31,20 +31,37 @@ public struct ZXAppleExchange: Sendable {
     public static let baseURLInfoKey = "ZXWeshiciAPIBaseURL"
     /// Info.plist 键: 产品标识 (`x-zx-app` 的值)。
     public static let appInfoKey = "ZXAppSlug"
+    /// Optional override for a shared configuration; ordinary apps use the native platform.
+    public static let platformInfoKey = "ZXAppleExchangePlatform"
+
+    public enum Platform: String, Sendable, Hashable, Codable {
+        case ios
+        case macos
+
+        public static var current: Platform {
+            #if os(macOS)
+            .macos
+            #else
+            .ios
+            #endif
+        }
+    }
 
     /// 接口地址 + 产品标识。
     public struct Configuration: Sendable, Hashable {
         public var endpoint: URL
         /// `x-zx-app` 的值, 如 `"xuanlan"`。空串表示不带 (服务端按微诗处理)。
         public var app: String
+        public var platform: Platform
 
-        public init(endpoint: URL, app: String) {
+        public init(endpoint: URL, app: String, platform: Platform = .current) {
             self.endpoint = endpoint
             self.app = app.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.platform = platform
         }
 
         /// 从 base URL 字符串拼出接口地址。没有 scheme 时补 `https://`; 空串 / 未展开的构建变量 / 占位符返回 nil。
-        public init?(baseURLString: String?, app: String) {
+        public init?(baseURLString: String?, app: String, platform: Platform = .current) {
             guard let raw = baseURLString?.trimmingCharacters(in: .whitespacesAndNewlines),
                   ZXSupabase.isUsableValue(raw) else { return nil }
             let withScheme = raw.contains("://") ? raw : "https://\(raw)"
@@ -56,7 +73,7 @@ public struct ZXAppleExchange: Sendable {
             components.query = nil
             components.fragment = nil
             guard let url = components.url else { return nil }
-            self.init(endpoint: url, app: app)
+            self.init(endpoint: url, app: app, platform: platform)
         }
 
         /// 从 Info.plist 读: `ZXAppleExchangeURL` 优先, 否则 `ZXWeshiciAPIBaseURL` + path; `ZXAppSlug` 给产品标识。
@@ -64,13 +81,15 @@ public struct ZXAppleExchange: Sendable {
             let app = (info?[ZXAppleExchange.appInfoKey] as? String).flatMap {
                 ZXSupabase.isUsableValue($0) ? $0 : nil
             } ?? ""
+            let platform = (info?[ZXAppleExchange.platformInfoKey] as? String)
+                .flatMap(Platform.init(rawValue:)) ?? .current
             if let full = info?[ZXAppleExchange.urlInfoKey] as? String, ZXSupabase.isUsableValue(full),
                let url = URL(string: full), let scheme = url.scheme?.lowercased(),
                scheme == "https" || scheme == "http", url.host?.isEmpty == false {
-                self.init(endpoint: url, app: app)
+                self.init(endpoint: url, app: app, platform: platform)
                 return
             }
-            self.init(baseURLString: info?[ZXAppleExchange.baseURLInfoKey] as? String, app: app)
+            self.init(baseURLString: info?[ZXAppleExchange.baseURLInfoKey] as? String, app: app, platform: platform)
         }
     }
 
@@ -97,8 +116,8 @@ public struct ZXAppleExchange: Sendable {
 
     /// 便捷注入: base URL 字符串 (如 Info.plist 的 `ZXWeshiciAPIBaseURL`) + 产品标识。base 不可用时返回 false 且不改配置。
     @discardableResult
-    public static func configure(baseURLString: String?, app: String) -> Bool {
-        guard let configuration = Configuration(baseURLString: baseURLString, app: app) else { return false }
+    public static func configure(baseURLString: String?, app: String, platform: Platform = .current) -> Bool {
+        guard let configuration = Configuration(baseURLString: baseURLString, app: app, platform: platform) else { return false }
         configure(configuration)
         return true
     }
@@ -138,7 +157,7 @@ public struct ZXAppleExchange: Sendable {
         var body: [String: String] = [
             "identity_token": idToken,
             "nonce": nonce,
-            "platform": "ios",
+            "platform": configuration.platform.rawValue,
         ]
         if !configuration.app.isEmpty { body["app"] = configuration.app }
         if let name = ZXUserMetadata.normalizedName(fullName) { body["full_name"] = name }

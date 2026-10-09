@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  CorpusYearSection.swift — 诗文「按年读」: 一条年份轴, 选年 → 该年作品
 //
 //  轴: 生年到卒年每年一格 (`CorpusYearAxis`), 有作品的格子一道墨色刻度 (高低随篇数), 分期起始年前

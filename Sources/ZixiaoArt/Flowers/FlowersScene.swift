@@ -11,7 +11,7 @@
 
 import CoreGraphics
 import Foundation
-import ZixiaoDesign
+import ZixiaoColor
 
 // MARK: - 参数
 

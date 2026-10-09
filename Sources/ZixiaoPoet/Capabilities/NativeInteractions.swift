@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  NativeInteractions.swift — 能力视图共用的小件 (不是 shim)
 //
 //  这里只放「读主题 token 的通用件」: 转场、分节标题、栏宽、操作按钮样式、载入 / 失败态、

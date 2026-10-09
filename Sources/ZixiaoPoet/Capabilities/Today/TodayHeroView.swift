@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  TodayHeroView.swift — 今日一刻: 今日页唯一的主角
 //
 //  画屏 (本刻所在地的山水, 4:3; 有墨迹的刻用真迹, 16:9) 上只放两样: 左上一行小字 (几年前 / 在哪) 与
@@ -31,7 +32,7 @@ struct TodayHeroView: View {
     private var artwork: Artwork? {
         pick.artworkID.flatMap { id in ctx.artworks.first { $0.id == id } }
     }
-    private var artworkImage: UIImage? { artwork.flatMap { ArtworkImages.image($0.cover) } }
+    private var artworkImage: UIImage? { artwork.flatMap { ArtworkImages.image($0.cover, resources: ctx.resources) } }
 
     /// 左上两行。
     private var lines: (String, String?) {

@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  ScreenArtView.swift — 画屏上屏: 先铺纸, 图好了淡入; 可选一句竖排诗落在画留出的诗句框里
 //
 //  - 尺寸 / 外观 / 倍率一变就换键重取 (`.task(id:)`); 换尺寸时先留着旧图 (同配方同外观, 拉伸铺满),

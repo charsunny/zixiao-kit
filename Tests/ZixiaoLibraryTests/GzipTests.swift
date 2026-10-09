@@ -1,3 +1,4 @@
+@testable import ZixiaoLibraryCore
 import CryptoKit
 import XCTest
 @testable import ZixiaoLibrary

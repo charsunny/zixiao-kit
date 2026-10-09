@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  CollectionReadingView.swift — 一组选读: 画屏题头 → 旨与导读 →「从头读」→ 逐篇 (封面 + 题 + 按语)
 //
 //  正文先取随包导读里的 (离线也有), 网络只补缺; 推入读本时带上这一组 (`ReadingJourney`),

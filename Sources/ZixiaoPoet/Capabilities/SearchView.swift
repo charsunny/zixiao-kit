@@ -1,14 +1,16 @@
+import ZixiaoPoetCore
 import SwiftUI
 import ZixiaoDesign
 
 /// 检索 Tab (编成里的 hero 能力)。零态给出编辑写好的线索; 有词时同时查书画 (本机) 与
-/// 作品 / 地点 / 人物 / 年份 (在线)。
+/// 作品 (在线与打包代表作) / 已载入的地点与人物 / 年份。
 struct SearchZeroStateView: View {
     let ctx: CompositionContext
     @State private var query = ""
     @State private var results = SearchResults.empty
     @State private var searching = false
     @State private var failed = false
+    @State private var searchRequestID: UUID?
     @Environment(\.zxTheme) private var theme
     private var artResults: [Artwork] { term.isEmpty ? [] : ctx.artworks.filter { $0.matches(term) } }
     private var term: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -18,8 +20,8 @@ struct SearchZeroStateView: View {
     var body: some View {
         Group {
             if term.isEmpty { zeroState }
-            else if searching && artResults.isEmpty { LoadingStateView(label: "正在寻踪…") }
-            else if failed && artResults.isEmpty { LoadFailureView(title: "检索暂不可用", retry: search) }
+            else if searching && results.isEmpty && artResults.isEmpty { LoadingStateView(label: "正在寻踪…") }
+            else if failed && results.isEmpty && artResults.isEmpty { LoadFailureView(title: "检索暂不可用", retry: search) }
             else if results.isEmpty && artResults.isEmpty { noResults }
             else { resultList }
         }
@@ -77,7 +79,7 @@ struct SearchZeroStateView: View {
                 } header: { ListSectionTitle("也可以看书画") }
                 .listRowBackground(theme.color.surface)
             }
-            if ctx.store.loadError != nil {
+            if ctx.store.loadError != nil && (ctx.hasItineraryData || ctx.hasNetworkData) {
                 Section {
                     Button("重新载入地点与人物") { Task { await ctx.store.bootstrap() } }.font(theme.type.body)
                 } footer: {
@@ -110,13 +112,18 @@ struct SearchZeroStateView: View {
                     .listRowBackground(theme.color.surface)
             }
             if failed {
-                Section { Button("在线诗文检索暂不可用，重试") { Task { await search() } }.font(theme.type.body) }
+                Section {
+                    Button("在线诗文检索暂不可用，重试") { Task { await search() } }.font(theme.type.body)
+                } footer: {
+                    Text("已保留本地诗文、书画与已载入的地点、人物线索。")
+                        .font(theme.type.footnote).foregroundStyle(theme.color.textSecondary)
+                }
                     .listRowBackground(theme.color.surface)
             }
 
             if let year = results.year {
                 Section {
-                    NavigationLink { ChronicleEventsView(ctx: ctx, year: year) } label: {
+                    NavigationLink { yearDestination(year) } label: {
                         HStack {
                             Text(ctx.era.label(year)).font(theme.type.headline).foregroundStyle(theme.color.textPrimary)
                             Spacer()
@@ -169,9 +176,9 @@ struct SearchZeroStateView: View {
                             PoemRow(poem: poem, showsDisclosure: false, displayTitle: ctx.workTitle(poem))
                         }
                     }
-                } header: { ListSectionTitle("作品 · \(results.poems.count)") }
+                } header: { ListSectionTitle("\(failed ? "离线代表作" : "作品") · \(results.poems.count)") }
                 footer: {
-                    if results.poems.count == 40 {
+                    if !failed && results.poems.count == 40 {
                         Text("显示前 40 篇，输入更完整的标题或诗句可缩小范围。")
                             .font(theme.type.footnote).foregroundStyle(theme.color.textSecondary)
                     }
@@ -183,20 +190,38 @@ struct SearchZeroStateView: View {
         .scrollContentBackground(.hidden).poetReadableWidth().foregroundStyle(theme.color.textPrimary)
     }
 
+    @ViewBuilder private func yearDestination(_ year: Int) -> some View {
+        if ctx.hasChronicleData {
+            ChronicleEventsView(ctx: ctx, year: year)
+        } else if let epoch = ctx.lifeEpochs.first(where: { $0.contains(year) }) {
+            EpochDetailView(ctx: ctx, epoch: epoch)
+        } else {
+            ContentUnavailableView("这一年的资料尚未收录", systemImage: "calendar")
+        }
+    }
+
     private func search() async {
+        let requestID = UUID()
+        searchRequestID = requestID
         let requested = term
-        results = .empty; failed = false
+        let local = ctx.store.localSearch(requested)
+        results = SearchResults(poems: ctx.featuredPoems(matching: requested),
+                                places: local.places, people: local.people, year: local.year)
+        failed = false
         guard !requested.isEmpty else { searching = false; return }
         searching = true
+        defer {
+            if searchRequestID == requestID { searching = false }
+        }
         do {
             try await Task.sleep(for: .milliseconds(280))
             let fetched = try await ctx.store.search(requested)
-            guard !Task.isCancelled, requested == term else { return }
-            results = fetched
+            guard !Task.isCancelled, requested == term, searchRequestID == requestID else { return }
+            results = SearchResults(poems: Array(ctx.combiningFeatured(fetched.poems, query: requested).prefix(40)),
+                                    places: fetched.places, people: fetched.people, year: fetched.year)
         } catch {
-            guard !Task.isCancelled, requested == term else { return }
+            guard !Task.isCancelled, requested == term, searchRequestID == requestID else { return }
             failed = true
         }
-        searching = false
     }
 }

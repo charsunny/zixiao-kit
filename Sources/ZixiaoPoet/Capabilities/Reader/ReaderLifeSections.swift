@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  ReaderLifeSections.swift — 读本正文之下: 此时 → 同年作品 → 相关墨迹
 //
 //  把作品钉回人生: 「此时」卡说它写在哪一年、哪一天、哪里 (刻 > 事目 > 未编年, 判定见 `ReaderTimeline`);
@@ -124,7 +125,7 @@ struct ReaderNowCard: View {
                     Text(moment.lede).font(theme.type.body).foregroundStyle(theme.color.textSecondary)
                         .lineSpacing(theme.space.xs).fixedSize(horizontal: false, vertical: true)
                 }
-                action("看这一天") { openMoment(moment) }
+                action(moment.workDating == .contextual ? "回到人生长卷" : "看这一天") { openMoment(moment) }
             }
         case .events(let links):
             card {
@@ -161,11 +162,16 @@ struct ReaderNowCard: View {
     private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         ZixiaoDesign.GlazePanel(glaze: .surface) {
             VStack(alignment: .leading, spacing: theme.space.md) {
-                ZixiaoDesign.SectionLabel("此时")
+                ZixiaoDesign.SectionLabel(isContextual ? "人生背景" : "此时")
                 content()
             }
         }
         .accessibilityElement(children: .contain)
+    }
+
+    private var isContextual: Bool {
+        if case .moment(let moment) = placement { return moment.workDating == .contextual }
+        return false
     }
 
     /// 卡内的下钻: 墨色小字 + 箭头, 不用强调色 (页面的强调留给书签)。

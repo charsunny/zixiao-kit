@@ -70,7 +70,7 @@ final class AppleExchangeTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
         let body = try XCTUnwrap(request.httpBody.flatMap { try JSONSerialization.jsonObject(with: $0) as? [String: String] })
         XCTAssertEqual(body, [
-            "identity_token": "id.tok.en", "nonce": "raw-nonce", "platform": "ios",
+            "identity_token": "id.tok.en", "nonce": "raw-nonce", "platform": ZXAppleExchange.Platform.current.rawValue,
             "app": "xuanlan", "full_name": "李白",
         ])
     }
@@ -80,7 +80,25 @@ final class AppleExchangeTests: XCTestCase {
         let request = try exchange.makeRequest(idToken: "t", nonce: "n", fullName: "   ")
         XCTAssertNil(request.value(forHTTPHeaderField: "x-zx-app"))
         let body = try XCTUnwrap(request.httpBody.flatMap { try JSONSerialization.jsonObject(with: $0) as? [String: String] })
-        XCTAssertEqual(body, ["identity_token": "t", "nonce": "n", "platform": "ios"])
+        XCTAssertEqual(body, ["identity_token": "t", "nonce": "n", "platform": ZXAppleExchange.Platform.current.rawValue])
+    }
+
+    func testExplicitPlatformFlowsThroughConfigurationAndRequest() throws {
+        for platform in [ZXAppleExchange.Platform.ios, .macos] {
+            let configuration = try XCTUnwrap(ZXAppleExchange.Configuration(info: [
+                "ZXWeshiciAPIBaseURL": "https://www.weshici.com",
+                "ZXAppSlug": "library",
+                "ZXAppleExchangePlatform": platform.rawValue,
+            ]))
+            XCTAssertEqual(configuration.platform, platform)
+            let request = try ZXAppleExchange(configuration: configuration, session: .shared)
+                .makeRequest(idToken: "test-token", nonce: "test-nonce")
+            let body = try XCTUnwrap(request.httpBody.flatMap {
+                try JSONSerialization.jsonObject(with: $0) as? [String: String]
+            })
+            XCTAssertEqual(body["platform"], platform.rawValue)
+            XCTAssertEqual(body["app"], "library")
+        }
     }
 
     // MARK: - 响应
@@ -219,7 +237,7 @@ final class AppleExchangeTests: XCTestCase {
         let body = try XCTUnwrap(try JSONSerialization.jsonObject(with: exchange.body) as? [String: String])
         XCTAssertEqual(body["identity_token"], "apple.id.token")
         XCTAssertEqual(body["nonce"], "raw")
-        XCTAssertEqual(body["platform"], "ios")
+        XCTAssertEqual(body["platform"], ZXAppleExchange.Platform.current.rawValue)
         // setSession 用的是换来的 access token。
         XCTAssertEqual(requests[1].headers["Authorization"], "Bearer \(Self.jwt(sub: newId))")
         let marker = try XCTUnwrap(try JSONSerialization.jsonObject(with: requests[2].body) as? [String: Any])

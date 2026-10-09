@@ -27,7 +27,7 @@
 
 import CoreGraphics
 import Foundation
-import ZixiaoDesign
+import ZixiaoColor
 
 public extension ZXArt {
     /// 配方里的程序化背景。Codable 的键与契约一致 (snake_case)。

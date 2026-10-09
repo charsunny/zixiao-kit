@@ -7,7 +7,7 @@
 //  浮点运算顺序与原作逐条一致 (a*b/c 与 a*(b/c) 在双精度下不等), 改写时别「化简」。
 
 import Foundation
-import ZixiaoDesign
+import ZixiaoColor
 
 extension ZXArt {
     typealias P = SIMD2<Double>

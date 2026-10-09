@@ -1,3 +1,4 @@
+@testable import ZixiaoPoetCore
 import CoreGraphics
 import XCTest
 @testable import ZixiaoPoet

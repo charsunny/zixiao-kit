@@ -39,9 +39,10 @@ public enum ZXSupabase {
     /// - Parameter storageKey: session 在钥匙串里的键。同一台设备上多个 App 的钥匙串本就隔离,
     ///   一般不用传; 只有同一个 App 要连两套后端时才需要区分。
     /// - Parameter headers: 附加到每个请求的头 (如志系列读本的 `x-poetkit-app`, 服务端 RLS 据此放行 reader 行)。
+    /// - Parameter autoRefreshToken: 默认保留 SDK 自动刷新。离线优先客户端可关闭, 在真实云端操作取 `auth.session` 时才刷新。
     @discardableResult
     public static func configure(url: URL?, anonKey: String?, storageKey: String? = nil,
-                                 headers: [String: String] = [:]) -> Bool {
+                                 headers: [String: String] = [:], autoRefreshToken: Bool = true) -> Bool {
         guard let url, let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http",
               url.host?.isEmpty == false,
               let key = anonKey?.trimmingCharacters(in: .whitespacesAndNewlines), isUsableValue(key)
@@ -52,6 +53,7 @@ public enum ZXSupabase {
         let options = SupabaseClientOptions(
             auth: .init(
                 storageKey: storageKey,
+                autoRefreshToken: autoRefreshToken,
                 // 新行为: 冷启动先交出本地 session (哪怕过期), 由我们在 bootstrap 里决定是否刷新。
                 // 不设的话 supabase-swift 每次启动都会打一条弃用警告。
                 emitLocalSessionAsInitialSession: true
@@ -69,12 +71,12 @@ public enum ZXSupabase {
     /// 这里两种都接: 没有 scheme 时补 `https://`。空串与未展开的 `$(SUPABASE_URL)` 视为缺失。
     @discardableResult
     public static func configure(urlString: String?, anonKey: String?, storageKey: String? = nil,
-                                 headers: [String: String] = [:]) -> Bool {
+                                 headers: [String: String] = [:], autoRefreshToken: Bool = true) -> Bool {
         guard let raw = urlString?.trimmingCharacters(in: .whitespacesAndNewlines), isUsableValue(raw) else {
-            return configure(url: nil, anonKey: anonKey, storageKey: storageKey, headers: headers)
+            return configure(url: nil, anonKey: anonKey, storageKey: storageKey, headers: headers, autoRefreshToken: autoRefreshToken)
         }
         let withScheme = raw.contains("://") ? raw : "https://\(raw)"
-        return configure(url: URL(string: withScheme), anonKey: anonKey, storageKey: storageKey, headers: headers)
+        return configure(url: URL(string: withScheme), anonKey: anonKey, storageKey: storageKey, headers: headers, autoRefreshToken: autoRefreshToken)
     }
 
     /// 直接注入一个已建好的客户端 (需要自定义 URLSession / logger 时用)。

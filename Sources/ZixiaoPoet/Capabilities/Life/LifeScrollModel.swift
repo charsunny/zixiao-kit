@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  LifeScrollModel.swift — 一生长卷的取数与路由
 //
 //  刻里的作品只给了 id。导读随包带着一部分作品 (离线可读), 其余一次批量向库里取, 缓存在这里;

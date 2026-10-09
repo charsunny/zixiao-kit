@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  ReadingSettingsView.swift — 读本的纸色、方向与字号
 //
 //  三样设置都存在 AppStorage (键沿用 PoetKit 的 `poetkit.*`, 升级不丢偏好), 由 `PoemDetailView` 读。

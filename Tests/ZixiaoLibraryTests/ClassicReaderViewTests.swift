@@ -1,3 +1,4 @@
+@testable import ZixiaoLibraryCore
 import SwiftUI
 import XCTest
 @testable import ZixiaoLibrary

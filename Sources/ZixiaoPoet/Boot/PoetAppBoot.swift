@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  PoetAppBoot.swift — 诗人应用共用的启动层
 //
 //  每个产品的 @main 只做三件事: 配置 ZixiaoCore (Supabase / Apple 换 session)、注入身份

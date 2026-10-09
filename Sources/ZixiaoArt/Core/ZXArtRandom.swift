@@ -12,7 +12,7 @@
 //  - `<<` / `&` 是 JS 的 int32 语义 (ToInt32 回绕)。
 
 import Foundation
-import ZixiaoDesign
+import ZixiaoColor
 
 extension ZXArt {
     /// 原作 PRNG: `s ← s² mod (p·q)`, p = 999979, q = 999983。

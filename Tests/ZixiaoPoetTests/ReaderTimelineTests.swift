@@ -1,3 +1,4 @@
+@testable import ZixiaoPoetCore
 import Foundation
 import XCTest
 @testable import ZixiaoPoet
@@ -102,6 +103,24 @@ final class ReaderTimelineTests: XCTestCase {
     }
 
     // MARK: 同年作品 / 墨迹 / 计数
+
+    func testContextualReadingKeepsLifeLinkWithoutClaimingAWorkYear() throws {
+        let moment = PoetMoments.Moment(id: "reading-context", date: .init(year: 742,
+            eraLabel: "天宝初", precision: .year), placeLabel: "诗中长安", title: "去留",
+            lede: "按主题与人生背景并读。", body: "作年尚无定论。", workId: poem, workDating: .contextual)
+        let source = PoetMoments(schemaVersion: 1, poet: "test", chapters: [.init(epochSequence: 0, title: "一卷", startYear: 740,
+            endYear: 745, thesis: "人生背景", placeSeed: "test", moments: [moment])])
+        let decoded = try PoetMoments.decode(JSONEncoder().encode(source))
+        let placement = ReaderTimeline.placement(of: poem, moments: decoded, links: [])
+        XCTAssertEqual(placement, .moment(moment))
+        XCTAssertNil(placement.year, "背景中的排序节点不能成为诗篇系年或触发同年查询")
+        XCTAssertEqual(ReaderTimeline.momentLine(moment), "主题选读 · 诗中长安")
+        XCTAssertEqual(LifeJump.resolve(year: 742, in: decoded.chapters)?.chapter, 0)
+        XCTAssertNil(LifeJump.resolve(year: 742, in: decoded.chapters)?.moment,
+                     "按背景年份跳卷时不能把主题选读当作当年作品")
+        XCTAssertEqual(LifeJump.resolve(year: 1082, in: moments(workId: poem).chapters)?.moment,
+                       "t-1082-03-rain", "旧版已编年的刻仍跳到原来的日期")
+    }
 
     func testSameYearIDsSortDedupeExcludeAndLimit() {
         let ids = (0..<6).map { UUID(uuidString: "00000000-0000-4000-8000-00000000000\($0)")! }

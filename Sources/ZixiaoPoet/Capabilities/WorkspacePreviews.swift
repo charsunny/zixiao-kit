@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 #if DEBUG
 import SwiftUI
 import Supabase

@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 import SwiftUI
 import ZixiaoDesign
 
@@ -15,6 +16,7 @@ struct CorpusView: View {
     @State private var searchQuery = ""
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.zxTheme) private var theme
+    @Environment(\.poetTabIsActive) private var isActiveTab
     /// 宽屏目录栏的宽度 (固有尺寸, 与原分栏侧栏的理想宽度相同)。
     private static let sidebarWidth: CGFloat = 310
 
@@ -25,6 +27,11 @@ struct CorpusView: View {
         case genre(String)
         case art(String)
         case search
+    }
+
+    private var searchAction: (() -> Void)? {
+        guard isActiveTab else { return nil }
+        return { activateSearch() }
     }
 
     var body: some View {
@@ -53,16 +60,21 @@ struct CorpusView: View {
             }
         }
         // ⌘F: 场景级命令 `PoetReadingCommands` (三个 App 都已注册) 经 focusedSceneValue 找到这里。
-        .focusedSceneValue(\.corpusSearchAction, activateSearch)
+        .focusedSceneValue(\.corpusSearchAction, searchAction)
         .tint(theme.color.accent)
     }
 
     private func activateSearch() {
+        guard isActiveTab else { return }
+        let savedQuery = searchQuery
         searchPresented = false
         if sizeClass == .regular { selection = .search } else { showingSearch = true }
         // 推入 / 切换完成后再展开搜索框, 否则系统会在转场中把它收起。
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(350))
+            // SwiftUI may clear the query when an active search presentation
+            // is dismissed. Reopening the workspace search preserves its task.
+            searchQuery = savedQuery
             searchPresented = true
         }
     }
@@ -88,9 +100,11 @@ struct CorpusView: View {
                     }
                 } header: { ListSectionTitle("选读") }
             }
-            Section {
-                row(.years) { Label("年份轴", systemImage: "calendar") }
-            } header: { ListSectionTitle("按年读") }
+            if ctx.hasChronicleData {
+                Section {
+                    row(.years) { Label("年份轴", systemImage: "calendar") }
+                } header: { ListSectionTitle("按年读") }
+            }
             if !ctx.literaryGenres.isEmpty {
                 Section {
                     ForEach(ctx.literaryGenres) { genre in

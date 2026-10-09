@@ -1,3 +1,4 @@
+@testable import ZixiaoPoetCore
 import Foundation
 import XCTest
 @testable import ZixiaoPoet

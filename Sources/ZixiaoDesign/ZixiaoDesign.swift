@@ -1,3 +1,5 @@
+@_exported import ZixiaoColor
+
 // ZixiaoDesign — 设计 token、身份 JSON、字体注册与文化组件。见仓库 README 的模块契约。
 //
 // 入口: `ZXIdentity` (身份) → `ZXTheme` (按外观解析, 经 `\.zxTheme` 下发) →

@@ -38,27 +38,34 @@ public final class ZXAuth {
     @ObservationIgnored private let backend: any ZXAuthBackend
     @ObservationIgnored private let outbox: ZXOutbox?
     @ObservationIgnored private let bootstrapTimeout: Duration
+    @ObservationIgnored private let createAnonymousIfMissing: Bool
     @ObservationIgnored private var bootstrapTask: Task<ZXAuthState, Never>?
 
     /// - Parameters:
     ///   - backend: 默认走 `ZXSupabase` 的配置; 测试注入 mock。
     ///   - outbox: 传入后, 用户一变就调 `setOwner`, 队列只替当前用户补传, 换账号时丢弃上一位的待传写入。
     ///   - bootstrapTimeout: 启动时每一步网络的上限, 后端不通时不能把启动挂死 (Flutter 版取 6 秒)。
+    ///   - createAnonymousIfMissing: 默认保留移动端匿名优先行为。离线优先客户端设 false, 无 session 时保持本机访客。
     public init(backend: any ZXAuthBackend = ZXSupabaseAuthBackend(), outbox: ZXOutbox? = nil,
-                bootstrapTimeout: Duration = .seconds(6)) {
+                bootstrapTimeout: Duration = .seconds(6), createAnonymousIfMissing: Bool = true) {
         self.backend = backend
         self.outbox = outbox
         self.bootstrapTimeout = bootstrapTimeout
+        self.createAnonymousIfMissing = createAnonymousIfMissing
         self.isOffline = !backend.isConfigured
     }
 
     public var userId: String? { state.userId }
+    /// The queue whose owner follows this session. Containers reuse this instance rather than
+    /// creating a second actor for the same outbox file.
+    public var syncOutbox: ZXOutbox? { outbox }
     /// 匿名用户退出就再也回不来 (没有任何可以登回去的身份), 界面上退出前要据此提醒。
     public var signOutLosesData: Bool { state.isAnonymous }
 
     // MARK: - 启动
 
-    /// 恢复 session; 没有则匿名登录。可重复调用: 并发调用共享同一次尝试, 已登录时只是刷新一次用户。
+    /// 恢复 session; 默认没有则匿名登录。`createAnonymousIfMissing: false` 时保持本机访客。
+    /// 可重复调用: 并发调用共享同一次尝试, 已登录时恢复当前用户。
     ///
     /// 不抛错: 后端不通时 App 照常进入 (离线可用), 失败原因留在 `bootstrapError`, 联网后再调一次即可。
     @discardableResult
@@ -84,9 +91,11 @@ public final class ZXAuth {
             let restored = try await withTimeout(bootstrapTimeout) { try await backend.restoreSession() }
             if let restored {
                 await apply(restored)
-            } else {
+            } else if createAnonymousIfMissing {
                 let fresh = try await withTimeout(bootstrapTimeout) { try await backend.signInAnonymously() }
                 await apply(fresh)
+            } else {
+                await apply(nil)
             }
             bootstrapError = nil
         } catch {
@@ -261,7 +270,7 @@ public final class ZXAuth {
     // MARK: - 退出与删号
 
     /// 退出。本地一定清掉; 服务端注销失败 (如断网) 不影响本地结果, 所以不抛错。
-    /// 退出后状态是 `.signedOut`; 要继续用云端功能, App 再调一次 `bootstrap()` 即得一个新的匿名用户。
+    /// 退出后状态是 `.signedOut`; 默认下次 `bootstrap()` 创建匿名用户。显式关闭匿名创建的客户端仍保持访客。
     public func signOut() async {
         if backend.isConfigured {
             try? await backend.signOut()

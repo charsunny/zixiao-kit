@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  CorpusRootView.swift — 诗文 Tab 的根页: 选读 → 按年读 → 全集 → 墨迹
 //
 //  设计主张 (zhi-design-reboot §3.3): 先选读, 再全集。门面是编辑过的合集 (画屏 + 竖排题的大卡,
@@ -27,7 +28,7 @@ struct CorpusRootView: View {
                     if !selections.isEmpty {
                         CorpusSelectionsSection(ctx: ctx, selections: selections).id(Anchor.selections)
                     }
-                    CorpusYearSection(ctx: ctx).id(Anchor.years)
+                    if ctx.hasChronicleData { CorpusYearSection(ctx: ctx).id(Anchor.years) }
                     if !ctx.literaryGenres.isEmpty { CorpusInventorySection(ctx: ctx).id(Anchor.inventory) }
                     if !ctx.artworks.isEmpty { CorpusInkSection(ctx: ctx).id(Anchor.ink) }
                 }

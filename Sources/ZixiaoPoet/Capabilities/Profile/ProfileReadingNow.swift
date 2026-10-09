@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  ProfileReadingNow.swift — 书房的「在读」: 最近三篇, 大封面 + 一道细进度线
 //
 //  取 `userData.reading` 的前三条 (已按最近阅读排好)。每篇一本线装封面 (宽 ≈ 内容宽的 1/3), 封面正下方是一道发丝进度线

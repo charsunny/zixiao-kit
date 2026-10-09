@@ -15,7 +15,7 @@
 
 import CoreGraphics
 import Foundation
-import ZixiaoDesign
+import ZixiaoColor
 
 public extension ZXArt {
     /// 渲染成位图。`size` 是点尺寸, `scale` 是每点像素 (widget @3x 传 3)。画面按

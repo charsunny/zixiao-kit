@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# CI 守线: 内核 (Sources/ZixiaoPoet) 不得出现诗人专属【逻辑】或产品名。
+# CI 守线: 诗人内核与 UI 不得出现诗人专属【逻辑】或产品名。
 #   从 zhi/poetkit/lint-no-poet-names.sh 移植 (PoetKit 并入 ZixiaoKit, 2026-10-01), 路径改为本仓库:
-#   - 目标: 文件或目录 (目录则递归检查全部 .swift), 默认 Sources/ZixiaoPoet;
+#   - 目标: 文件或目录 (目录则递归检查全部 .swift), 默认 ZixiaoPoet 与 ZixiaoPoetCore;
 #   - 称谓: 诗人志系列的编成 (`../zhi/poetkit/compositions/*.json`, 可用 POET_COMPOSITIONS_DIR 覆盖) 里的
 #     名 / slug / 字 / 号, 加上一份固定的产品与诗人名单 (编成目录不在时也能查)。
 #   查的是代码, 不是注释 —— 注释里举例无妨, 写进 if 分支才是腐烂。
@@ -9,9 +9,11 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET="${1:-$ROOT/Sources/ZixiaoPoet}"
+CORE_TARGET=""
+if [[ $# -eq 0 ]]; then CORE_TARGET="$ROOT/Sources/ZixiaoPoetCore"; fi
 COMPOSITIONS="${POET_COMPOSITIONS_DIR:-$ROOT/../zhi/poetkit/compositions}"
 
-python3 - "$TARGET" "$COMPOSITIONS" <<'PY'
+python3 - "$TARGET" "$COMPOSITIONS" "$CORE_TARGET" <<'PY'
 import json, glob, re, sys, os
 target, comp_dir = sys.argv[1], sys.argv[2]
 
@@ -25,6 +27,8 @@ names = {n for n in names if n}
 
 files = [target] if os.path.isfile(target) else sorted(
     glob.glob(os.path.join(target, '**', '*.swift'), recursive=True))
+if sys.argv[3]:
+    files += sorted(glob.glob(os.path.join(sys.argv[3], '**', '*.swift'), recursive=True))
 
 hits = []
 for path in files:

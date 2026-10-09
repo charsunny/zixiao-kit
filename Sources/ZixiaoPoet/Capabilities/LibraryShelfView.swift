@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  LibraryShelfView.swift — 书房的云端书架
 //
 //  编成的可选 `library` 块给出一组书 (id / 地址 / sha256 / 分组); 这里按分组一行一行摆上书架,
@@ -8,6 +9,7 @@
 import SwiftUI
 import ZixiaoDesign
 import ZixiaoLibrary
+import ZixiaoCore
 
 // MARK: - 模型
 
@@ -26,6 +28,7 @@ final class PoetShelfModel {
 
     @ObservationIgnored let store: BookStore
     @ObservationIgnored let readingStore: ReadingStateStore
+    @ObservationIgnored var onReadingChange: (() -> Void)?
     @ObservationIgnored private let center: PoetDownloadProgress
     @ObservationIgnored private var pendingLocation: ReaderLocation?
     @ObservationIgnored private var flushTask: Task<Void, Never>?
@@ -106,12 +109,14 @@ final class PoetShelfModel {
         pendingLocation = nil
         try? await readingStore.move(bookId: location.bookId, chapterId: location.chapterId,
                                      passageId: location.passageId)
+        onReadingChange?()
     }
 
     func finish(chapterId: String, in book: ZixiaoLibrary.Book) {
         let total = book.chapters.count
         Task { [readingStore] in
             _ = try? await readingStore.finish(bookId: book.id, chapterId: chapterId, totalChapters: total)
+            self.onReadingChange?()
         }
     }
 
@@ -205,7 +210,17 @@ struct PoetBookFetcher: BookFetching {
 
 struct LibraryShelfSection: View {
     let library: PoetLibrary
-    @State private var model = PoetShelfModel()
+    @State private var model: PoetShelfModel
+    private let cloud: PoetBooksCloud
+
+    init(library: PoetLibrary, ctx: CompositionContext) {
+        self.library = library
+        let cloud = PoetBooksCloud.instance(ctx)
+        self.cloud = cloud
+        let model = PoetShelfModel(readingStore: cloud.store)
+        model.onReadingChange = { Task { await cloud.driver.synchronize() } }
+        _model = State(initialValue: model)
+    }
     @Environment(\.zxTheme) private var theme
     /// 书架上一本书的宽度, 随 Dynamic Type。
     @ScaledMetric(relativeTo: .body) private var coverWidth = BookCoverView.Size.shelf.width
@@ -238,7 +253,7 @@ struct LibraryShelfSection: View {
                 }
             }
         }
-        .task { await model.refreshOffline() }
+        .task { await model.refreshOffline(); await cloud.driver.synchronize() }
     }
 }
 

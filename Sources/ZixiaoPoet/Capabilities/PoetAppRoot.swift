@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  PoetAppRoot.swift — 由编成装配界面。
 //
 //  这里没有任何 if poet == ... 的分支：胶囊里放什么、分离钮是谁、
@@ -10,6 +11,17 @@
 
 import SwiftUI
 import ZixiaoDesign
+
+private struct PoetTabActiveKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var poetTabIsActive: Bool {
+        get { self[PoetTabActiveKey.self] }
+        set { self[PoetTabActiveKey.self] = newValue }
+    }
+}
 
 public struct PoetAppRoot: View {
     @State private var ctx: CompositionContext
@@ -50,10 +62,12 @@ public struct PoetAppRoot: View {
         ZXTabShell(tabs: tabs, selection: $selection) { tab in
             if let id = CapabilityID(rawValue: tab.id) {
                 CapabilityRegistry.root(id, ctx)
+                    .environment(\.poetTabIsActive, tab.id == selection)
             }
         }
         // 全局 tint 走身份的 accent, Tab 栏与系统控件的高亮不落回系统蓝。
         .tint(theme.color.accent)
+        .environment(\.poetResources, ctx.resources)
         // 账号与用户数据由 PoetAppBoot 启动 (`startSession`); 这里只拉只读骨架。
         .task { await ctx.store.bootstrap() }
         // 跨 Tab 导航 (今日「看这一天」→ 一生长卷): 请求的 Tab 在编成里才切; 滚到哪一刻由长卷自己看

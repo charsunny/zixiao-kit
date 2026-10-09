@@ -1,3 +1,4 @@
+@testable import ZixiaoPoetCore
 import SwiftUI
 import XCTest
 import ZixiaoDesign

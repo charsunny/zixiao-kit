@@ -1,8 +1,17 @@
+@testable import ZixiaoPoetCore
 import Foundation
 @testable import ZixiaoPoet
 
 /// 占位诗人 / 占位产品的测试数据。内核测试里不出现真实诗人。
 enum PoetFixtures {
+    static var workspaceRoot: URL {
+        if let path = ProcessInfo.processInfo.environment["ZX_TEST_WORKSPACE_ROOT"] {
+            return URL(fileURLWithPath: path)
+        }
+        return URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    }
+
     static func compositionJSON(cards: [String], includesOnThisDayConfig: Bool, dayPrecise: Int) throws -> String {
         let cardJSON = cards.map { "\"\($0)\"" }.joined(separator: ",")
         let onThisDay = includesOnThisDayConfig

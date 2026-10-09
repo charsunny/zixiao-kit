@@ -14,7 +14,7 @@ import Supabase
 /// - `auth.signInWithOTP(phone:shouldCreateUser: false)` + `auth.verifyOTP(phone:token:type: .sms)` ——
 ///   仅用于「找回旧账号」, 会换 user id (见 `ZXAuth.signInWithApple` 上方说明);
 /// - `auth.update(user: UserAttributes(data:))` —— 昵称 / 头像样式写进 user_metadata (键名见 `ZXUserMetadata`);
-/// - `auth.signOut(scope:)`; `rpc("zen_delete_account")`。
+/// - `auth.signOut(scope:)`; 默认经 HTTP 删号入口先清私有媒体，再删账号；显式 RPC 注入保留旧兼容路径。
 ///
 /// 失败一律抛 `ZXAuthFailure` (映射后的 `ZXCoreError` + GoTrue 原文), `ZXAuth` 把原文记进 `lastErrorDetail`。
 ///
@@ -37,29 +37,42 @@ public struct ZXSupabaseAuthBackend: ZXAuthBackend {
     public static let defaultDeleteAccountRPC = "zen_delete_account"
 
     private let clientProvider: @Sendable () throws -> SupabaseClient
-    private let deleteAccountRPC: String
+    private let deleteAccountRPC: String?
     private let appleExchangeProvider: @Sendable () throws -> ZXAppleExchange
+    private let accountDeletionProvider: @Sendable () -> ZXAccountDeletion
+    /// Uses the locally persisted user even if the access token has expired.
+    /// Token validation/refresh still happens when an authenticated request runs.
+    private let preferCachedSession: Bool
 
-    public init(deleteAccountRPC: String = ZXSupabaseAuthBackend.defaultDeleteAccountRPC,
-                appleExchange: @escaping @Sendable () throws -> ZXAppleExchange = { try ZXAppleExchange.current() }) {
+    public init(deleteAccountRPC: String? = nil,
+                appleExchange: @escaping @Sendable () throws -> ZXAppleExchange = { try ZXAppleExchange.current() },
+                accountDeletion: @escaping @Sendable () -> ZXAccountDeletion = { ZXAccountDeletion.current() },
+                preferCachedSession: Bool = false) {
         self.init(deleteAccountRPC: deleteAccountRPC, client: { try ZXSupabase.requireClient() },
-                  appleExchange: appleExchange)
+                  appleExchange: appleExchange, accountDeletion: accountDeletion, preferCachedSession: preferCachedSession)
     }
 
     /// 注入客户端来源。默认每次调用都去读 `ZXSupabase` / `ZXAppleExchange` 的全局配置,
     /// 所以 App 晚于 `ZXAuth` 初始化配置也没关系。
-    public init(deleteAccountRPC: String = ZXSupabaseAuthBackend.defaultDeleteAccountRPC,
+    public init(deleteAccountRPC: String? = nil,
                 client: @escaping @Sendable () throws -> SupabaseClient,
-                appleExchange: @escaping @Sendable () throws -> ZXAppleExchange = { try ZXAppleExchange.current() }) {
+                appleExchange: @escaping @Sendable () throws -> ZXAppleExchange = { try ZXAppleExchange.current() },
+                accountDeletion: @escaping @Sendable () -> ZXAccountDeletion = { ZXAccountDeletion.current() },
+                preferCachedSession: Bool = false) {
         self.clientProvider = client
         self.deleteAccountRPC = deleteAccountRPC
         self.appleExchangeProvider = appleExchange
+        self.accountDeletionProvider = accountDeletion
+        self.preferCachedSession = preferCachedSession
     }
 
     public var isConfigured: Bool { (try? clientProvider()) != nil }
 
     public func restoreSession() async throws -> ZXAuthUser? {
         let client = try clientProvider()
+        // AuthClient.currentUser reads SessionStorage synchronously, whereas
+        // auth.session refreshes an expired token over the network.
+        if preferCachedSession { return client.auth.currentUser.map(ZXAuthUser.init) }
         do {
             // 未过期直接返回本地的; 过期则用 refresh token 换新的。
             return ZXAuthUser(try await client.auth.session.user)
@@ -183,8 +196,14 @@ public struct ZXSupabaseAuthBackend: ZXAuthBackend {
     public func deleteAccount() async throws {
         let client = try clientProvider()
         do {
-            try await client.rpc(deleteAccountRPC).execute()
+            if let deleteAccountRPC {
+                try await client.rpc(deleteAccountRPC).execute()
+            } else {
+                let token = try await client.auth.session.accessToken
+                try await accountDeletionProvider().delete(accessToken: token)
+            }
         } catch {
+            if let failure = error as? ZXAuthFailure { throw failure }
             throw Self.failure(error)
         }
         // auth.users 行已删, 服务端 /logout 会回 401/404 (SDK 会吞掉); 只需清本地。

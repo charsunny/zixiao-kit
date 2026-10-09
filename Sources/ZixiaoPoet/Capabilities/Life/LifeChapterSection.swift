@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  LifeChapterSection.swift — 一卷: 封面 → (这一卷) → 刻 → 卷末
 //
 //  桩卷 (还没编好刻) 不空着: 封面照画, 下面一行「本卷整理中」, 再用导读同一分期的导语与转折

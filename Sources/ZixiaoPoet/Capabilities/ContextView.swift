@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 import SwiftUI
 
 /// 时代背景的独立主入口。导读篇章和关联作品都来自随 App 打包的 guide，

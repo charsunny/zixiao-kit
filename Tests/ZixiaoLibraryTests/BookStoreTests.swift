@@ -1,3 +1,4 @@
+@testable import ZixiaoLibraryCore
 import XCTest
 @testable import ZixiaoLibrary
 

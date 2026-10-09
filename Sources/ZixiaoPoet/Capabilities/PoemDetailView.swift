@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 import SwiftUI
 import ZixiaoDesign
 
@@ -9,6 +10,9 @@ struct PoemDetailView: View {
     @State private var loaded = false
     @State private var bookmarkFailed = false
     @State private var contextFailed = false
+    @State private var contextLoaded = false
+    @State private var contextLoading = false
+    @State private var contextRequestID: UUID?
     @State private var bookmarkFeedback = 0
     @State private var showingReadingSettings = false
     /// 竖排区可用的高度 (页面可视区), 决定一列排几个字。
@@ -122,10 +126,11 @@ struct PoemDetailView: View {
             Button("知道了", role: .cancel) { }
         } message: { Text("已恢复之前的收藏状态，请检查网络后重试。") }
         .task {
-            guard !loaded else { return }
-            loaded = true
-            async let context: Void = loadContext()
-            await ctx.userData.markRead(poem)
+            async let context: Void = loadContextIfNeeded()
+            if !loaded {
+                loaded = true
+                await ctx.userData.markRead(poem)
+            }
             await context
         }
     }
@@ -188,10 +193,12 @@ struct PoemDetailView: View {
                     Label("写作线索", systemImage: "calendar").font(theme.type.headline).frame(minHeight: Self.entryHeight)
                 }
                 InkDivider()
+            } else if contextLoading {
+                ProgressView("正在查找写作线索…").font(theme.type.footnote)
             } else if contextFailed {
                 Button("写作线索暂未载入，点击重试") { Task { await loadContext() } }
                     .font(theme.type.footnote).frame(minHeight: PoetLayout.minHitTarget)
-            } else if ctx.hasChronicleData {
+            } else if ctx.hasChronicleData && contextLoaded {
                 Text("年谱尚未关联这篇作品的写作线索。")
                     .font(theme.type.footnote).foregroundStyle(theme.color.textSecondary).padding(.vertical, theme.space.md)
             }
@@ -282,13 +289,29 @@ struct PoemDetailView: View {
             }.buttonStyle(.plain)
         }
     }
+    private func loadContextIfNeeded() async {
+        if !contextLoaded { await loadContext() }
+    }
+
     private func loadContext() async {
         contextFailed = false
         guard ctx.hasChronicleData else { return }
+        let requestID = UUID()
+        contextRequestID = requestID
+        contextLoading = true
+        defer {
+            if contextRequestID == requestID {
+                contextLoading = false
+                contextRequestID = nil
+            }
+        }
         do {
             let fetched = try await ctx.store.occasions(of: poem)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, contextRequestID == requestID else { return }
             occasions = fetched.filter { $0.poet_events != nil }
-        } catch { if !Task.isCancelled { contextFailed = true } }
+            contextLoaded = true
+        } catch {
+            if !Task.isCancelled, contextRequestID == requestID { contextFailed = true }
+        }
     }
 }

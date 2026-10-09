@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  LifeRailGesture.swift — 年轨的手势仲裁: 点一下跳年份, 按住再拖跳卷, 普通的滑动照常滚页
 //
 //  为什么不用 SwiftUI 手势: 年轨是盖在滚动视图上的一层, 只要它能被点中, 从它上面起手的滑动就

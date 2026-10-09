@@ -1,19 +1,16 @@
 import Foundation
 import XCTest
 
-/// 金标 fixture 的定位与解码。
-///
-/// 用 `#filePath` 回溯到仓库根的 Fixtures/ 读取 —— 模拟器进程能直接读宿主机文件系统。
-///
-/// 为什么不走测试包资源: Package.swift 里 testTarget 声明了 `.copy("../../Fixtures")`,
-/// 但该路径在目标目录之外, Xcode 的 SPM 集成不为它生成资源包 (测试目标里没有
-/// `Bundle.module`, 编译报 inaccessible)。按冲刺约定不改 Package.swift, 改为直接读源码树。
+/// Gold fixtures can be staged outside a protected external source volume.
+/// ZX_TEST_WORKSPACE_ROOT points to a workspace-shaped, read-only copy for CI/simulators.
 enum Fixture {
     static func data(_ name: String) throws -> Data {
-        let root = URL(fileURLWithPath: #filePath)
+        let sourceRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent() // ZixiaoCalendarTests
             .deletingLastPathComponent() // Tests
             .deletingLastPathComponent() // 仓库根
+        let root = ProcessInfo.processInfo.environment["ZX_TEST_WORKSPACE_ROOT"]
+            .map { URL(fileURLWithPath: $0).appendingPathComponent("zixiao-kit") } ?? sourceRoot
         let url = root.appendingPathComponent("Fixtures/\(name).json")
         guard FileManager.default.fileExists(atPath: url.path) else {
             // 不用 XCTSkip: 金标缺失必须是失败, 否则「全绿」会掩盖根本没比对。

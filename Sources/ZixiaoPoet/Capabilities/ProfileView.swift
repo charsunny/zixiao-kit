@@ -1,3 +1,4 @@
+import ZixiaoPoetCore
 //  ProfileView.swift — 书房: 账号卡、在读 (最近三篇大封面)、收藏、书架 (编成有 library 时)、阅读记录; 设置 / 账号 / 登录 / 注销 / 关于
 //
 //  账号模型 (D3): 匿名优先。未绑定 Apple / 手机号的用户也有一个云端匿名身份 (`ctx.isSignedIn == false`),
@@ -42,7 +43,7 @@ struct ProfileView: View {
                                   poems: indexed, loading: loading, namespace: books) { showingDirectory = true }
                 savedSection
                 if let library = ctx.composition.library, !library.books.isEmpty {
-                    LibraryShelfSection(library: library)
+                    LibraryShelfSection(library: library, ctx: ctx).id(ctx.auth.state)
                 }
                 historySection
                 if let message = ctx.userData.userDataError {
@@ -179,7 +180,10 @@ private struct AccountCard: View {
 
     var body: some View {
         if ctx.isSignedIn {
-            NavigationLink { AccountView(ctx: ctx) } label: { card }
+            NavigationLink { PoetBooksCloudScreen(ctx: ctx) } label: {
+                    Label("同步书房", systemImage: "icloud").font(theme.type.body)
+                }
+                NavigationLink { AccountView(ctx: ctx) } label: { card }
                 .buttonStyle(.plain)
                 .accessibilityHint("查看账号与同步")
         } else {
@@ -292,8 +296,24 @@ private struct AboutLinks: View {
     let app: AppMeta
     @Environment(\.zxTheme) private var theme
     var body: some View {
+        if let notice = app.privacyNotice, !notice.isEmpty {
+            NavigationLink {
+                ScrollView {
+                    Text(notice).font(theme.type.body).lineSpacing(theme.space.sm)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .padding(theme.space.margin).poetReadableWidth(640)
+                }
+                .background(theme.paper())
+                .zxNavigationTitle("隐私说明", role: .secondary)
+            } label: {
+                Label("本应用隐私说明", systemImage: "hand.raised").font(theme.type.body)
+            }
+        }
         if let privacy = app.privacyLink {
-            Link(destination: privacy) { linkLabel("隐私政策", systemImage: "hand.raised") }
+            Link(destination: privacy) {
+                linkLabel(app.privacyNotice == nil ? "隐私政策" : "服务隐私政策", systemImage: "hand.raised")
+            }
                 .accessibilityHint("在浏览器中打开")
         }
         if let support = app.supportLink {
@@ -439,7 +459,7 @@ struct AboutView: View {
                         ? "收藏和阅读记录跟随账号同步。同一账号也可用于子晓纪的其他应用，\(app.displayName)的记录单独保存。"
                         : "暂不登录也可以阅读和收藏，记录先保存在这台设备上。登录后会并入账号，方便换设备继续阅读。")
                 }
-                if app.privacyLink != nil || app.supportLink != nil {
+                if app.privacyNotice != nil || app.privacyLink != nil || app.supportLink != nil {
                     InkDivider()
                     aboutSection("隐私与支持") {
                         VStack(alignment: .leading, spacing: 0) { AboutLinks(app: app) }

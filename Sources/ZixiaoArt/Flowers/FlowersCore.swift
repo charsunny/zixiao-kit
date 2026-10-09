@@ -9,7 +9,7 @@
 //  wispy 滤镜) 留给渲染器。
 
 import Foundation
-import ZixiaoDesign
+import ZixiaoColor
 
 extension ZXArt {
     typealias V3 = SIMD3<Double>

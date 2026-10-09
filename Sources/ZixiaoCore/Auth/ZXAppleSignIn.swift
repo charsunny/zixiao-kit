@@ -49,11 +49,15 @@ public struct ZXAppleCredential: Sendable, Hashable {
     }
 }
 
-#if os(iOS)
+#if os(iOS) || os(macOS)
 import AuthenticationServices
+#if os(iOS)
 import UIKit
+#else
+import AppKit
+#endif
 
-/// 从 PoetKit `AppleSignInCoordinator` 移植的 Apple 登录辅助 (仅 iOS)。
+/// Apple 登录辅助。iOS 使用当前 scene，原生 macOS 使用发起操作的窗口。
 ///
 /// 两种用法:
 /// 1. 自持流程: `let cred = try await ZXAppleSignIn().request()`;
@@ -61,20 +65,21 @@ import UIKit
 ///    在 `onCompletion` 里 `try ZXAppleSignIn.credential(from: authorization, rawNonce: nonce)`。
 /// 拿到凭证后都交给 `ZXAuth.linkApple`, 这里不碰 Supabase。
 ///
-/// 与 PoetKit 的区别: PoetKit 把 token 送到自家服务端的 /api/mobile/auth/apple/exchange 换 session
-/// (那套 GoTrue 没配 Apple provider); 本内核面对的 GoTrue 已开 Apple + 手动绑定, 直接 linkIdentityWithIdToken。
+/// 凭证由 `ZXAuth` 交给子晓系共用的 `ZXAppleExchange` 换取 session。
 @MainActor
 public final class ZXAppleSignIn: NSObject {
     private var continuation: CheckedContinuation<ZXAppleCredential, any Error>?
     private var rawNonce = ""
     private var controller: ASAuthorizationController?
+    private var requestedPresentationAnchor: ASPresentationAnchor?
 
     public override init() { super.init() }
 
     /// 弹出 Apple 登录面板。用户取消抛 `ZXCoreError.cancelled`。
-    public func request() async throws -> ZXAppleCredential {
+    public func request(presentationAnchor: ASPresentationAnchor? = nil) async throws -> ZXAppleCredential {
         // 同一个实例同时只允许一次, 否则前一次的 continuation 会被覆盖而永远不 resume。
         if continuation != nil { throw ZXCoreError.cancelled }
+        requestedPresentationAnchor = presentationAnchor
         return try await withCheckedThrowingContinuation { cont in
             continuation = cont
             let request = ASAuthorizationAppleIDProvider().createRequest()
@@ -118,6 +123,7 @@ public final class ZXAppleSignIn: NSObject {
         continuation?.resume(with: result)
         continuation = nil
         controller = nil
+        requestedPresentationAnchor = nil
     }
 }
 
@@ -135,10 +141,15 @@ extension ZXAppleSignIn: ASAuthorizationControllerDelegate {
 
 extension ZXAppleSignIn: ASAuthorizationControllerPresentationContextProviding {
     public func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        if let requestedPresentationAnchor { return requestedPresentationAnchor }
+        #if os(macOS)
+        return NSApplication.shared.keyWindow ?? NSApplication.shared.mainWindow ?? ASPresentationAnchor()
+        #else
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         if let key = scenes.lazy.compactMap(\.keyWindow).first { return key }
         if let scene = scenes.first { return ASPresentationAnchor(windowScene: scene) }
         return ASPresentationAnchor()
+        #endif
     }
 }
 #endif
