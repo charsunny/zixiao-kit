@@ -1,7 +1,7 @@
 # 统一书房移动端接入（2026-10-07）
 
 代码与接口已接入。本文件描述实现范围；编译、端到端结果由 workspace 主任务的串行验收记录补充。
-后端协议见 `poetry/code/wish/web/docs/zixiao-library-sync.md`。后台迁移和 Web 部署由主任务隔离执行，移动文件不会触发部署。
+后端协议见 `wish/web/docs/zixiao-library-sync.md`。后台迁移和 Web 部署由主任务隔离执行，移动文件不会触发部署。
 
 ## 同步范围
 

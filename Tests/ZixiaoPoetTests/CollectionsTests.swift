@@ -110,7 +110,7 @@ final class CollectionsTests: XCTestCase {
     /// 旁边的 zhi 仓库里已有正式合集文件时, 整份解一遍 (没有就跳过)。
     func testBundledCollectionsDecodeWhenPresent() throws {
         let url = PoetFixtures.workspaceRoot
-            .appendingPathComponent("zhi/dongpo/App/Resources")
+            .appendingPathComponent("zhi/apple/App/Resources")
         let files = (try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []
         let collections = files.filter { $0.hasPrefix("collections-") && $0.hasSuffix(".json") }
         try XCTSkipIf(collections.isEmpty, "zhi 仓库里还没有合集文件")

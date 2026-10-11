@@ -134,7 +134,7 @@ final class MomentsTests: XCTestCase {
 
     /// 完整的产品数据 (旁边的 zhi 仓库在时): 整份能解, 卷按分期升序, 每个已编卷的刻都有出处。
     func testFullBundledFileDecodesWhenAvailable() throws {
-        let dir = Self.repoRoot.deletingLastPathComponent().appendingPathComponent("zhi/dongpo/App/Resources")
+        let dir = Self.repoRoot.deletingLastPathComponent().appendingPathComponent("zhi/apple/App/Resources")
         let files = (try? FileManager.default.contentsOfDirectory(atPath: dir.path))?
             .filter { $0.hasPrefix("moments-") && $0.hasSuffix(".json") } ?? []
         guard !files.isEmpty else { throw XCTSkip("旁边没有 zhi 仓库的 moments 数据") }
