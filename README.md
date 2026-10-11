@@ -46,3 +46,5 @@ xcodebuild -scheme ZixiaoKit-Package -destination 'generic/platform=iOS Simulato
 # 测试
 xcodebuild -scheme ZixiaoKit-Package -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 ```
+
+Apple 共用组件、风格及产品规范索引见 [设计规范](Docs/Design/README.md)。
