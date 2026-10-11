@@ -1,6 +1,6 @@
 # ZixiaoKit
 
-子晓纪产品矩阵的共享 Swift 内核 (L1)。消费者: 玄览 (`../qizen/apple`), 东坡志 / 诗人志系列 (`../zhi/DongpoZhi`, 三个 target 经 `ZixiaoPoet` 模块接入, 2026-10-01 起)。
+子晓纪产品矩阵的共享 Swift 内核 (L1)。消费者: 玄览 (`../xuan/apple`), 东坡志 / 诗人志系列 (`../zhi/dongpo`, 三个 target 经 `ZixiaoPoet` 模块接入, 2026-10-01 起)。
 
 规划: `../.claude/plans/product-matrix-2026.md` 第 4 章; 当前冲刺: `../.claude/plans/xuanlan-swift-sprint-01.md`。
 
