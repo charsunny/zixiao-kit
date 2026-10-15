@@ -228,6 +228,10 @@ extension ShanShuiEngine {
         struct Mist { var depth: Double; var blur: Double; var peak: Double; var floorY: Double; var floorDepth: Double }
         var canv: ZXArt.SSCanv
         var mist: Mist? = nil
+        /// 近景 (水纹、船、近岸): 只给分层渲染用 (`Drawing.restricted(to:)`), 不影响出图。
+        var near = false
+
+        static func near(_ canv: ZXArt.SSCanv) -> Part { Part(canv: canv, near: true) }
     }
 
     /// 画框: 可画区域 (逻辑单位)。竖幅 / 方幅 = 整宽 × 留白以下; 横幅 (小组件) = 右侧, 左侧留给诗句。
@@ -338,12 +342,12 @@ extension ShanShuiEngine {
             notedMountain(.main, raw: main0, final: main)
             // 水从主峰山脚 (实测) 往下铺, 画在山的下面。
             let base = min(ShanShuiEngine.bottom(main) ?? fr.y(0.8), H - 0.12 * R)
-            parts.append(Part(canv: noted(.water, waterLines(base - 0.02 * R, H - 0.03 * R, count: 2 + Int(3 * d),
+            parts.append(Part.near(noted(.water, waterLines(base - 0.02 * R, H - 0.03 * R, count: 2 + Int(3 * d),
                                                              xa: fr.x0, xb: fr.x1))))
             parts.append(Part(canv: main))
             if d > 0.2 {
                 let by = fr.y(0.90 + 0.06 * r())
-                parts.append(Part(canv: boat(fr.x(0.12 + 0.6 * r()), by, 0.6)))
+                parts.append(Part.near(boat(fr.x(0.12 + 0.6 * r()), by, 0.6)))
             }
         case .riverbank:
             parts.append(distant(fr.y(0.16), 60, from: wide ? 0.45 * W : 0, to: W))
@@ -360,12 +364,12 @@ extension ShanShuiEngine {
                 notedMountain(.side, raw: m2, final: m2Moved)
                 parts.append(Part(canv: m2Moved))
             }
-            parts.append(Part(canv: noted(.water, waterLines(fr.y(0.55), fr.y(0.74), count: 2 + Int(2 * d),
+            parts.append(Part.near(noted(.water, waterLines(fr.y(0.55), fr.y(0.74), count: 2 + Int(2 * d),
                                                              xa: fr.x0, xb: fr.x1))))
-            if d > 0.2 { parts.append(Part(canv: boat(fr.x(0.5 - side * (0.05 + 0.2 * r())), fr.y(0.64), 0.55))) }
+            if d > 0.2 { parts.append(Part.near(boat(fr.x(0.5 - side * (0.05 + 0.2 * r())), fr.y(0.64), 0.55))) }
             // 近岸在主山的对侧下角, 画面下方正中留出水面。
             let bw = (0.75 + 0.15 * r()) * fr.w
-            parts.append(Part(canv: bank(fr.x(0.5 - side * 0.5), fr.y(0.95), wid: bw, inward: side)))
+            parts.append(Part.near(bank(fr.x(0.5 - side * 0.5), fr.y(0.95), wid: bw, inward: side)))
         case .distant:
             let rows = d < 0.4 ? 2 : 3
             for k in 0..<rows {
@@ -373,12 +377,12 @@ extension ShanShuiEngine {
                 parts.append(distant(fr.y(0.14 + 0.13 * fk), 80 + 35 * fk, from: wide ? 0.4 * W : 0, to: W,
                                      peak: 0.5 + 0.22 * fk))
             }
-            parts.append(Part(canv: noted(.water, waterLines(fr.y(0.62), fr.y(0.92), count: 2 + Int(2 * d),
+            parts.append(Part.near(noted(.water, waterLines(fr.y(0.62), fr.y(0.92), count: 2 + Int(2 * d),
                                                              xa: fr.x0, xb: fr.x1))))
-            if d > 0.15 { parts.append(Part(canv: boat(fr.x(0.15 + 0.6 * r()), fr.y(0.72 + 0.1 * r()), 0.5))) }
+            if d > 0.15 { parts.append(Part.near(boat(fr.x(0.15 + 0.6 * r()), fr.y(0.72 + 0.1 * r()), 0.5))) }
             if d > 0.5 {
                 let side: Double = wide ? 1 : (r() < 0.5 ? -1 : 1)
-                parts.append(Part(canv: bank(fr.x(0.5 + side * 0.5), fr.y(0.97), wid: 0.7 * fr.w, inward: -side)))
+                parts.append(Part.near(bank(fr.x(0.5 + side * 0.5), fr.y(0.97), wid: 0.7 * fr.w, inward: -side)))
             }
         }
         let anchors: ZXArt.Anchors? = anchorLog == nil ? nil
@@ -458,22 +462,34 @@ public extension ZXArt {
             for part in parts { for p in part.canv { trace.add(p.p.map { ($0.x, $0.y) }) } }
             var paper = params.paperTexture ? engine.backgroundPaper() : nil
             paper?.tint = params.palette.ink
+            let built = layers(parts, palette: params.palette)
             var d = Drawing(width: W, height: H, background: params.palette.paper, paper: paper,
-                            layers: layers(parts, palette: params.palette),
+                            layers: built.layers,
                             quietRect: W > H * 1.3 ? CGRectCodable(x: 0, y: 0, width: 0.42 * W, height: H)
                                                     : CGRectCodable(x: 0, y: 0, width: W, height: params.quietTop * H))
             if let verse = params.verse { d.setVerse(verse, quietTop: params.quietTop) }
             d.anchors = anchors
+            d.nearSpans = built.nearSpans
             return (d, trace)
         }
 
-        /// 构图各部分 → 图层: 远山各成一个雾化层, 其余按先后并进普通层。
-        static func layers(_ parts: [ShanShuiEngine.Part], palette: Palette) -> [Layer] {
+        /// 构图各部分 → 图层: 远山各成一个雾化层, 其余按先后并进普通层。同时记下普通层里近景 (`Part.near`)
+        /// 的形状区间, 分层渲染用 —— 图层本身与以前逐位相同。
+        static func layers(_ parts: [ShanShuiEngine.Part], palette: Palette) -> (layers: [Layer], nearSpans: [ShapeSpan]) {
             var out: [Layer] = []
+            var spans: [ShapeSpan] = []
             var current: [Shape] = []
+            var currentNear: [Range<Int>] = []
+            func flush() {
+                guard !current.isEmpty else { return }
+                spans += currentNear.map { ShapeSpan(layer: out.count, range: $0) }
+                out.append(Layer(shapes: current))
+                current = []
+                currentNear = []
+            }
             for part in parts {
                 if let m = part.mist {
-                    if !current.isEmpty { out.append(Layer(shapes: current)); current = [] }
+                    flush()
                     var shapes: [Shape] = []
                     ZXArt.appendShapes(part.canv, palette: palette, into: &shapes, washContrast: 0.4)
                     let (ridge, x0) = LayerMist.ridge(of: shapes, step: 2)
@@ -481,11 +497,13 @@ public extension ZXArt {
                                                      ridgeX0: x0, ridgeStep: 2, floorY: m.floorY, floorDepth: m.floorDepth),
                                      shapes: shapes))
                 } else {
+                    let before = current.count
                     ZXArt.appendShapes(part.canv, palette: palette, into: &current)
+                    if part.near, current.count > before { currentNear.append(before..<current.count) }
                 }
             }
-            if !current.isEmpty { out.append(Layer(shapes: current)) }
-            return out
+            flush()
+            return (out, spans)
         }
 
         /// 原作网页打开时的第一屏 (3000×800 横卷, 对拍与预览用)。

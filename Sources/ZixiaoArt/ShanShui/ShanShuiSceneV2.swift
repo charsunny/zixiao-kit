@@ -198,9 +198,9 @@ extension ShanShuiEngine {
             notedMountain(.main, raw: m0, final: main)
             // 水从主峰山脚 (实测) 往下铺, 画在山的下面。
             let base = min(ShanShuiEngine.bottom(main) ?? fy(0.8), H - 0.12 * R)
-            parts.append(Part(canv: noted(.water, waterLines(base - 0.02 * R, H - 0.03 * R, count: 2 + Int(3 * d)))))
+            parts.append(Part.near(noted(.water, waterLines(base - 0.02 * R, H - 0.03 * R, count: 2 + Int(3 * d)))))
             parts.append(Part(canv: main))
-            if d > 0.2 { parts.append(Part(canv: boat(fy(0.90 + 0.06 * r()), 0.6))) }
+            if d > 0.2 { parts.append(Part.near(boat(fy(0.90 + 0.06 * r()), 0.6))) }
         case .riverbank:
             parts.append(distant(fy(0.16), 55))
             let hei = (0.55 + 0.15 * r()) * R
@@ -216,14 +216,14 @@ extension ShanShuiEngine {
                 notedMountain(.side, raw: m2, final: m2Moved)
                 parts.append(Part(canv: m2Moved))
             }
-            parts.append(Part(canv: noted(.water, waterLines(fy(0.55), fy(0.74), count: 2 + Int(2 * d)))))
-            if d > 0.2 { parts.append(Part(canv: boat(fy(0.64), 0.55))) }
+            parts.append(Part.near(noted(.water, waterLines(fy(0.55), fy(0.74), count: 2 + Int(2 * d)))))
+            if d > 0.2 { parts.append(Part.near(boat(fy(0.64), 0.55))) }
             // 近岸在主山的对侧下角 (横幅的竖栏占满高时, 贴主山一侧的外缘)
             let bwid = (0.75 + 0.15 * r()) * bw
             if roomBelow {
-                parts.append(Part(canv: bank(m < 0 ? W : 0, fy(0.95), wid: bwid, inward: m)))
+                parts.append(Part.near(bank(m < 0 ? W : 0, fy(0.95), wid: bwid, inward: m)))
             } else {
-                parts.append(Part(canv: bank(m < 0 ? 0 : W, fy(0.95), wid: bwid, inward: -m)))
+                parts.append(Part.near(bank(m < 0 ? 0 : W, fy(0.95), wid: bwid, inward: -m)))
             }
         case .distant:
             let rows = d < 0.4 ? 2 : 3
@@ -243,11 +243,11 @@ extension ShanShuiEngine {
                     parts.append(distant(fy(0.14 + 0.13 * fk), 80 + 35 * fk, peak: 0.5 + 0.22 * fk))
                 }
             }
-            parts.append(Part(canv: noted(.water, waterLines(waterTop, max(fy(0.92), waterTop + 0.05 * R),
+            parts.append(Part.near(noted(.water, waterLines(waterTop, max(fy(0.92), waterTop + 0.05 * R),
                                                              count: 2 + Int(2 * d)))))
-            if d > 0.15 { parts.append(Part(canv: boat(max(fy(0.72 + 0.1 * r()), waterTop + 0.03 * R), 0.5))) }
+            if d > 0.15 { parts.append(Part.near(boat(max(fy(0.72 + 0.1 * r()), waterTop + 0.03 * R), 0.5))) }
             if d > 0.5 {
-                parts.append(Part(canv: bank(m < 0 ? 0 : W, fy(0.97), wid: 0.7 * bw, inward: -m)))
+                parts.append(Part.near(bank(m < 0 ? 0 : W, fy(0.97), wid: 0.7 * bw, inward: -m)))
             }
         }
 

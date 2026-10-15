@@ -100,6 +100,9 @@ public extension ZXArt {
         /// shanshui@1 / @2: 意象锚点 (山脊、水、船、人、树、屋、天空带; 单位坐标), 给在画上叠雨雪岚雁月的客户端用。
         /// 只记录, 不影响出图 (见 ShanShuiAnchors.swift)。花、原作第一屏为 nil。
         public var anchors: Anchors?
+        /// shanshui@1 / @2: 普通层里属于近景 (水纹、船、近岸) 的形状区间, 分层渲染用 (`restricted(to:)`)。
+        /// 其余形状是中景, 带雾化的图层是远山。花、原作第一屏为空。不影响出图。
+        public var nearSpans: [ShapeSpan] = []
 
         public init(width: Double, height: Double, background: ZXHex, paper: PaperTexture? = nil,
                     layers: [Layer] = [], quietRect: CGRectCodable? = nil) {
@@ -120,9 +123,61 @@ public extension ZXArt {
                                               : verseRect
         }
 
+        /// 只留景深里的某几层 (远山 / 中景 / 近景), 其余形状去掉; 图层的先后、混合、不透明度、雾化与滤镜参数不变。
+        /// 视差镜头用: 三层分别画成透明底的位图 (`ZXArt.draw(_:in:rect:pixelsPerUnit:includesGround:)` 传
+        /// `includesGround: false`), 各按自己的倍率缩放再叠起来。
+        /// - 远山 = 带雾化的图层; 近景 = `nearSpans` 里的形状 (水纹、船、近岸); 中景 = 其余的 (主峰 / 侧山 / 树 / 屋)。
+        /// - 原来中景与近景在同一个图层里交错着画 (水画在主峰脚下), 分开后同层内中景在前、近景在后 ——
+        ///   所以三层叠回去的样子与整幅画有细微出入 (近景的水纹会盖到山脚), 只用于视频的镜头, 不用于出图。
+        /// 纯数据变换, 不渲染; 要全部三层就是原画 (形状顺序除外)。
+        public func restricted(to roles: Set<PartRole>) -> Drawing {
+            var out = self
+            out.paper = nil
+            out.layers = []
+            out.nearSpans = []
+            for (index, layer) in layers.enumerated() {
+                if layer.mist != nil {
+                    if roles.contains(.far) { out.layers.append(layer) }
+                    continue
+                }
+                let nearRanges = nearSpans.filter { $0.layer == index }.map(\.range)
+                var mid: [Shape] = [], near: [Shape] = []
+                for (k, shape) in layer.shapes.enumerated() {
+                    if nearRanges.contains(where: { $0.contains(k) }) { near.append(shape) } else { mid.append(shape) }
+                }
+                if roles.contains(.mid), !mid.isEmpty {
+                    var l = layer
+                    l.shapes = mid
+                    out.layers.append(l)
+                }
+                if roles.contains(.near), !near.isEmpty {
+                    var l = layer
+                    l.shapes = near
+                    out.layers.append(l)
+                }
+            }
+            return out
+        }
+
         /// 形状总数 / 顶点总数 (调试与性能日志用)。
         public var shapeCount: Int { layers.reduce(0) { $0 + $1.shapes.count } }
         public var pointCount: Int { layers.reduce(0) { $0 + $1.shapes.reduce(0) { $0 + $1.points.count } } }
+    }
+
+    /// 一个图层里一段连续的形状 (`layers[layer].shapes[range]`)。
+    struct ShapeSpan: Sendable, Hashable {
+        public var layer: Int
+        public var range: Range<Int>
+
+        public init(layer: Int, range: Range<Int>) {
+            self.layer = layer
+            self.range = range
+        }
+    }
+
+    /// 山水的景深: 远山 (雾化层)、中景 (主峰 / 侧山 / 树 / 屋)、近景 (水 / 船 / 岸)。
+    enum PartRole: Sendable, Hashable, CaseIterable {
+        case far, mid, near
     }
 
     /// 可 Sendable / Codable 的矩形 (逻辑画布坐标)。
