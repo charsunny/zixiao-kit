@@ -6,8 +6,50 @@
 //
 //  线装书阅读页的版式 (版心、界栏、夹注) 另有讲究, 归 ZixiaoLibrary; 这里只管
 //  一句话、一首诗、一个书名。
+//
+//  逐字效果 (`zxGlyphEffect`): 环境里放一个「字序号 → 效果」的函数, 每个字按它加透明度 / 模糊 / 缩放
+//  (墨洇入场用)。字序号就是阅读顺序 (列从右到左、列内从上到下, 换行符不占序号)。效果只改外观, 不改
+//  排版 (字格、列距、尺寸都不变); 环境里没有 (缺省) 时一个修饰器都不加, 画面与加这个能力之前逐像素相同。
 
 import SwiftUI
+
+/// 一个字此刻的外观效果: 透明度 0…1、模糊半径 (pt)、缩放。不改排版。
+public struct ZXGlyphEffect: Sendable, Equatable {
+    public var opacity: Double
+    public var blur: Double
+    public var scale: Double
+
+    public init(opacity: Double = 1, blur: Double = 0, scale: Double = 1) {
+        self.opacity = opacity
+        self.blur = blur
+        self.scale = scale
+    }
+
+    /// 没有任何效果。
+    public var isIdentity: Bool { opacity >= 1 && blur <= 0 && scale == 1 }
+}
+
+public extension EnvironmentValues {
+    /// 竖排每个字的效果 (参数是字序号); nil = 不加效果 (缺省)。
+    @Entry var zxGlyphEffect: (@Sendable (Int) -> ZXGlyphEffect)?
+}
+
+/// 按效果修饰一个字; 没有效果 (或恒等) 时原样交回, 不加修饰器。
+struct ZXGlyphEffectModifier: ViewModifier {
+    let effect: ZXGlyphEffect?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let effect, !effect.isIdentity {
+            content
+                .opacity(effect.opacity)
+                .blur(radius: effect.blur)
+                .scaleEffect(effect.scale)
+        } else {
+            content
+        }
+    }
+}
 
 public struct VerticalText: View, Sendable {
     let text: String
@@ -18,6 +60,7 @@ public struct VerticalText: View, Sendable {
 
     @Environment(\.zxTheme) private var theme
     @Environment(\.legibilityWeight) private var legibilityWeight
+    @Environment(\.zxGlyphEffect) private var glyphEffect
 
     /// - Parameters:
     ///   - font: 缺省用身份的正文字 20pt。
@@ -41,6 +84,7 @@ public struct VerticalText: View, Sendable {
                     .font(font ?? theme.bodyFont(20, legibilityWeight: legibilityWeight))
                     .foregroundStyle(color ?? theme.ink())
                     .fixedSize()
+                    .modifier(ZXGlyphEffectModifier(effect: glyphEffect?(i)))
                     .layoutValue(key: ZXGlyphInfo.self, value: glyphs[i])
             }
         }

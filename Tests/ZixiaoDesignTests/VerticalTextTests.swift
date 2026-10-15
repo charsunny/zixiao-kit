@@ -48,4 +48,24 @@ final class VerticalTextTests: XCTestCase {
         XCTAssertEqual(ZXVerticalLayout.columns(g, capacity: nil).count, 3)
         XCTAssertEqual(ZXVerticalLayout.columns([], capacity: 4), [[]])
     }
+
+    // MARK: - 逐字效果
+
+    func testGlyphEffectIdentityAndDefaults() {
+        XCTAssertTrue(ZXGlyphEffect().isIdentity)
+        XCTAssertFalse(ZXGlyphEffect(opacity: 0.5).isIdentity)
+        XCTAssertFalse(ZXGlyphEffect(blur: 1).isIdentity)
+        XCTAssertFalse(ZXGlyphEffect(scale: 1.06).isIdentity)
+        XCTAssertTrue(ZXGlyphEffect(opacity: 1, blur: 0, scale: 1).isIdentity)
+        // 缺省环境里没有效果函数: 竖排不加任何修饰器。
+        XCTAssertNil(EnvironmentValues().zxGlyphEffect)
+    }
+
+    /// 字序号 = 阅读顺序: 换行符不占序号, 每个字格一个序号 (效果函数按这个序号取)。
+    func testGlyphIndexIsReadingOrder() {
+        let g = ZXVerticalLayout.glyphs("床前明月光，\n疑是地上霜。")
+        XCTAssertEqual(g.count, 12)
+        let columns = ZXVerticalLayout.columns(g, capacity: nil)
+        XCTAssertEqual(columns.flatMap { $0 }, Array(0..<12), "列从右到左、列内自上而下, 序号恰好依次")
+    }
 }
