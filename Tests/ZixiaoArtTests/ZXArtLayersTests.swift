@@ -35,7 +35,11 @@ final class ZXArtLayersTests: XCTestCase {
                     XCTAssertTrue(mid.layers.allSatisfy { $0.mist == nil }, label)
                     XCTAssertTrue(near.layers.allSatisfy { $0.mist == nil }, label)
                     XCTAssertGreaterThan(far.shapeCount, 0, "\(label): 总有远山")
-                    XCTAssertGreaterThan(mid.shapeCount, 0, "\(label): 总有中景")
+                    if variant == .distant {
+                        XCTAssertEqual(mid.shapeCount, 0, "\(label): 远山构图只有雾化远山与近景")
+                    } else {
+                        XCTAssertGreaterThan(mid.shapeCount, 0, "\(label): 高山与江岸保留中景")
+                    }
                     XCTAssertGreaterThan(near.shapeCount, 0, "\(label): 总有水纹")
                 }
             }
