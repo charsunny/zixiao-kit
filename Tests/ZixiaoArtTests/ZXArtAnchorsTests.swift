@@ -398,8 +398,9 @@ final class ZXArtAnchorsTests: XCTestCase {
     }
 
     func testBuildSplitsABoatIntoHullAndFigure() {
-        // 人 (两笔) + 船身 (填充 + 描边), 人在船身的左半: 船头朝右, 不翻转。
-        let canv: ZXArt.SSCanv = [line([(60, 80), (64, 98)]), line([(58, 80), (68, 80)]),
+        // 杖伸到船外，不能影响人物中心、脚下和朝向；其后是人 (两笔) + 船身 (填充 + 描边)。
+        let canv: ZXArt.SSCanv = [line([(-120, 50), (68, 130)]),
+                                  line([(60, 80), (64, 98)]), line([(58, 80), (68, 80)]),
                                   line([(60, 100), (100, 106)], fill: true), line([(60, 100), (100, 106)])]
         let boat = ZXArt.AnchorPiece(kind: .boat, canv: canv)
         let a = ZXArt.Anchors.build(pieces: [boat], width: 200, height: 200, blocked: { _, _ in false })
@@ -414,7 +415,8 @@ final class ZXArtAnchorsTests: XCTestCase {
         XCTAssertEqual(a.figures.first?.topY ?? 9, 0.4, accuracy: 1e-9)
 
         // 人在右半: 翻转。
-        let mirrored: ZXArt.SSCanv = [line([(96, 80), (100, 98)]), line([(60, 100), (100, 106)], fill: true),
+        let mirrored: ZXArt.SSCanv = [line([(96, 50), (280, 130)]), line([(96, 80), (100, 98)]),
+                                      line([(60, 100), (100, 106)], fill: true),
                                       line([(60, 100), (100, 106)])]
         let b = ZXArt.Anchors.build(pieces: [ZXArt.AnchorPiece(kind: .boat, canv: mirrored)], width: 200, height: 200,
                                     blocked: { _, _ in false })
