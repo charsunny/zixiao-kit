@@ -1,10 +1,11 @@
-//  ZXArtAnchorsTests.swift — shanshui@2 的意象锚点: 只记录不改画 + 锚点合理
+//  ZXArtAnchorsTests.swift — shanshui@1 / @2 的意象锚点: 只记录不改画 + 锚点合理
 //
 //  「不改画」靠两层:
-//  1. `Fixtures/zxart/procedural-v2.json` (ZXArtProceduralFixtureTests) 记录了 @2 的几何指纹与生成后的 PRNG 状态,
-//     由加锚点之前的代码生成 —— 加了记录之后指纹不变, 就证明出图与取随机数的顺序没变;
+//  1. `Fixtures/zxart/procedural-v1.json` / `procedural-v2.json` (ZXArtProceduralFixtureTests) 记录了 @1 / @2 的几何指纹与
+//     生成后的 PRNG 状态, 由加锚点之前的代码生成 —— 加了记录之后指纹不变, 就证明出图与取随机数的顺序没变;
 //  2. 本文件: 同一个种子、同一个版式, 记录开 / 关各生成一遍, 构图的每一笔 (坐标、颜色、线宽) 与 PRNG 状态逐位相同,
-//     覆盖三种 variant × 三种版式 × 三种诗句边 × 多个种子与密度 (比指纹那几个配方宽得多)。
+//     @2 覆盖三种 variant × 三种版式 × 三种诗句边 × 多个种子与密度, @1 覆盖三种 variant × 三种版式 (含横幅小组件) ×
+//     多个种子与密度 (比指纹那几个配方宽得多)。
 //  「锚点合理」: 都在 0…1 内、不落在诗句框里、船在水面带附近、人站在船上、天空带在所有山脊之上、被 cull 的东西不记。
 
 import CoreGraphics
@@ -32,6 +33,12 @@ final class ZXArtAnchorsTests: XCTestCase {
                                     palette: .paperInk, pixelSize: size))
     }
 
+    static func drawingV1(_ seed: String, _ variant: Variant, _ size: CGSize, density: Double = 1.3) throws -> ZXArt.Drawing {
+        try XCTUnwrap(ZXArt.drawing(procedural: .init(generator: "shanshui@1", seed: seed, variant: variant.rawValue,
+                                                      params: .init(density: density)),
+                                    palette: .paperInk, pixelSize: size))
+    }
+
     // MARK: - 记录不改画
 
     private struct Composed {
@@ -55,6 +62,19 @@ final class ZXArtAnchorsTests: XCTestCase {
         let engine = ShanShuiEngine(seed: ZXArt.Seed(seed))
         engine.recordsAnchors = records
         let composed = engine.composeV2(width: W, height: H, params: params, verse: verse)
+        return Composed(parts: composed.parts, anchors: composed.anchors, state: engine.e.state)
+    }
+
+    /// @1: 没有诗句框。
+    private func composeV1(_ seed: String, _ variant: Variant, _ pixel: CGSize, density: Double, records: Bool) -> Composed {
+        let aspect = Double(pixel.height / pixel.width)
+        let short = ZXArt.ShanShui.logicalShortSide
+        let (W, H) = aspect >= 1 ? (short, short * aspect) : (short / aspect, short)
+        let params = ZXArt.ShanShui.Params(palette: .paperInk, density: density, variant: variant,
+                                           quietTop: ZXArt.Frame(pixelSize: pixel).defaultQuietTop)
+        let engine = ShanShuiEngine(seed: ZXArt.Seed(seed))
+        engine.recordsAnchors = records
+        let composed = engine.compose(width: W, height: H, params: params)
         return Composed(parts: composed.parts, anchors: composed.anchors, state: engine.e.state)
     }
 
@@ -102,6 +122,33 @@ final class ZXArtAnchorsTests: XCTestCase {
         XCTAssertEqual(checked, Self.seeds.count * Variant.allCases.count * Self.sizes.count * Self.sides.count)
     }
 
+    func testRecordingDoesNotChangeTheV1Composition() {
+        var checked = 0
+        for (si, seed) in (Self.seeds + ["b", "42"]).enumerated() {
+            for variant in Variant.allCases {
+                for (zi, size) in Self.sizes.enumerated() {
+                    for density in [0.1, 0.45, 0.7, 1.0] where (si + zi) % 2 == Int(density * 10) % 2 {
+                        let on = composeV1(seed, variant, size, density: density, records: true)
+                        let off = composeV1(seed, variant, size, density: density, records: false)
+                        let label = "@1 \(seed) \(variant.rawValue) \(Int(size.width))x\(Int(size.height)) d=\(density)"
+                        XCTAssertNotNil(on.anchors, label)
+                        XCTAssertNil(off.anchors, label)
+                        XCTAssertEqual(on.state, off.state, "\(label): PRNG state after composition")
+                        XCTAssertEqual(on.parts.count, off.parts.count, "\(label): parts")
+                        for (k, (a, b)) in zip(on.parts, off.parts).enumerated() {
+                            assertSame(a.canv, b.canv, "\(label) part \(k)")
+                            XCTAssertEqual(a.mist?.depth, b.mist?.depth, "\(label) part \(k) mist depth")
+                            XCTAssertEqual(a.mist?.peak, b.mist?.peak, "\(label) part \(k) mist peak")
+                            XCTAssertEqual(a.mist?.floorY, b.mist?.floorY, "\(label) part \(k) mist floor")
+                        }
+                        checked += 1
+                    }
+                }
+            }
+        }
+        XCTAssertGreaterThan(checked, 60)
+    }
+
     func testMountainRecordingDoesNotChangeTheMountain() {
         for seed in ["m1", "m2", "m3", "m4"] {
             let on = ShanShuiEngine(seed: ZXArt.Seed(seed))
@@ -140,14 +187,15 @@ final class ZXArtAnchorsTests: XCTestCase {
 
     // MARK: - 谁有锚点
 
-    func testOnlyShanShuiV2CarriesAnchors() throws {
+    func testShanShuiV1AndV2CarryAnchorsFlowersDoNot() throws {
         let size = CGSize(width: 402, height: 874)
         let v2 = try Self.drawing("枫桥", .riverbank, size, side: .right)
         XCTAssertNotNil(v2.anchors)
         XCTAssertEqual(v2.anchors?.isEmpty, false)
-        let v1 = try XCTUnwrap(ZXArt.drawing(procedural: .init(generator: "shanshui@1", seed: "枫桥", variant: "江岸"),
-                                             palette: .paperInk, pixelSize: size))
-        XCTAssertNil(v1.anchors, "@1 不加")
+        for variant in Variant.allCases {
+            let v1 = try Self.drawingV1("枫桥", variant, size)
+            XCTAssertEqual(v1.anchors?.isEmpty, false, "@1 \(variant.rawValue) 有锚点")
+        }
         for generator in ["nonflowers@1", "nonflowers@2"] {
             let flower = try XCTUnwrap(ZXArt.drawing(procedural: .init(generator: generator, seed: "42", variant: "梅"),
                                                      palette: .paperInk, pixelSize: size))
@@ -165,11 +213,14 @@ final class ZXArtAnchorsTests: XCTestCase {
 
     // MARK: - 合理性
 
-    /// 所有版式 × variant × 诗句边 × 种子的 @2 山水。
-    private func forEveryRecipe(_ body: (String, ZXArt.Drawing, ZXArt.Anchors, ZXArt.VerseLayout) throws -> Void) throws {
+    /// 所有版式 × variant × 诗句边 × 种子的 @2 山水, 再加所有版式 × variant × 种子的 @1 山水 (没有诗句框: `verse` 为 nil)。
+    private func forEveryRecipe(_ body: (String, ZXArt.Drawing, ZXArt.Anchors, ZXArt.VerseLayout?) throws -> Void) throws {
         for seed in Self.seeds {
             for variant in Variant.allCases {
                 for size in Self.sizes {
+                    let v1 = try Self.drawingV1(seed, variant, size)
+                    let label1 = "@1 \(seed) \(variant.rawValue) \(Int(size.width))x\(Int(size.height))"
+                    try body(label1, v1, try XCTUnwrap(v1.anchors, label1), nil)
                     for side in Self.sides {
                         let d = try Self.drawing(seed, variant, size, side: side, density: 1.3)
                         let label = "\(seed) \(variant.rawValue) \(Int(size.width))x\(Int(size.height)) \(side)"
@@ -237,6 +288,7 @@ final class ZXArtAnchorsTests: XCTestCase {
     /// 船、人、树、屋的基准点不落在诗句框里 (与 cull 同一个禁区; 被 cull 的整件不记)。
     func testNothingAnchoredInsideTheVerseBox() throws {
         try forEveryRecipe { label, _, a, verse in
+            guard let verse else { return }   // @1 没有诗句框
             let box = verse.rect
             func outside(_ x: Double, _ y: Double, _ what: String) {
                 XCTAssertFalse(box.contains(CGPoint(x: x, y: y)), "\(label): \(what) (\(x), \(y)) 落在诗句框 \(box) 里")

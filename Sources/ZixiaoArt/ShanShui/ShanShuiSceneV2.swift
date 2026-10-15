@@ -24,6 +24,7 @@ extension ShanShuiEngine {
                    verse: ZXArt.VerseLayout) -> (parts: [Part], anchors: ZXArt.Anchors?) {
         drawTowers = false
         anchorLog = recordsAnchors ? [] : nil
+        anchorPieces = []
         let d = min(max(params.density, 0), 1)
         let q = min(max(params.quietTop, 0), 0.5) * H
         let wide = W > H * 1.3
@@ -79,24 +80,6 @@ extension ShanShuiEngine {
         }
 
         var parts: [Part] = []
-        /// 记下的意象 (逻辑坐标, 已是最终位置; 末了按诗句框的禁区去掉被 cull 的笔画再换算)。
-        var pieces: [ZXArt.AnchorPiece] = []
-        /// 记一件整件的东西 (水纹、船), 原样交回笔画。
-        func noted(_ kind: ZXArt.AnchorPiece.Kind, _ canv: ZXArt.SSCanv) -> ZXArt.SSCanv {
-            if anchorLog != nil, !canv.isEmpty { pieces.append(ZXArt.AnchorPiece(kind: kind, canv: canv)) }
-            return canv
-        }
-        /// 记一座山: 山脊 (`final` = placed / fit 之后) 加 `mountain()` 报上来的树与屋 (按同一个平移换算)。
-        func notedMountain(_ role: ZXArt.Anchors.Ridge.Role, raw: ZXArt.SSCanv, final: ZXArt.SSCanv) {
-            let onMountain = takeAnchorLog()
-            guard anchorLog != nil else { return }
-            let (dx, dy) = ShanShuiEngine.translation(from: raw, to: final)
-            pieces.append(ZXArt.AnchorPiece(kind: .ridge(role), canv: final))
-            for piece in onMountain {
-                pieces.append(ZXArt.AnchorPiece(kind: piece.kind, canv: ShanShuiEngine.shifted(piece.canv, dx: dx, dy: dy)))
-            }
-        }
-
         /// 远山: 铺满 span 的一条 (满宽时两端各出画 10%; 贴着诗栏的一端收在栏外), 渲染时雾化。
         func distant(_ y: Double, _ hei: Double, peak: Double = 0.9) -> Part {
             let (sa, sb) = span(y - hei, y + 30)
@@ -275,7 +258,7 @@ extension ShanShuiEngine {
             return p
         }
         let anchors: ZXArt.Anchors? = anchorLog == nil ? nil
-            : ZXArt.Anchors.build(pieces: pieces, width: W, height: H, blocked: blocked)
+            : ZXArt.Anchors.build(pieces: anchorPieces, width: W, height: H, blocked: blocked)
         anchorLog = nil
         return (culled, anchors)
     }

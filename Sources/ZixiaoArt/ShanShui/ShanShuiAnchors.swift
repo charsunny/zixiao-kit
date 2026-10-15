@@ -4,14 +4,14 @@
 //  它们要知道意象在哪, 而画本身只是一堆多边形。锚点随 `ZXArt.Drawing.anchors` 返回, 全部是单位坐标
 //  (0…1, 左上为原点, x 乘画布宽、y 乘画布高), 与 `verseLayout` 同一套。
 //
-//  只记录, 不改构图: 记录发生在 `composeV2` 里已经算好的笔画上 (山 / 船 / 水纹整件, 山上的树与屋由 `mountain()`
+//  只记录, 不改构图: 记录发生在 `compose` / `composeV2` 里已经算好的笔画上 (山 / 船 / 水纹整件, 山上的树与屋由 `mountain()`
 //  在生成时顺手报一声), 不取随机数、不改取数顺序、不改任何位置与笔画 —— @2 的出图与加锚点之前逐字节相同
-//  (`Fixtures/zxart/procedural-v2.json` 的指纹, 与 `ZXArtAnchorsTests` 里「记录开 / 关各画一遍逐点相同」)。
+//  (`Fixtures/zxart/procedural-v1.json` / `procedural-v2.json` 的指纹, 与 `ZXArtAnchorsTests` 里「记录开 / 关各画一遍逐点相同」)。
 //  被 `fit` 平移的山, 它身上的树与屋 (记录时是山的原始坐标) 一起按同一个位移换算; 被 `cull` 去掉的笔画
 //  (落在诗句框里的) 不参与: 山脊与水只取剩下的笔画, 树 / 屋 / 船只要有一笔被去掉整件不记。
 //
-//  只有 @2 山水有锚点; @1 (`compose`)、花、原作第一屏的 `Drawing.anchors` 为 nil。
-//  锚点是「画了什么」的描述, 渲染不读。
+//  shanshui@1 (`compose`) 与 @2 (`composeV2`) 都有锚点; @1 没有诗句框、没有 fit / cull, 其余同 @2 (横幅小组件的构图也记)。
+//  花、原作第一屏的 `Drawing.anchors` 为 nil。锚点是「画了什么」的描述, 渲染不读。
 
 import CoreGraphics
 import Foundation
@@ -19,7 +19,7 @@ import Foundation
 // MARK: - 公开的数据形状
 
 public extension ZXArt {
-    /// 一幅 @2 山水里的意象锚点 (单位坐标)。每一类可能为空: 画里没有的意象 (例如密度低时没有船) 就没有对应锚点。
+    /// 一幅山水 (@1 / @2) 里的意象锚点 (单位坐标)。每一类可能为空: 画里没有的意象 (例如密度低时没有船) 就没有对应锚点。
     struct Anchors: Sendable, Hashable {
         /// 各山层的山脊折线 (远山、主峰后的次峰、主峰、侧山), 按生成的先后。
         public var ridges: [Ridge] = []
@@ -31,6 +31,7 @@ public extension ZXArt {
         public var trees: [Tree] = []
         public var buildings: [Building] = []
         /// 画顶到最高山脊之间的空白带 (放月、雁)。山顶几乎顶到画顶 (< 2% 画高) 时为 nil。
+        /// @1 / @2 都从画顶算起 (含顶部留白与 @2 的时钟区)。
         /// 只是「没有山」的范围, 诗句框 / 时钟区另算 (`verseLayout`), 用的人自己避开。
         public var sky: SkyBand?
 
@@ -165,7 +166,7 @@ public extension ZXArt {
 // MARK: - 构图过程中记下的东西 (内部)
 
 extension ZXArt {
-    /// `composeV2` / `mountain()` 生成时记下的一件东西: 种类 + 它的笔画 (逻辑坐标, 平移前后各自成立)。
+    /// `compose` / `composeV2` / `mountain()` 生成时记下的一件东西: 种类 + 它的笔画 (逻辑坐标, 平移前后各自成立)。
     struct AnchorPiece: Sendable {
         enum Kind: Sendable, Hashable {
             case ridge(Anchors.Ridge.Role)
@@ -184,6 +185,24 @@ extension ShanShuiEngine {
     func noteAnchor(_ kind: ZXArt.AnchorPiece.Kind, _ canv: ZXArt.SSCanv) {
         guard anchorLog != nil, !canv.isEmpty else { return }
         anchorLog?.append(ZXArt.AnchorPiece(kind: kind, canv: canv))
+    }
+
+    /// 记一件整件的东西 (水纹、船、远山、岸上的树), 原样交回笔画。构图里的调用夹在原来的语句之间。
+    @discardableResult
+    func noted(_ kind: ZXArt.AnchorPiece.Kind, _ canv: ZXArt.SSCanv) -> ZXArt.SSCanv {
+        if anchorLog != nil, !canv.isEmpty { anchorPieces.append(ZXArt.AnchorPiece(kind: kind, canv: canv)) }
+        return canv
+    }
+
+    /// 记一座山: 山脊 (`final` = placed / fit 之后) 加 `mountain()` 报上来的树与屋 (按同一个平移换算)。
+    func notedMountain(_ role: ZXArt.Anchors.Ridge.Role, raw: ZXArt.SSCanv, final: ZXArt.SSCanv) {
+        let onMountain = takeAnchorLog()
+        guard anchorLog != nil else { return }
+        let (dx, dy) = ShanShuiEngine.translation(from: raw, to: final)
+        anchorPieces.append(ZXArt.AnchorPiece(kind: .ridge(role), canv: final))
+        for piece in onMountain {
+            anchorPieces.append(ZXArt.AnchorPiece(kind: piece.kind, canv: ShanShuiEngine.shifted(piece.canv, dx: dx, dy: dy)))
+        }
     }
 
     /// 取走并清空 `mountain()` 生成时记下的树与屋 (它们还是山的原始坐标)。
