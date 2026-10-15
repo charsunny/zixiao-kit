@@ -260,11 +260,12 @@ extension ZXArt.Anchors {
                 guard whole, let e = Extent(drawn), let p = e.placement(width: W, height: H) else { continue }
                 out.buildings.append(Building(kind: kind, x: p.x, baseY: p.base, roofY: p.top, width: p.width))
             case .boat:
-                // boat01 = 人 (若干笔) + 船身 (最后两笔: 填充 + 描边)。
-                guard whole, drawn.count >= 3, let hull = Extent(Array(drawn.suffix(2))),
+                // boat01 = 持杖 (第一笔) + 人 (衣、头、斗笠) + 船身 (最后两笔: 填充 + 描边)。
+                // 杖可伸出船外，不能把它计入人物中心、脚下或朝向。
+                guard whole, drawn.count >= 4, let hull = Extent(Array(drawn.suffix(2))),
                       let h = hull.placement(width: W, height: H) else { continue }
                 // 船身朝哪边画 (xoff 在船头一端): 人坐在船头一侧。
-                let man = Array(drawn.dropLast(2))
+                let man = Array(drawn.dropFirst().dropLast(2))
                 out.boats.append(Boat(x: h.x, y: h.base, length: h.width, flipped: Self.isFlipped(man: man, hull: hull)))
                 if let m = Extent(man), let p = m.placement(width: W, height: H) {
                     out.figures.append(Figure(x: p.x, baseY: p.base, topY: p.top, wearsStrawHat: true))
