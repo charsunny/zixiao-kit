@@ -419,8 +419,11 @@ public extension ZXArt {
             }
             let engine = ShanShuiEngine(seed: seed)
             let parts: [ShanShuiEngine.Part]
+            var anchors: Anchors?
             if let verse = params.verse {
-                parts = engine.composeV2(width: W, height: H, params: params, verse: verse)
+                let composed = engine.composeV2(width: W, height: H, params: params, verse: verse)
+                parts = composed.parts
+                anchors = composed.anchors
             } else {
                 parts = engine.compose(width: W, height: H, params: params)
             }
@@ -433,6 +436,7 @@ public extension ZXArt {
                             quietRect: W > H * 1.3 ? CGRectCodable(x: 0, y: 0, width: 0.42 * W, height: H)
                                                     : CGRectCodable(x: 0, y: 0, width: W, height: params.quietTop * H))
             if let verse = params.verse { d.setVerse(verse, quietTop: params.quietTop) }
+            d.anchors = anchors
             return (d, trace)
         }
 

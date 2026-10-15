@@ -97,6 +97,9 @@ public extension ZXArt {
         public var verseRect: CGRectCodable?
         /// @2: 诗句框 + 竖排 / 横排 (单位坐标)。@1 为 nil。
         public var verseLayout: VerseLayout?
+        /// shanshui@2: 意象锚点 (山脊、水、船、人、树、屋、天空带; 单位坐标), 给在画上叠雨雪岚雁月的客户端用。
+        /// 只记录, 不影响出图 (见 ShanShuiAnchors.swift)。@1、花、原作第一屏为 nil。
+        public var anchors: Anchors?
 
         public init(width: Double, height: Double, background: ZXHex, paper: PaperTexture? = nil,
                     layers: [Layer] = [], quietRect: CGRectCodable? = nil) {
