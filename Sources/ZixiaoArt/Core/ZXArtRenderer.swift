@@ -112,10 +112,13 @@ extension ZXArt {
 public extension ZXArt {
     /// 画进一个 y 向下的上下文 (SwiftUI Canvas 的 `withCGContext`、或 `render` 翻转过的位图)。
     /// `rect` 用上下文当前单位; `pixelsPerUnit` 是这些单位对应的设备像素 (滤镜层离屏位图用)。
-    static func draw(_ drawing: Drawing, in ctx: CGContext, rect: CGRect, pixelsPerUnit: CGFloat) {
+    /// `includesGround` 为 false 时不画底色与纸纹, 只画图层 (画进一个清空的上下文就是透明底的图层图; 缺省 true,
+    /// 与以前逐位相同)。
+    static func draw(_ drawing: Drawing, in ctx: CGContext, rect: CGRect, pixelsPerUnit: CGFloat,
+                     includesGround: Bool = true) {
         let visible = ctx.boundingBoxOfClipPath.intersection(rect)
         draw(Prepared(drawing), in: ctx, rect: rect, visible: visible.isNull ? rect : visible,
-             pixelsPerUnit: pixelsPerUnit)
+             pixelsPerUnit: pixelsPerUnit, ground: includesGround)
     }
 }
 
