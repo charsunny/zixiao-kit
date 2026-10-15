@@ -12,7 +12,8 @@
 //
 //  @2 (2026-09-30): 构图给诗留一块「诗句框」(`verseLayout`, 见 ZXArtVerse.swift) —— 竖排是一侧的竖栏,
 //  横排是时钟区下的横带 —— 山与花绕开它, 客户端把诗排进这个框。生成器 (随机序列、笔触) 与 @1 相同,
-//  只是构图 (山水: `composeV2`; 花: 摆放的区域) 不同。@1 的代码路径一字未动。
+//  只是构图 (山水: `composeV2`; 花: 摆放的区域) 不同。@1 的代码路径一字未动 (山水 @1 / @2 另有只记录的意象锚点,
+//  `Drawing.anchors`, 见 ShanShuiAnchors.swift: 不取随机数、不改出图, 指纹与逐位对照测试保证)。
 //
 //  配色取 style.palette 的 paper / ink; wash 缺省 = ink 以 40% 叠在 paper 上。
 //  未知 generator / 版本 / variant → `render` 返回 nil, 调用方回退纸纹 (配方原样保留)。

@@ -10,15 +10,21 @@
 //
 //  随机数从本引擎按固定顺序取 (web 预览 zxart-compose.js 逐行对照)。改动这里任何取数 / 位置都会改变 @2
 //  的出图 —— 另开 @3, 保留本函数。
+//
+//  意象锚点 (`ZXArt.Anchors`, 见 ShanShuiAnchors.swift): 同一趟里顺手记下山脊 / 水纹 / 船 / 山上与岸上的树 / 屋,
+//  末了按 fit 之后、cull 之后的样子换算成单位坐标随 `Drawing.anchors` 返回。只记录: 记录的调用都夹在原来的
+//  语句之间, 不取随机数、不改取数顺序、不改位置与笔画 (`recordsAnchors = false` 时一概不记, 出图相同)。
 
 import CoreGraphics
 import Foundation
 
 extension ShanShuiEngine {
-    /// 构图 @2 (shanshui@2)。`verse.rect` 是单位坐标。
+    /// 构图 @2 (shanshui@2)。`verse.rect` 是单位坐标。同时返回意象锚点 (`recordsAnchors` 关着时为 nil)。
     func composeV2(width W: Double, height H: Double, params: ZXArt.ShanShui.Params,
-                   verse: ZXArt.VerseLayout) -> [Part] {
+                   verse: ZXArt.VerseLayout) -> (parts: [Part], anchors: ZXArt.Anchors?) {
         drawTowers = false
+        anchorLog = recordsAnchors ? [] : nil
+        anchorPieces = []
         let d = min(max(params.density, 0), 1)
         let q = min(max(params.quietTop, 0), 0.5) * H
         let wide = W > H * 1.3
@@ -74,7 +80,6 @@ extension ShanShuiEngine {
         }
 
         var parts: [Part] = []
-
         /// 远山: 铺满 span 的一条 (满宽时两端各出画 10%; 贴着诗栏的一端收在栏外), 渲染时雾化。
         func distant(_ y: Double, _ hei: Double, peak: Double = 0.9) -> Part {
             let (sa, sb) = span(y - hei, y + 30)
@@ -97,6 +102,7 @@ extension ShanShuiEngine {
                     return q
                 }
             }
+            _ = noted(.ridge(.far), c)
             return Part(canv: c, mist: .init(depth: hei * 1.1, blur: 1.2, peak: peak, floorY: y + 8, floorDepth: hei * 0.55))
         }
         func waterLines(_ y0: Double, _ y1: Double, count: Int) -> ZXArt.SSCanv {
@@ -114,7 +120,7 @@ extension ShanShuiEngine {
         func boat(_ y: Double, _ sca: Double) -> ZXArt.SSCanv {
             let (xa, xb) = span(y - 30, y + 10)
             let x = xa + (xb - xa) * (0.25 + 0.5 * r())
-            return boat01(x, y, r(), sca: sca, fli: e.choice([true, false]))
+            return noted(.boat, boat01(x, y, r(), sca: sca, fli: e.choice([true, false])))
         }
         /// 近岸 (同 @1): 平岸 + 一丛同种的树 + 一两块石。`cx` 在画布边上, `inward` 指向画面内侧。
         func bank(_ cx: Double, _ y: Double, wid: Double, inward: Double) -> ZXArt.SSCanv {
@@ -129,10 +135,14 @@ extension ShanShuiEngine {
                 let tx = tx0 + inward * Double(k) * (9 + 7 * r())
                 let ht = (species == 1 ? 55 : 70) * (0.75 + 0.5 * r())
                 if species == 1 {
-                    c += tree01(tx, ground + 4 * r(), hei: ht, wid: 2 + 2 * r(), col: .ink(0.45 + 0.15 * r()))
+                    let tree = tree01(tx, ground + 4 * r(), hei: ht, wid: 2 + 2 * r(), col: .ink(0.45 + 0.15 * r()))
+                    c += tree
+                    _ = noted(.tree(.tree01), tree)
                 } else {
                     let bc = r() * 0.08
-                    c += tree03(tx, ground + 4 * r(), hei: ht, ben: { pow($0 * bc, 1) }, col: .ink(0.35 + 0.1 * r()))
+                    let tree = tree03(tx, ground + 4 * r(), hei: ht, ben: { pow($0 * bc, 1) }, col: .ink(0.35 + 0.1 * r()))
+                    c += tree
+                    _ = noted(.tree(.tree03), tree)
                 }
             }
             let rocks = 1 + (r() < 0.4 ? 1 : 0)
@@ -167,12 +177,16 @@ extension ShanShuiEngine {
                     let hei = (0.5 + 0.15 * r()) * R
                     let wid = (0.6 + 0.2 * r()) * bw
                     let b = mountain(bx, fy(0.6), r() * 100, hei: hei, wid: wid, tex: 150 * texScale)
-                    backs += fit(placed(b, topY: fy(0.12 + 0.08 * r())))
+                    let moved = fit(placed(b, topY: fy(0.12 + 0.08 * r())))
+                    notedMountain(.back, raw: b, final: moved)
+                    backs += moved
                 } else {
                     // 对侧一座矮山 (竖栏时在诗句之下)
                     let bx = ox(0.2 + 0.08 * r())
                     let b = mountain(bx, fy(0.75), r() * 100, hei: 0.3 * R, wid: 0.55 * bw, tex: 120 * texScale)
-                    backs += fit(placed(b, topY: max(fy(0.30 + 0.08 * r()), roomBelow ? ey1 + 0.02 * R : 0)))
+                    let moved = fit(placed(b, topY: max(fy(0.30 + 0.08 * r()), roomBelow ? ey1 + 0.02 * R : 0)))
+                    notedMountain(.back, raw: b, final: moved)
+                    backs += moved
                 }
             }
             parts.append(Part(canv: backs))
@@ -181,9 +195,10 @@ extension ShanShuiEngine {
             let wid = (0.95 + 0.25 * r()) * bw
             let m0 = mountain(cx, fy(0.75), r() * 100, hei: hei, wid: wid, tex: 220 * texScale)
             let main = fit(placed(m0, topY: fy(0.03 + 0.05 * r())))
+            notedMountain(.main, raw: m0, final: main)
             // 水从主峰山脚 (实测) 往下铺, 画在山的下面。
             let base = min(ShanShuiEngine.bottom(main) ?? fy(0.8), H - 0.12 * R)
-            parts.append(Part(canv: waterLines(base - 0.02 * R, H - 0.03 * R, count: 2 + Int(3 * d))))
+            parts.append(Part(canv: noted(.water, waterLines(base - 0.02 * R, H - 0.03 * R, count: 2 + Int(3 * d)))))
             parts.append(Part(canv: main))
             if d > 0.2 { parts.append(Part(canv: boat(fy(0.90 + 0.06 * r()), 0.6))) }
         case .riverbank:
@@ -191,13 +206,17 @@ extension ShanShuiEngine {
             let hei = (0.55 + 0.15 * r()) * R
             let m1 = mountain(mx(0.3), fy(0.45), r() * 100, hei: hei, wid: s != 0 ? 1.2 * aw : 0.8 * W,
                               tex: 160 * texScale)
-            parts.append(Part(canv: fit(placed(m1, topY: fy(0.10 + 0.08 * r())))))
+            let m1Moved = fit(placed(m1, topY: fy(0.10 + 0.08 * r())))
+            notedMountain(.main, raw: m1, final: m1Moved)
+            parts.append(Part(canv: m1Moved))
             if d > 0.45 {
                 let m2 = mountain(ox(0.08), fy(0.5), r() * 100, hei: 0.35 * R, wid: 0.55 * bw, tex: 100 * texScale,
                                   veg: true)
-                parts.append(Part(canv: fit(placed(m2, topY: max(fy(0.30 + 0.06 * r()), roomBelow ? ey1 + 0.02 * R : 0)))))
+                let m2Moved = fit(placed(m2, topY: max(fy(0.30 + 0.06 * r()), roomBelow ? ey1 + 0.02 * R : 0)))
+                notedMountain(.side, raw: m2, final: m2Moved)
+                parts.append(Part(canv: m2Moved))
             }
-            parts.append(Part(canv: waterLines(fy(0.55), fy(0.74), count: 2 + Int(2 * d))))
+            parts.append(Part(canv: noted(.water, waterLines(fy(0.55), fy(0.74), count: 2 + Int(2 * d)))))
             if d > 0.2 { parts.append(Part(canv: boat(fy(0.64), 0.55))) }
             // 近岸在主山的对侧下角 (横幅的竖栏占满高时, 贴主山一侧的外缘)
             let bwid = (0.75 + 0.15 * r()) * bw
@@ -224,7 +243,8 @@ extension ShanShuiEngine {
                     parts.append(distant(fy(0.14 + 0.13 * fk), 80 + 35 * fk, peak: 0.5 + 0.22 * fk))
                 }
             }
-            parts.append(Part(canv: waterLines(waterTop, max(fy(0.92), waterTop + 0.05 * R), count: 2 + Int(2 * d))))
+            parts.append(Part(canv: noted(.water, waterLines(waterTop, max(fy(0.92), waterTop + 0.05 * R),
+                                                             count: 2 + Int(2 * d)))))
             if d > 0.15 { parts.append(Part(canv: boat(max(fy(0.72 + 0.1 * r()), waterTop + 0.03 * R), 0.5))) }
             if d > 0.5 {
                 parts.append(Part(canv: bank(m < 0 ? 0 : W, fy(0.97), wid: 0.7 * bw, inward: -m)))
@@ -232,10 +252,14 @@ extension ShanShuiEngine {
         }
 
         // 兜底: 仍有点落在禁区里的笔画整笔去掉。
-        return parts.map { part in
+        let culled: [Part] = parts.map { part in
             var p = part
             p.canv = part.canv.filter { poly in !poly.p.contains { v in v.x.isFinite && v.y.isFinite && blocked(v.x, v.y) } }
             return p
         }
+        let anchors: ZXArt.Anchors? = anchorLog == nil ? nil
+            : ZXArt.Anchors.build(pieces: anchorPieces, width: W, height: H, blocked: blocked)
+        anchorLog = nil
+        return (culled, anchors)
     }
 }

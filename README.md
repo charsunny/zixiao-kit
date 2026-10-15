@@ -15,7 +15,7 @@
 | ZixiaoLibrary | iOS / Catalyst 线装书阅读器；公开 re-export ZixiaoLibraryCore | ZixiaoLibraryCore, ZixiaoDesign |
 | ZixiaoPoetCore | 编成与资源、只读数据 (PoetStore)、用户同步 (PoetUserData)、多编成共享会话 (PoetSession)、阅读推导；无 UI | ZixiaoCore, ZixiaoCalendar, supabase-swift |
 | ZixiaoPoet | iOS / Catalyst 启动层与能力视图；公开 re-export ZixiaoPoetCore。诗人资源随各 App 包发，内核零诗人名 (`Tools/lint-no-poet-names.sh`) | ZixiaoPoetCore, ZixiaoDesign, ZixiaoLibrary, ZixiaoArt, SwiftPieces |
-| ZixiaoArt | 程序化国画 (画屏背景): 山水 (shan-shui-inf 移植) 与花卉 (nonflowers 移植), 配方 `background.procedural` 的解码与渲染 (CoreGraphics 与 SwiftUI Canvas); MIT 致谢 `ZXArt.acknowledgements` | ZixiaoColor |
+| ZixiaoArt | 程序化国画 (画屏背景): 山水 (shan-shui-inf 移植) 与花卉 (nonflowers 移植), 配方 `background.procedural` 的解码与渲染 (CoreGraphics 与 SwiftUI Canvas); shanshui@1 / @2 的 `Drawing.anchors` 记录山脊 / 水 / 船 / 人 / 树 / 屋 / 天空带的位置 (只记录, 不影响出图); MIT 致谢 `ZXArt.acknowledgements` | ZixiaoColor |
 
 `ZixiaoCore`、`ZixiaoCalendar`、`ZixiaoArt`、`ZixiaoLibraryCore`、`ZixiaoPoetCore` 支持原生 macOS 15。
 现有 iOS 客户端可继续导入 `ZixiaoLibrary` / `ZixiaoPoet`，数据类型只在对应 Core 模块定义一份。

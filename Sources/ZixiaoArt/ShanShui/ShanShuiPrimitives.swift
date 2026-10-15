@@ -49,6 +49,13 @@ final class ShanShuiEngine {
     let cwid: Double = 512
     /// 构图开关: 不画电塔 (原作彩蛋, 对「画屏」不合适)。关掉时仍按原作消耗随机数。
     var drawTowers = true
+    /// 意象锚点的记录开关 (@1 / @2 构图用, 见 ShanShuiAnchors.swift)。关掉时 `composeV2` 与 `mountain()` 的行为不变,
+    /// 只是不记 —— 单测拿它对照「记录不改变出图」。
+    var recordsAnchors = true
+    /// `mountain()` 生成时记下的树 / 屋 (山的原始坐标; composeV2 随山的平移换算后取走)。nil = 不记 (原作第一屏)。
+    var anchorLog: [ZXArt.AnchorPiece]?
+    /// 构图 (`compose` / `composeV2`) 记下的东西, 已是最终位置 (逻辑坐标)。
+    var anchorPieces: [ZXArt.AnchorPiece] = []
 
     init(seed: ZXArt.Seed) { e = ZXArt.Entropy(seed: seed) }
 

@@ -81,14 +81,17 @@ extension ShanShuiEngine {
             ptlist.append(row)
         }
 
+        /// `kind` 只给锚点记录用 (见 ShanShuiAnchors.swift): 记下这一棵树 / 这间屋的笔画, 不取随机数、不改笔画。
         func vegetate(_ treeFunc: (Double, Double) -> ZXArt.SSCanv, _ growth: (Int, Int) -> Bool,
-                      _ proof: ([P], Int) -> Bool) {
+                      _ proof: ([P], Int) -> Bool, kind: ZXArt.AnchorPiece.Kind? = nil) {
             var veglist: [P] = []
             for i in 0..<ptlist.count {
                 for j in 0..<ptlist[i].count where growth(i, j) { veglist.append(ptlist[i][j]) }
             }
             for i in 0..<veglist.count where proof(veglist, i) {
-                canv += treeFunc(veglist[i].x, veglist[i].y)
+                let piece = treeFunc(veglist[i].x, veglist[i].y)
+                canv += piece
+                if let kind { noteAnchor(kind, piece) }
             }
         }
         let always: ([P], Int) -> Bool = { _, _ in true }
@@ -100,7 +103,7 @@ extension ShanShuiEngine {
         }, { i, j in
             let ns = self.n(Double(j) * 0.1, seed)
             return i == 0 && ns * ns * ns < 0.1 && abs(ptlist[i][j].y) / h > 0.2
-        }, always)
+        }, always, kind: .tree(.tree02))
 
         // WHITE BG
         canv.append(poly(ptlist[0] + [P(0, Double(reso0) * 4)], xof: xoff, yof: yoff, fil: .white, str: nil))
@@ -116,7 +119,7 @@ extension ShanShuiEngine {
         }, { i, j in
             let ns = self.n(Double(i) * 0.1, Double(j) * 0.1, seed + 2)
             return ns * ns * ns < 0.1 && abs(ptlist[i][j].y) / h > 0.5
-        }, always)
+        }, always, kind: .tree(.tree02))
 
         if veg {
             // MIDDLE
@@ -137,7 +140,7 @@ extension ShanShuiEngine {
                     if counter > 2 { return true }
                 }
                 return false
-            })
+            }, kind: .tree(.tree01))
 
             // BOTTOM
             vegetate({ x, y in
@@ -150,7 +153,7 @@ extension ShanShuiEngine {
             }, { i, j in
                 let ns = self.n(Double(i) * 0.2, Double(j) * 0.05, seed)
                 return (j == 0 || j == ptlist[i].count - 1) && ns * ns * ns * ns < 0.012
-            }, always)
+            }, always, kind: .tree(.tree03))
         }
 
         // BOTT ARCH
@@ -161,9 +164,13 @@ extension ShanShuiEngine {
                 let sto = self.e.choice([1.0, 2, 2, 3])
                 let rot = self.r()
                 let sty = self.e.choice([1, 2, 3])
-                return self.arch02(x + xoff, y + yoff, seed, wid: w, rot: rot, sto: sto, sty: sty)
+                let house = self.arch02(x + xoff, y + yoff, seed, wid: w, rot: rot, sto: sto, sty: sty)
+                self.noteAnchor(.building(.house), house)
+                return house
             } else if tt == 2 {
-                return self.arch04(x + xoff, y + yoff, seed, sto: self.e.choice([1.0, 1, 1, 2, 2]))
+                let pavilion = self.arch04(x + xoff, y + yoff, seed, sto: self.e.choice([1.0, 1, 1, 2, 2]))
+                self.noteAnchor(.building(.pavilion), pavilion)
+                return pavilion
             }
             return []
         }, { i, j in
@@ -178,7 +185,7 @@ extension ShanShuiEngine {
             return self.arch03(x + xoff, y + yoff, seed, wid: w, sto: sto)
         }, { i, j in
             i == 1 && abs(Double(j) - Double(ptlist[i].count) / 2) < 1 && self.r() < 0.02
-        }, always)
+        }, always, kind: .building(.pagoda))
 
         // TRANSM
         vegetate({ x, y in

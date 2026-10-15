@@ -7,6 +7,7 @@
 //  原作是无限横卷 (视窗 3000×800, 按 512 宽的 chunk 规划)。`originalScene` 原样复现它的第一屏,
 //  用来做整幅画的逐多边形对拍; 手机壁纸用的是 `compose` —— 自己的竖幅构图, 只调用移植过来的
 //  生成器 (山 / 远山 / 平岸 / 水 / 船), 不改它们的内部。
+//  `compose` / `composeV2` 同时只记录意象锚点 (ShanShuiAnchors.swift), 不影响出图。
 
 import CoreGraphics
 import Foundation
@@ -242,8 +243,14 @@ extension ShanShuiEngine {
 
     /// 构图 @1 (shanshui@1)。所有随机数都从本引擎按固定顺序取 —— 改动这里的任何取数 / 位置都会
     /// 改变 @1 的出图, 必须另开 @2 (保留本函数不动)。
-    func compose(width W: Double, height H: Double, params: ZXArt.ShanShui.Params) -> [Part] {
+    /// 意象锚点 (见 ShanShuiAnchors.swift) 只记录: 记录的调用夹在原来的语句之间 (`noted` / `notedMountain`),
+    /// 不取随机数、不改取数顺序、不改位置与笔画; `recordsAnchors = false` 时一概不记, 出图相同。
+    /// 同时返回锚点 (`recordsAnchors` 关着时为 nil)。
+    func compose(width W: Double, height H: Double, params: ZXArt.ShanShui.Params)
+        -> (parts: [Part], anchors: ZXArt.Anchors?) {
         drawTowers = false
+        anchorLog = recordsAnchors ? [] : nil
+        anchorPieces = []
         let d = min(max(params.density, 0), 1)
         let q = min(max(params.quietTop, 0), 0.5) * H
         let wide = W > H * 1.3
@@ -257,6 +264,7 @@ extension ShanShuiEngine {
         func distant(_ y: Double, _ hei: Double, from xa: Double, to xb: Double, peak: Double = 0.9) -> Part {
             let len = ((xb - xa + 300) / 50).rounded(.up) * 50
             let c = distMount(xa - 150 + (r() - 0.5) * 60, y, r() * 100, hei: hei, len: len)
+            noted(.ridge(.far), c)
             return Part(canv: c, mist: .init(depth: hei * 1.1, blur: 1.2, peak: peak, floorY: y + 8, floorDepth: hei * 0.55))
         }
         func waterLines(_ y0: Double, _ y1: Double, count: Int, xa: Double, xb: Double) -> ZXArt.SSCanv {
@@ -271,7 +279,7 @@ extension ShanShuiEngine {
             return c
         }
         func boat(_ x: Double, _ y: Double, _ sca: Double) -> ZXArt.SSCanv {
-            boat01(x, y, r(), sca: sca, fli: e.choice([true, false]))
+            noted(.boat, boat01(x, y, r(), sca: sca, fli: e.choice([true, false])))
         }
         /// 近岸: 平岸 (不带原作的 flatDec 杂物) + 克制的点景: 一丛同种的树、一两块石。
         /// `cx` 在画框边上 (岸的一半在画外), `inward` 指向画面内侧。
@@ -288,10 +296,14 @@ extension ShanShuiEngine {
                 let tx = tx0 + inward * Double(k) * (9 + 7 * r())
                 let ht = (species == 1 ? 55 : 70) * (0.75 + 0.5 * r())
                 if species == 1 {
-                    c += tree01(tx, ground + 4 * r(), hei: ht, wid: 2 + 2 * r(), col: .ink(0.45 + 0.15 * r()))
+                    let tree = tree01(tx, ground + 4 * r(), hei: ht, wid: 2 + 2 * r(), col: .ink(0.45 + 0.15 * r()))
+                    c += tree
+                    noted(.tree(.tree01), tree)
                 } else {
                     let bc = r() * 0.08
-                    c += tree03(tx, ground + 4 * r(), hei: ht, ben: { pow($0 * bc, 1) }, col: .ink(0.35 + 0.1 * r()))
+                    let tree = tree03(tx, ground + 4 * r(), hei: ht, ben: { pow($0 * bc, 1) }, col: .ink(0.35 + 0.1 * r()))
+                    c += tree
+                    noted(.tree(.tree03), tree)
                 }
             }
             // 石: 靠内侧 1–2 块小石
@@ -314,16 +326,20 @@ extension ShanShuiEngine {
                 let bx = wide ? fr.x(0.5 + sgn * (0.28 + 0.08 * r())) : fr.x(0.5 + sgn * (0.30 + 0.1 * r()))
                 let m = mountain(bx, fr.y(0.6), r() * 100, hei: (0.55 + 0.15 * r()) * R,
                                  wid: (0.7 + 0.2 * r()) * (wide ? 0.8 * fr.w : fr.w), tex: 150 * texScale)
-                backs += placed(m, topY: fr.y(0.14 + 0.08 * r()))
+                let moved = placed(m, topY: fr.y(0.14 + 0.08 * r()))
+                notedMountain(.back, raw: m, final: moved)
+                backs += moved
             }
             parts.append(Part(canv: backs))
             let mx = wide ? fr.x(0.55 + 0.08 * r()) : fr.x(0.5 - side * (0.05 + 0.08 * r()))
-            let main = placed(mountain(mx, fr.y(0.75), r() * 100, hei: (0.95 + 0.2 * r()) * R,
-                                       wid: (1.0 + 0.25 * r()) * (wide ? 0.75 * fr.w : fr.w), tex: 220 * texScale),
-                              topY: fr.y(0.04 + 0.05 * r()))
+            let main0 = mountain(mx, fr.y(0.75), r() * 100, hei: (0.95 + 0.2 * r()) * R,
+                                 wid: (1.0 + 0.25 * r()) * (wide ? 0.75 * fr.w : fr.w), tex: 220 * texScale)
+            let main = placed(main0, topY: fr.y(0.04 + 0.05 * r()))
+            notedMountain(.main, raw: main0, final: main)
             // 水从主峰山脚 (实测) 往下铺, 画在山的下面。
             let base = min(ShanShuiEngine.bottom(main) ?? fr.y(0.8), H - 0.12 * R)
-            parts.append(Part(canv: waterLines(base - 0.02 * R, H - 0.03 * R, count: 2 + Int(3 * d), xa: fr.x0, xb: fr.x1)))
+            parts.append(Part(canv: noted(.water, waterLines(base - 0.02 * R, H - 0.03 * R, count: 2 + Int(3 * d),
+                                                             xa: fr.x0, xb: fr.x1))))
             parts.append(Part(canv: main))
             if d > 0.2 {
                 let by = fr.y(0.90 + 0.06 * r())
@@ -334,13 +350,18 @@ extension ShanShuiEngine {
             let side: Double = wide ? 1 : (r() < 0.5 ? -1 : 1)
             let m = mountain(fr.x(0.5 + side * 0.34), fr.y(0.45), r() * 100, hei: (0.55 + 0.15 * r()) * R,
                              wid: 0.8 * fr.w, tex: 160 * texScale)
-            parts.append(Part(canv: placed(m, topY: fr.y(0.10 + 0.08 * r()))))
+            let mMoved = placed(m, topY: fr.y(0.10 + 0.08 * r()))
+            notedMountain(.main, raw: m, final: mMoved)
+            parts.append(Part(canv: mMoved))
             if d > 0.45 {
                 let m2 = mountain(fr.x(0.5 - side * 0.42), fr.y(0.50), r() * 100, hei: 0.35 * R, wid: 0.55 * fr.w,
                                   tex: 100 * texScale, veg: true)
-                parts.append(Part(canv: placed(m2, topY: fr.y(0.30 + 0.06 * r()))))
+                let m2Moved = placed(m2, topY: fr.y(0.30 + 0.06 * r()))
+                notedMountain(.side, raw: m2, final: m2Moved)
+                parts.append(Part(canv: m2Moved))
             }
-            parts.append(Part(canv: waterLines(fr.y(0.55), fr.y(0.74), count: 2 + Int(2 * d), xa: fr.x0, xb: fr.x1)))
+            parts.append(Part(canv: noted(.water, waterLines(fr.y(0.55), fr.y(0.74), count: 2 + Int(2 * d),
+                                                             xa: fr.x0, xb: fr.x1))))
             if d > 0.2 { parts.append(Part(canv: boat(fr.x(0.5 - side * (0.05 + 0.2 * r())), fr.y(0.64), 0.55))) }
             // 近岸在主山的对侧下角, 画面下方正中留出水面。
             let bw = (0.75 + 0.15 * r()) * fr.w
@@ -352,14 +373,18 @@ extension ShanShuiEngine {
                 parts.append(distant(fr.y(0.14 + 0.13 * fk), 80 + 35 * fk, from: wide ? 0.4 * W : 0, to: W,
                                      peak: 0.5 + 0.22 * fk))
             }
-            parts.append(Part(canv: waterLines(fr.y(0.62), fr.y(0.92), count: 2 + Int(2 * d), xa: fr.x0, xb: fr.x1)))
+            parts.append(Part(canv: noted(.water, waterLines(fr.y(0.62), fr.y(0.92), count: 2 + Int(2 * d),
+                                                             xa: fr.x0, xb: fr.x1))))
             if d > 0.15 { parts.append(Part(canv: boat(fr.x(0.15 + 0.6 * r()), fr.y(0.72 + 0.1 * r()), 0.5))) }
             if d > 0.5 {
                 let side: Double = wide ? 1 : (r() < 0.5 ? -1 : 1)
                 parts.append(Part(canv: bank(fr.x(0.5 + side * 0.5), fr.y(0.97), wid: 0.7 * fr.w, inward: -side)))
             }
         }
-        return parts
+        let anchors: ZXArt.Anchors? = anchorLog == nil ? nil
+            : ZXArt.Anchors.build(pieces: anchorPieces, width: W, height: H, blocked: { _, _ in false })
+        anchorLog = nil
+        return (parts, anchors)
     }
 }
 
@@ -419,10 +444,15 @@ public extension ZXArt {
             }
             let engine = ShanShuiEngine(seed: seed)
             let parts: [ShanShuiEngine.Part]
+            var anchors: Anchors?
             if let verse = params.verse {
-                parts = engine.composeV2(width: W, height: H, params: params, verse: verse)
+                let composed = engine.composeV2(width: W, height: H, params: params, verse: verse)
+                parts = composed.parts
+                anchors = composed.anchors
             } else {
-                parts = engine.compose(width: W, height: H, params: params)
+                let composed = engine.compose(width: W, height: H, params: params)
+                parts = composed.parts
+                anchors = composed.anchors
             }
             var trace = ZXArt.Trace(logicalWidth: W, logicalHeight: H, prngAfter: engine.e.state)
             for part in parts { for p in part.canv { trace.add(p.p.map { ($0.x, $0.y) }) } }
@@ -433,6 +463,7 @@ public extension ZXArt {
                             quietRect: W > H * 1.3 ? CGRectCodable(x: 0, y: 0, width: 0.42 * W, height: H)
                                                     : CGRectCodable(x: 0, y: 0, width: W, height: params.quietTop * H))
             if let verse = params.verse { d.setVerse(verse, quietTop: params.quietTop) }
+            d.anchors = anchors
             return (d, trace)
         }
 
