@@ -38,8 +38,8 @@ public enum ZXPaletteCatalog {
                 Entry(.moonWhite, imagery: "冷月、青灰"),
                 Entry(.xiangLeaf, imagery: "旧书缃帙、暖黄"),
                 Entry(.canglang, imagery: "新竹、青绿"),
-                Entry(.ouhe, imagery: "藕粉、淡紫"),
-                Entry(.daiBlue, imagery: "远山黛、沉静"),
+                Entry(.ousi, imagery: "藕粉、淡紫"),
+                Entry(.qingdai, imagery: "远山黛、沉静"),
                 Entry(.rouge, imagery: "胭脂、喜气")
             ]
         } catch { preconditionFailure("随包配色目录损坏：\(error)") }
@@ -47,13 +47,26 @@ public enum ZXPaletteCatalog {
 
     public static let seasonalID = "seasonal"
 
+    public static func seasonalLabel(for season: ZXSeasonTint) -> String {
+        let name: String
+        switch season {
+        case .spring: name = "春"
+        case .summer: name = "夏"
+        case .lateSummer: name = "长夏"
+        case .autumn: name = "秋"
+        case .winter: name = "冬"
+        }
+        let entry = entries.first { $0.bundled == palette(for: season) }
+        return "随节气 · \(name) · \(entry?.name ?? "")"
+    }
+
     public static func palette(for season: ZXSeasonTint) -> ZXBundledIdentity {
         switch season {
         case .spring: .canglang
         case .summer: .rouge
         case .lateSummer: .xiangLeaf
         case .autumn: .moonWhite
-        case .winter: .daiBlue
+        case .winter: .qingdai
         }
     }
 }

@@ -5,6 +5,7 @@ public struct ZXPalettePicker: View {
     @Binding private var selection: String
     private let entries: [ZXPaletteCatalog.Entry]
     private let includesSeasonal: Bool
+    private let season: ZXSeasonTint
     private let isLocked: (String) -> Bool
     private let onLockedTap: (String) -> Void
     @Environment(\.colorScheme) private var scheme
@@ -13,11 +14,12 @@ public struct ZXPalettePicker: View {
     @Environment(\.zxTheme) private var theme
 
     public init(selection: Binding<String>, entries: [ZXPaletteCatalog.Entry] = ZXPaletteCatalog.entries,
-                includesSeasonal: Bool = true, isLocked: @escaping (String) -> Bool = { _ in false },
+                includesSeasonal: Bool = true, season: ZXSeasonTint, isLocked: @escaping (String) -> Bool = { _ in false },
                 onLockedTap: @escaping (String) -> Void = { _ in }) {
         _selection = selection
         self.entries = entries
         self.includesSeasonal = includesSeasonal
+        self.season = season
         self.isLocked = isLocked
         self.onLockedTap = onLockedTap
     }
@@ -28,9 +30,11 @@ public struct ZXPalettePicker: View {
                 card(id: entry.id, name: entry.name, imagery: entry.imagery,
                      swatch: scheme == .dark ? entry.dark : entry.light)
             }
-            if includesSeasonal, let first = entries.first {
-                card(id: ZXPaletteCatalog.seasonalID, name: "随节气", imagery: "五行之季，应时换色",
-                     swatch: scheme == .dark ? first.dark : first.light)
+            if includesSeasonal, let seasonal = ZXPaletteCatalog.entries.first(where: {
+                $0.bundled == ZXPaletteCatalog.palette(for: season)
+            }) {
+                card(id: ZXPaletteCatalog.seasonalID, name: ZXPaletteCatalog.seasonalLabel(for: season),
+                     imagery: "五行之季，应时换色", swatch: scheme == .dark ? seasonal.dark : seasonal.light)
             }
         }
     }
@@ -77,5 +81,5 @@ public struct ZXPalettePicker: View {
 }
 
 #Preview {
-    ScrollView { ZXPalettePicker(selection: .constant("moon-white")).padding() }
+    ScrollView { ZXPalettePicker(selection: .constant("moon-white"), season: .autumn).padding() }
 }

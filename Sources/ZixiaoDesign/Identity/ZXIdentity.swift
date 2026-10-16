@@ -155,8 +155,8 @@ public enum ZXBundledIdentity: String, CaseIterable, Sendable {
     case moonWhite = "moon-white"
     case xiangLeaf = "xiang-leaf"
     case canglang
-    case ouhe
-    case daiBlue = "dai-blue"
+    case ousi
+    case qingdai = "qingdai"
     case rouge
 }
 

@@ -47,7 +47,34 @@ final class PaletteTests: XCTestCase {
         XCTAssertEqual(ZXPaletteCatalog.palette(for: .summer), .rouge)
         XCTAssertEqual(ZXPaletteCatalog.palette(for: .lateSummer), .xiangLeaf)
         XCTAssertEqual(ZXPaletteCatalog.palette(for: .autumn), .moonWhite)
-        XCTAssertEqual(ZXPaletteCatalog.palette(for: .winter), .daiBlue)
+        XCTAssertEqual(ZXPaletteCatalog.palette(for: .winter), .qingdai)
+    }
+
+    func testSeasonalLabelsAndRenamedPaletteSources() throws {
+        let labels: [(ZXSeasonTint, String)] = [
+            (.spring, "随节气 · 春 · 苍筤"), (.summer, "随节气 · 夏 · 胭脂"),
+            (.lateSummer, "随节气 · 长夏 · 缃叶"), (.autumn, "随节气 · 秋 · 月白"),
+            (.winter, "随节气 · 冬 · 青黛")
+        ]
+        for (season, label) in labels {
+            XCTAssertEqual(ZXPaletteCatalog.seasonalLabel(for: season), label)
+            let palette = try ZXIdentity.bundled(ZXPaletteCatalog.palette(for: season))
+            let entry = try XCTUnwrap(ZXPaletteCatalog.entries.first { $0.name == palette.name })
+            XCTAssertEqual(entry.light, palette.palette.light)
+            XCTAssertEqual(entry.dark, palette.palette.dark)
+        }
+        XCTAssertEqual(ZXBundledIdentity.ousi.rawValue, "ousi")
+        XCTAssertEqual(ZXBundledIdentity.qingdai.rawValue, "qingdai")
+        let ousi = try ZXIdentity.bundled(.ousi)
+        XCTAssertEqual(ousi.name, "藕丝")
+        for source in ["粉霞红绶藕丝裙", "李贺", "天上谣", "681fe831-2fb0-4bae-bb2a-41d499309c7a"] {
+            XCTAssertTrue(ousi.rationale.contains(source))
+        }
+        let qingdai = try ZXIdentity.bundled(.qingdai)
+        XCTAssertEqual(qingdai.name, "青黛")
+        for source in ["一螺青黛镜中心", "雍陶", "题君山", "2f5e562a-ff78-42e3-8c1b-d9b3686907c5"] {
+            XCTAssertTrue(qingdai.rationale.contains(source))
+        }
     }
 
     func testApplyingPalettePreservesProductTypeAndSlots() throws {
