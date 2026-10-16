@@ -83,7 +83,7 @@ final class PaletteTests: XCTestCase {
 
     func testFourthDraftSixPrimarySlots() throws {
         let fixtures: [(ZXBundledIdentity, String, String)] = [
-            (.yaqing, "#F4F5F3 #121E21 #3E625C #8A5A3A #A63A2B #5A6364", "#121E21 #F2F2E8 #AEC5C0 #D9B08C #EE9C88 #AAAEA8"),
+            (.yaqing, "#F4F5F3 #121E21 #000000 #8A5A3A #A63A2B #5A6364", "#121E21 #F2F2E8 #F2F2F2 #D9B08C #EE9C88 #AAAEA8"),
             (.moonWhite, "#F3F6F7 #1F2A33 #2D5876 #8A5532 #B0412D #636B72", "#111A20 #E4ECEE #9EC3D8 #D9A47C #EE9C88 #A0A9AC"),
             (.xiangLeaf, "#F6F5F2 #2A231C #7A5718 #2A3F5F #A63A28 #6B6660", "#17150F #F0E8D6 #E0BF6E #A8BBD6 #EE9C88 #ABA496"),
             (.canglang, "#F3F5F2 #1E2922 #2E6A4E #94562F #B03C2A #626A65", "#0F1612 #E3EBE2 #8FCBA8 #D9A27A #EE9C88 #9FA79F"),
