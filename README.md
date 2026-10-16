@@ -50,7 +50,7 @@ xcodebuild -scheme ZixiaoKit-Package -destination 'platform=iOS Simulator,name=i
 Apple 共用组件、风格及产品规范索引见 [设计规范](Docs/Design/README.md)。
 
 传统色配色见 [方案](Docs/Design/THEME_PALETTES.md)。`ZXPaletteCatalog.entries` 提供七套配色
-（纸墨朱印与六套传统色）的色样与意象；`ZXPalettePicker` 接受选择绑定、上锁判断与回调，
+（鸦青为首项，加月白、缃叶、苍筤、藕丝、青黛、胭脂）的色样与意象；`ZXPalettePicker` 接受选择绑定、上锁判断与回调，
 不包含会员规则。产品使用 `try productIdentity.applyingPalette(.moonWhite)` 保留自身字族和印文。
 `ZXPaletteCatalog.palette(for: .spring)` 等纯函数按五行选配色，应用后 `seasonTint` 传 `nil`。
 增强对比度经 SwiftUI 环境自动解析；旧身份资源缺省回落。
@@ -58,3 +58,5 @@ Apple 共用组件、风格及产品规范索引见 [设计规范](Docs/Design/R
 本批在 Linux VPS 上编写，未构建、未运行测试，待用户 Mac 验证。
 藕丝（`ousi`）与青黛（`qingdai`）已按验收更名，原句、作者、篇名与诗库 ID 保存在 rationale。
 选择组件的 `season` 由 App 传入，随节气卡展示当季色样与「随节气 · 秋 · 月白」这类名称。
+
+第四稿七套色板采用近中性底与小面积点色；旧纸墨朱印仍可加载，但不再列入选择目录。

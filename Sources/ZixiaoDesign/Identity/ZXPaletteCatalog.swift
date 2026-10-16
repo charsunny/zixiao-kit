@@ -30,17 +30,17 @@ public enum ZXPaletteCatalog {
         }
     }
 
-    /// 单色墨系仍是可加载身份，目录只列供产品选择的七套配色。
+    /// 目录仅列七套第四稿配色；既有单色墨系与纸墨朱印仍可独立加载。
     public static let entries: [Entry] = {
         do {
             return try [
-                Entry(.paperInkSeal, imagery: "暖纸、墨色、朱印"),
-                Entry(.moonWhite, imagery: "冷月、青灰"),
-                Entry(.xiangLeaf, imagery: "旧书缃帙、暖黄"),
-                Entry(.canglang, imagery: "新竹、青绿"),
-                Entry(.ousi, imagery: "藕粉、淡紫"),
-                Entry(.qingdai, imagery: "远山黛、沉静"),
-                Entry(.rouge, imagery: "胭脂、喜气")
+                Entry(.yaqing, imagery: "苍黑、青灰、月白"),
+                Entry(.moonWhite, imagery: "花青 × 赭石"),
+                Entry(.xiangLeaf, imagery: "深缃 × 绀青"),
+                Entry(.canglang, imagery: "石绿 × 赭石"),
+                Entry(.ousi, imagery: "茄紫 × 柳绿"),
+                Entry(.qingdai, imagery: "青黛 × 泥金"),
+                Entry(.rouge, imagery: "胭脂 × 石绿")
             ]
         } catch { preconditionFailure("随包配色目录损坏：\(error)") }
     }()

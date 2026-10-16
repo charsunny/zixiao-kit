@@ -152,6 +152,7 @@ public enum ZXBundledIdentity: String, CaseIterable, Sendable {
     case monochromeInk = "monochrome-ink"
     /// 纸墨朱印: 暖纸、墨绿黑、朱印强调。
     case paperInkSeal = "paper-ink-seal"
+    case yaqing
     case moonWhite = "moon-white"
     case xiangLeaf = "xiang-leaf"
     case canglang
