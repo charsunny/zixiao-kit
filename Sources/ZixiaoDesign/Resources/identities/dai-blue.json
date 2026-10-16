@@ -1,0 +1,51 @@
+{
+  "name": "黛蓝",
+  "rationale": "远山黛、沉静。色名出处待核：微诗诗库检索“黛蓝”无结果。建议换名“青黛”：雍陶《题君山》“应是水仙梳洗处，一螺青黛镜中心。”（2f5e562a-ff78-42e3-8c1b-d9b3686907c5），写山色；这不是“黛蓝”的出处，当前保留方案名供审阅。 色值按 THEME_PALETTES 第 2 节独立调定，不取第三方色库数据。纸、墨、强调、朱印、次级文字保留方案值；surface 浅色向白混 35%、深色各通道抬高 8；border/rule 为纸上墨 12%，track 为 7%，night 为深纸各通道降低 5。secondary 与成功、警示、危险、提示取强调色向冷青、竹绿、赭黄、朱红、黛青邻色混 80%，分别服务标签与状态，颜色之外仍用符号说明状态。深色按独立浅色墨与强调设计，accentOn 由 token 选择纸墨中对比度较高者。",
+  "palette": {
+    "light": {
+      "paper": "#F2F1EE",
+      "ink": "#16202B",
+      "surface": "#F7F6F4",
+      "muted": "#5A6270",
+      "border": "#D8D8D7",
+      "track": "#E3E2E0",
+      "accent": "#2F4A6D",
+      "seal": "#9B382B",
+      "rule": "#D8D8D7",
+      "night": "#070C13",
+      "secondary": "#34586F",
+      "success": "#345B44",
+      "warning": "#704F23",
+      "danger": "#873536",
+      "info": "#35506B"
+    },
+    "dark": {
+      "paper": "#0C1118",
+      "ink": "#E4E8EE",
+      "surface": "#141920",
+      "muted": "#A2ABB8",
+      "border": "#262B32",
+      "track": "#1B2027",
+      "accent": "#A9BEDB",
+      "seal": "#EE9C88",
+      "rule": "#262B32",
+      "night": "#070C13",
+      "secondary": "#A6C2D6",
+      "success": "#ADC7AC",
+      "warning": "#D7BF8D",
+      "danger": "#E1AAA2",
+      "info": "#A8BFDA"
+    }
+  },
+  "type": {
+    "display": "Source Han Serif CN Bold",
+    "body": "Source Han Serif CN",
+    "ui": "system"
+  },
+  "slots": {
+    "surface": "paper-xuan",
+    "rule": "vertical-hairline",
+    "marker": "seal-square",
+    "sealText": null
+  }
+}

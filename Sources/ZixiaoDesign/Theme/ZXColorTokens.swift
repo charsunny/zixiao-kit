@@ -185,9 +185,12 @@ public extension ZXColorTokens {
     ///   墨、accent、状态色等其余角色原样不变 —— "墨色系不变, 底色随季极淡地偏一点"。
     ///   nil (默认) 就是不偏, 与加这个参数之前逐字节相同。
     init(identity: ZXIdentity, colorScheme: ColorScheme, accentName: String? = nil,
-        seasonTint: ZXSeasonTint? = nil) {
+        seasonTint: ZXSeasonTint? = nil, contrast: ColorSchemeContrast = .standard) {
         let dark = colorScheme == .dark
-        let s = dark ? identity.palette.dark : identity.palette.light
+        let normal = dark ? identity.palette.dark : identity.palette.light
+        let s = contrast == .increased
+            ? ((dark ? identity.palette.highContrastDark : identity.palette.highContrastLight) ?? normal)
+            : normal
         let alternate = accentName.flatMap { identity.palette.accents?[$0] }
         let accent = alternate.map { dark ? $0.dark : $0.light } ?? s.accent
 

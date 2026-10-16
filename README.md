@@ -48,3 +48,12 @@ xcodebuild -scheme ZixiaoKit-Package -destination 'platform=iOS Simulator,name=i
 ```
 
 Apple 共用组件、风格及产品规范索引见 [设计规范](Docs/Design/README.md)。
+
+传统色配色见 [方案](Docs/Design/THEME_PALETTES.md)。`ZXPaletteCatalog.entries` 提供七套配色
+（纸墨朱印与六套传统色）的色样与意象；`ZXPalettePicker` 接受选择绑定、上锁判断与回调，
+不包含会员规则。产品使用 `try productIdentity.applyingPalette(.moonWhite)` 保留自身字族和印文。
+`ZXPaletteCatalog.palette(for: .spring)` 等纯函数按五行选配色，应用后 `seasonTint` 传 `nil`。
+增强对比度经 SwiftUI 环境自动解析；旧身份资源缺省回落。
+
+本批在 Linux VPS 上编写，未构建、未运行测试，待用户 Mac 验证。
+色名藕荷、黛蓝的诗库依据不足，资源中明确记录，发布前需定名。

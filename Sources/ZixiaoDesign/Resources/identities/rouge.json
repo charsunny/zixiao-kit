@@ -1,0 +1,51 @@
+{
+  "name": "胭脂",
+  "rationale": "胭脂、喜气。罗隐《梅》：“天赐胭脂一抹腮，盘中磊落笛中哀。”微诗诗库 1f204352-241f-417d-b73a-4343c4747bb3，以胭脂写梅花红色。 色值按 THEME_PALETTES 第 2 节独立调定，不取第三方色库数据。纸、墨、强调、朱印、次级文字保留方案值；surface 浅色向白混 35%、深色各通道抬高 8；border/rule 为纸上墨 12%，track 为 7%，night 为深纸各通道降低 5。secondary 与成功、警示、危险、提示取强调色向冷青、竹绿、赭黄、朱红、黛青邻色混 80%，分别服务标签与状态，颜色之外仍用符号说明状态。深色按独立浅色墨与强调设计，accentOn 由 token 选择纸墨中对比度较高者。",
+  "palette": {
+    "light": {
+      "paper": "#F8F1EC",
+      "ink": "#2B1A18",
+      "surface": "#FAF6F3",
+      "muted": "#6B5753",
+      "border": "#DFD7D3",
+      "track": "#EAE2DD",
+      "accent": "#9A2B2E",
+      "seal": "#B03A22",
+      "rule": "#DFD7D3",
+      "night": "#120A09",
+      "secondary": "#495263",
+      "success": "#495538",
+      "warning": "#854916",
+      "danger": "#9C2F29",
+      "info": "#4A4A5F"
+    },
+    "dark": {
+      "paper": "#170F0E",
+      "ink": "#F3E7E3",
+      "surface": "#1F1716",
+      "muted": "#BBA7A2",
+      "border": "#312928",
+      "track": "#261E1D",
+      "accent": "#F0A29C",
+      "seal": "#F4A98C",
+      "rule": "#312928",
+      "night": "#120A09",
+      "secondary": "#B4BCCA",
+      "success": "#BBC19F",
+      "warning": "#E5B980",
+      "danger": "#EFA496",
+      "info": "#B6B9CE"
+    }
+  },
+  "type": {
+    "display": "Source Han Serif CN Bold",
+    "body": "Source Han Serif CN",
+    "ui": "system"
+  },
+  "slots": {
+    "surface": "paper-xuan",
+    "rule": "vertical-hairline",
+    "marker": "seal-square",
+    "sealText": null
+  }
+}

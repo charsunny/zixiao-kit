@@ -1,0 +1,51 @@
+{
+  "name": "苍筤",
+  "rationale": "新竹、青绿。朱庆余《震为苍筤竹》：“青苍才映粉，蒙密正含春。”微诗诗库 efd28f83-a3b4-4297-9de7-80a215b4f84d，题名点出苍筤竹，原句明写青苍色。 色值按 THEME_PALETTES 第 2 节独立调定，不取第三方色库数据。纸、墨、强调、朱印、次级文字保留方案值；surface 浅色向白混 35%、深色各通道抬高 8；border/rule 为纸上墨 12%，track 为 7%，night 为深纸各通道降低 5。secondary 与成功、警示、危险、提示取强调色向冷青、竹绿、赭黄、朱红、黛青邻色混 80%，分别服务标签与状态，颜色之外仍用符号说明状态。深色按独立浅色墨与强调设计，accentOn 由 token 选择纸墨中对比度较高者。",
+  "palette": {
+    "light": {
+      "paper": "#EFF2EA",
+      "ink": "#1D2620",
+      "surface": "#F5F7F1",
+      "muted": "#59645A",
+      "border": "#D6DAD2",
+      "track": "#E0E4DC",
+      "accent": "#46663E",
+      "seal": "#9B382B",
+      "rule": "#D6DAD2",
+      "night": "#0A0F0B",
+      "secondary": "#385E66",
+      "success": "#38603B",
+      "warning": "#745419",
+      "danger": "#8C3B2C",
+      "info": "#395662"
+    },
+    "dark": {
+      "paper": "#0F1410",
+      "ink": "#E5ECE2",
+      "surface": "#171C18",
+      "muted": "#A6B2A4",
+      "border": "#292E29",
+      "track": "#1E231F",
+      "accent": "#A9C79C",
+      "seal": "#EE9C88",
+      "rule": "#292E29",
+      "night": "#0A0F0B",
+      "secondary": "#A6C4CA",
+      "success": "#ADC99F",
+      "warning": "#D7C180",
+      "danger": "#E1AC96",
+      "info": "#A8C1CE"
+    }
+  },
+  "type": {
+    "display": "Source Han Serif CN Bold",
+    "body": "Source Han Serif CN",
+    "ui": "system"
+  },
+  "slots": {
+    "surface": "paper-xuan",
+    "rule": "vertical-hairline",
+    "marker": "seal-square",
+    "sealText": null
+  }
+}

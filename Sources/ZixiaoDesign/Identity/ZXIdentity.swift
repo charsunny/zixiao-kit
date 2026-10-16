@@ -33,11 +33,17 @@ public struct ZXIdentity: Decodable, Sendable, Hashable {
         /// 备选强调色 (如系列里各诗人的身份色)。键是给人看的色名, 由 App 选用;
         /// 内核不知道哪支色属于谁。
         public let accents: [String: Pair]?
+        /// 增强对比度的可选完整色板；旧身份缺省沿用普通色板。
+        public let highContrastLight: Swatch?
+        public let highContrastDark: Swatch?
 
-        public init(light: Swatch, dark: Swatch, accents: [String: Pair]? = nil) {
+        public init(light: Swatch, dark: Swatch, accents: [String: Pair]? = nil,
+                    highContrastLight: Swatch? = nil, highContrastDark: Swatch? = nil) {
             self.light = light
             self.dark = dark
             self.accents = accents
+            self.highContrastLight = highContrastLight
+            self.highContrastDark = highContrastDark
         }
     }
 
@@ -146,6 +152,12 @@ public enum ZXBundledIdentity: String, CaseIterable, Sendable {
     case monochromeInk = "monochrome-ink"
     /// 纸墨朱印: 暖纸、墨绿黑、朱印强调。
     case paperInkSeal = "paper-ink-seal"
+    case moonWhite = "moon-white"
+    case xiangLeaf = "xiang-leaf"
+    case canglang
+    case ouhe
+    case daiBlue = "dai-blue"
+    case rouge
 }
 
 public enum ZXIdentityError: Error, Sendable, Equatable {
@@ -153,6 +165,17 @@ public enum ZXIdentityError: Error, Sendable, Equatable {
 }
 
 public extension ZXIdentity {
+    /// 把设计语言的配色套入产品，字族、材质、标记与印文仍归产品所有。
+    func applyingPalette(_ palette: ZXIdentity) -> ZXIdentity {
+        ZXIdentity(name: "\(name) · \(palette.name)",
+                   rationale: "\(rationale)\n配色：\(palette.rationale)",
+                   palette: palette.palette, type: type, slots: slots)
+    }
+
+    func applyingPalette(_ bundled: ZXBundledIdentity) throws -> ZXIdentity {
+        applyingPalette(try Self.bundled(bundled))
+    }
+
     /// 从 JSON 数据解码。颜色写错 (不是 #RRGGBB / #RRGGBBAA) 会在这里就失败,
     /// 而不是等到画面上出现一块黑。
     static func decode(from data: Data) throws -> ZXIdentity {

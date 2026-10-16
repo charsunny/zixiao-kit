@@ -1,0 +1,51 @@
+{
+  "name": "缃叶",
+  "rationale": "旧书缃帙、暖黄。李峤《荷》：“鱼戏排缃叶，龟浮见绿池。”微诗诗库 7ee8d5cc-bb25-499f-8d1c-4df1581916fa，取缃叶的浅黄色意象。 色值按 THEME_PALETTES 第 2 节独立调定，不取第三方色库数据。纸、墨、强调、朱印、次级文字保留方案值；surface 浅色向白混 35%、深色各通道抬高 8；border/rule 为纸上墨 12%，track 为 7%，night 为深纸各通道降低 5。secondary 与成功、警示、危险、提示取强调色向冷青、竹绿、赭黄、朱红、黛青邻色混 80%，分别服务标签与状态，颜色之外仍用符号说明状态。深色按独立浅色墨与强调设计，accentOn 由 token 选择纸墨中对比度较高者。",
+  "palette": {
+    "light": {
+      "paper": "#F7F0DC",
+      "ink": "#2A2118",
+      "surface": "#FAF5E8",
+      "muted": "#665A49",
+      "border": "#DED7C4",
+      "track": "#E9E2CE",
+      "accent": "#7E5418",
+      "seal": "#A33A26",
+      "rule": "#DED7C4",
+      "night": "#110E08",
+      "secondary": "#445A5E",
+      "success": "#445D33",
+      "warning": "#805112",
+      "danger": "#973725",
+      "info": "#44525A"
+    },
+    "dark": {
+      "paper": "#16130D",
+      "ink": "#F1E7CF",
+      "surface": "#1E1B15",
+      "muted": "#BBAE93",
+      "border": "#302C24",
+      "track": "#25221B",
+      "accent": "#E2C27A",
+      "seal": "#EE9C88",
+      "rule": "#302C24",
+      "night": "#110E08",
+      "secondary": "#B1C3C3",
+      "success": "#B8C898",
+      "warning": "#E2C079",
+      "danger": "#ECAB8F",
+      "info": "#B4C0C7"
+    }
+  },
+  "type": {
+    "display": "Source Han Serif CN Bold",
+    "body": "Source Han Serif CN",
+    "ui": "system"
+  },
+  "slots": {
+    "surface": "paper-xuan",
+    "rule": "vertical-hairline",
+    "marker": "seal-square",
+    "sealText": null
+  }
+}

@@ -61,7 +61,7 @@ public struct ZXTheme: Sendable {
     ///     (随包宋体不会自己响应这个开关)。`zxTheme(_ identity:)` 会自动从环境取。
     ///   - space / radius / motion: 尺度。默认是标准尺; 产品要更圆、更慢, 换一套传进来。
     public nonisolated init(_ identity: ZXIdentity, colorScheme: ColorScheme, accentName: String? = nil,
-                            seasonTint: ZXSeasonTint? = nil,
+                            seasonTint: ZXSeasonTint? = nil, contrast: ColorSchemeContrast = .standard,
                             legibilityWeight: LegibilityWeight? = nil,
                             space: ZXSpaceTokens = .standard,
                             radius: ZXRadiusTokens = .standard,
@@ -69,7 +69,7 @@ public struct ZXTheme: Sendable {
         self.identity = identity
         self.colorScheme = colorScheme
         let color = ZXColorTokens(identity: identity, colorScheme: colorScheme, accentName: accentName,
-                                  seasonTint: seasonTint)
+                                  seasonTint: seasonTint, contrast: contrast)
         self.color = color
         paperHex = color.values.paper
         inkHex = color.values.ink
@@ -168,10 +168,11 @@ private struct ZXThemeResolver: ViewModifier {
     let seasonTint: ZXSeasonTint?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.legibilityWeight) private var legibilityWeight
+    @Environment(\.colorSchemeContrast) private var contrast
 
     func body(content: Content) -> some View {
         content.environment(\.zxTheme, ZXTheme(identity, colorScheme: colorScheme, accentName: accentName,
-                                               seasonTint: seasonTint, legibilityWeight: legibilityWeight))
+                                               seasonTint: seasonTint, contrast: contrast, legibilityWeight: legibilityWeight))
     }
 }
 
