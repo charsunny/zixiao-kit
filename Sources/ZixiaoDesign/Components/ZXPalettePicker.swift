@@ -8,6 +8,7 @@ public struct ZXPalettePicker: View {
     private let season: ZXSeasonTint
     private let isLocked: (String) -> Bool
     private let onLockedTap: (String) -> Void
+    private let localize: (String) -> String
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -15,13 +16,15 @@ public struct ZXPalettePicker: View {
 
     public init(selection: Binding<String>, entries: [ZXPaletteCatalog.Entry] = ZXPaletteCatalog.entries,
                 includesSeasonal: Bool = true, season: ZXSeasonTint, isLocked: @escaping (String) -> Bool = { _ in false },
-                onLockedTap: @escaping (String) -> Void = { _ in }) {
+                onLockedTap: @escaping (String) -> Void = { _ in },
+                localize: @escaping (String) -> String = { $0 }) {
         _selection = selection
         self.entries = entries
         self.includesSeasonal = includesSeasonal
         self.season = season
         self.isLocked = isLocked
         self.onLockedTap = onLockedTap
+        self.localize = localize
     }
 
     public var body: some View {
@@ -46,7 +49,7 @@ public struct ZXPalettePicker: View {
         } label: {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("一日一诗").font(.body).foregroundStyle(Color(zxHex: swatch.ink))
+                    Text(verbatim: localize("一日一诗")).font(.body).foregroundStyle(Color(zxHex: swatch.ink))
                     Spacer(minLength: 4)
                     Circle().fill(Color(zxHex: swatch.accent)).frame(width: 12, height: 12)
                     Rectangle().fill(Color(zxHex: swatch.seal)).frame(width: 16, height: 16)
@@ -54,12 +57,12 @@ public struct ZXPalettePicker: View {
                 .padding(12)
                 .background(Color(zxHex: swatch.paper), in: RoundedRectangle(cornerRadius: 8))
                 HStack(alignment: .firstTextBaseline) {
-                    Text(name).font(.headline)
+                    Text(verbatim: localize(name)).font(.headline)
                     Spacer(minLength: 4)
                     if isLocked(id) { Image(systemName: "lock.fill") }
                     if selection == id { Image(systemName: "checkmark.circle.fill") }
                 }
-                Text(imagery).font(.subheadline).foregroundStyle(theme.color.textSecondary)
+                Text(verbatim: localize(imagery)).font(.subheadline).foregroundStyle(theme.color.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .foregroundStyle(theme.color.textPrimary)
@@ -70,13 +73,13 @@ public struct ZXPalettePicker: View {
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(
                 selection == id ? theme.color.accent : theme.color.separator, lineWidth: selection == id ? 2 : 1))
             .contentShape(Rectangle())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(localize("\(name)，\(imagery)"))
+            .accessibilityValue(localize(isLocked(id) ? "需解锁，可预览" : "可使用"))
+            .accessibilityAddTraits(selection == id ? [.isSelected] : [])
+            .accessibilityIdentifier("palette.\(id)")
         }
         .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(name)，\(imagery)")
-        .accessibilityValue(isLocked(id) ? "需解锁，可预览" : "可使用")
-        .accessibilityAddTraits(selection == id ? [.isSelected] : [])
-        .accessibilityIdentifier("palette.\(id)")
     }
 }
 

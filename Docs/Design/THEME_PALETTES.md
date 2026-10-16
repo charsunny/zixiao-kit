@@ -61,3 +61,8 @@ night 为深纸每通道降低 5；四状态以 accent 向绿 / 赭 / 朱 / 黛�
 
 本批未构建、未运行测试，待用户 Mac 验证。资源数值计算未发现低于第 3 节阈值的色对；
 这不等同于测试套件通过或上屏验收通过。
+
+2026-10-16 Mac 集成验证补记：`xcodebuild -scheme ZixiaoKit-Package` 在 iPadOS 27 模拟器运行
+`ZixiaoDesignTests/PaletteTests`，7 项通过。微诗的 iOS Simulator、真机签名与 Mac Catalyst
+构建通过，四种模拟器完成配色切换、预览门禁及繁体卡片文案验证；详细记录见 wish 的
+`docs/THEME_PALETTES.md` 第 5 节。选择卡的无障碍描述与标识附在按钮 label，避免系统合并时丢失。

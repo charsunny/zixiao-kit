@@ -24,3 +24,4 @@ App 定义身份组合、页面布局和文案；共用库定义 token 语义和
 
 传统色配色目录由 `ZXPaletteCatalog` 提供，`ZXPalettePicker` 用色样卡片选色并转交上锁点击。
 `ZXIdentity.applyingPalette` 只替换配色，保留产品字族与插槽。配色按五行季节映射后，不叠加季节偏色。
+`ZXPalettePicker` 接受可选 `localize` 文本转换回调（默认原样返回），用于产品的繁简转换；同时转换卡片标签、意象、季节名称和无障碍描述。共享库不读取产品语言单例。
