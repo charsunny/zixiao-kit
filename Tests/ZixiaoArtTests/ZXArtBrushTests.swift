@@ -19,9 +19,10 @@ final class ZXArtBrushTests: XCTestCase {
 
     /// 几何逐点相等, 不通过光栅结果间接判断。
     func equal(_ a: Brush.Stroke, _ b: Brush.Stroke, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertEqual(a, b, file: file, line: line)
         XCTAssertEqual(a.body, b.body, file: file, line: line)
-        XCTAssertEqual(a.bodyAlpha.start, b.bodyAlpha.start, file: file, line: line)
-        XCTAssertEqual(a.bodyAlpha.end, b.bodyAlpha.end, file: file, line: line)
+        XCTAssertEqual(a.bodyAlphaStart, b.bodyAlphaStart, file: file, line: line)
+        XCTAssertEqual(a.bodyAlphaEnd, b.bodyAlphaEnd, file: file, line: line)
         XCTAssertEqual(a.bristles.count, b.bristles.count, file: file, line: line)
         for (x, y) in zip(a.bristles, b.bristles) {
             XCTAssertEqual(x.runs, y.runs, file: file, line: line)
@@ -45,10 +46,29 @@ final class ZXArtBrushTests: XCTestCase {
         XCTAssertNotEqual(blot, Brush.blot(center: center, radius: 8, squash: 0.6, angle: 0.4, seed: 43))
     }
 
+    func testStrokeAndBristleAreHashable() {
+        let stroke = Brush.stroke(Self.path, style: .init(), seed: 42)
+        XCTAssertEqual(Set([stroke, stroke]).count, 1)
+        var changed = stroke
+        changed.bodyAlphaStart *= 0.5
+        XCTAssertNotEqual(stroke, changed)
+        XCTAssertEqual(Set([stroke, changed]).count, 2)
+        changed = stroke
+        changed.bodyAlphaEnd *= 0.5
+        XCTAssertNotEqual(stroke, changed)
+        let hair = stroke.bristles[0]
+        var changedHair = hair
+        changedHair.width *= 2
+        XCTAssertEqual(Set([hair, hair, changedHair]).count, 2)
+        changed = stroke
+        changed.bristles[0] = changedHair
+        XCTAssertNotEqual(stroke, changed)
+    }
+
     func testProgressIsAnExactPrefix() {
         for dry in [0.0, 0.4, 0.8, 1.0] {
             for profile in Brush.Profile.allCases {
-                let style = Brush.Style(width: 10, dry: dry, gapLength: 240, profile: profile)
+                let style = Brush.Style(width: 10, dry: dry, gapLength: 300, profile: profile)
                 let full = Brush.stroke(Self.path, style: style, seed: 42)
                 equal(full, Brush.stroke(Self.path, style: style, seed: 42, progress: 1))
                 for p in [0.0, 0.1, 0.5, 0.9, 1.0] {
@@ -80,7 +100,7 @@ final class ZXArtBrushTests: XCTestCase {
 
     func testFixedGapLengthKeepsNormalizedBreaks() {
         // 直笔只改长度、不改宽度, x / length 就是归一化弧长。
-        let style = Brush.Style(width: 9, dry: 0.8, gapLength: 200, profile: .even)
+        let style = Brush.Style(width: 9, dry: 0.8, gapLength: 500, profile: .even)
         let a = Brush.stroke([SIMD3(0, 0, 1), SIMD3(200, 0, 1)], style: style, seed: 73)
         let b = Brush.stroke([SIMD3(0, 0, 1), SIMD3(240, 0, 1)], style: style, seed: 73)
         var fragments = 0
@@ -93,52 +113,173 @@ final class ZXArtBrushTests: XCTestCase {
             }
         }
         XCTAssertGreaterThan(fragments, a.bristles.count, "用例必须确实覆盖断墨")
-        // 墨圈半径 r → 1.2r; 同比缩放线宽以便直接比较所有点的归一化坐标。
+        // 只改墨圈半径, 宽度与参考弧长不变; 用墨体中线量回断点的归一化弧长。
         var ringStyle = style
         ringStyle.width = 2
         ringStyle.bristles = 4
         let r = Brush.ring(center: .zero, radius: 80, squash: 0.3, style: ringStyle, seed: 73)
-        let grown = Brush.ring(center: .zero, radius: 96, squash: 0.3, style: ringStyle, seed: 73)
-        XCTAssertEqual(r.bristles.count, grown.bristles.count)
-        for (x, y) in zip(r.bristles, grown.bristles) {
-            XCTAssertEqual(x.runs.map(\.count), y.runs.map(\.count))
-        }
-        ringStyle.width *= 1.2
         let s = Brush.ring(center: .zero, radius: 96, squash: 0.3, style: ringStyle, seed: 73)
         XCTAssertEqual(r.bristles.count, s.bristles.count)
         for (x, y) in zip(r.bristles, s.bristles) {
-            // 显式给笔毫数, 避免宽度自动推导造成根数变化。
-            XCTAssertEqual(x.runs.count, y.runs.count)
+            XCTAssertEqual(x.runs.map(\.count), y.runs.map(\.count))
             for (u, v) in zip(x.runs, y.runs) {
-                XCTAssertEqual(u.count, v.count)
-                for (p, q) in zip(u, v) {
-                    XCTAssertEqual(p.x / 80, q.x / 96, accuracy: 1e-6)
-                    XCTAssertEqual(p.y / 80, q.y / 96, accuracy: 1e-6)
+                for (p, q) in [(u.first!, v.first!), (u.last!, v.last!)] {
+                    XCTAssertEqual(normalizedPosition(p, in: r), normalizedPosition(q, in: s), accuracy: 0.002)
                 }
             }
         }
     }
 
+    /// 将笔毫端点投影到墨体复原的中心线, 量弧长而非带法线偏移的椭圆相位。
+    func normalizedPosition(_ point: SIMD2<Float>, in stroke: Brush.Stroke) -> Double {
+        let n = stroke.body.count / 2
+        let line = (0..<n).map { i -> SIMD2<Double> in
+            let p = (stroke.body[i] + stroke.body[2 * n - 1 - i]) * 0.5
+            return SIMD2(Double(p.x), Double(p.y))
+        }
+        let p = SIMD2<Double>(Double(point.x), Double(point.y))
+        var length = 0.0, nearest = 0.0, best = Double.infinity
+        for i in 1..<line.count {
+            let d = line[i] - line[i - 1], delta = p - line[i - 1]
+            let squared = d.x * d.x + d.y * d.y
+            guard squared > 0 else { continue }
+            let t = min(1, max(0, (delta.x * d.x + delta.y * d.y) / squared))
+            let offset = p - (line[i - 1] + d * t)
+            let distance = offset.x * offset.x + offset.y * offset.y
+            if distance < best { best = distance; nearest = length + t * squared.squareRoot() }
+            length += squared.squareRoot()
+        }
+        return length > 0 ? nearest / length : 0
+    }
+
     func testDryBoundariesAndSide() {
         let wet = Brush.stroke(Self.path, style: .init(width: 12, dry: 0), seed: 42)
-        XCTAssertGreaterThan(wet.bodyAlpha.start, 0)
+        XCTAssertGreaterThan(wet.bodyAlphaStart, 0)
         for hair in wet.bristles { XCTAssertEqual(hair.runs.count, 1) }
         let dry = Brush.stroke(Self.path, style: .init(width: 12, dry: 1), seed: 42)
-        XCTAssertEqual(dry.bodyAlpha.start, 0)
-        XCTAssertEqual(dry.bodyAlpha.end, 0)
+        XCTAssertEqual(dry.bodyAlphaStart, 0)
+        XCTAssertEqual(dry.bodyAlphaEnd, 0)
         XCTAssertTrue(dry.bristles.contains { !$0.runs.isEmpty })
         let a = Brush.stroke(Self.path, style: .init(width: 12, side: 0), seed: 42)
         let b = Brush.stroke(Self.path, style: .init(width: 12, side: 0.8), seed: 42)
         XCTAssertEqual(a.body, b.body)
         for (x, y) in zip(a.bristles, b.bristles) {
             XCTAssertEqual(x.runs, y.runs)
-            XCTAssertTrue(y.alpha == x.alpha || abs(y.alpha - x.alpha * 0.2) < 1e-6)
+            XCTAssertGreaterThanOrEqual(y.alpha, x.alpha * 0.2 - 1e-6)
+            XCTAssertLessThanOrEqual(y.alpha, x.alpha)
         }
         XCTAssertTrue(zip(a.bristles, b.bristles).contains { pair in pair.0.alpha > pair.1.alpha })
         var style = Brush.Style(width: 12)
         let before = Brush.stroke(Self.path, style: style, seed: 42)
         style.wet = 1
         equal(before, Brush.stroke(Self.path, style: style, seed: 42))
+    }
+
+    func testSideAlphaVariesSmoothlyAcrossTheStroke() {
+        // 从左向右画, 正法线朝屏幕下方; 按笔毫横向次序看, 透明度应连续增加。
+        let path = [SIMD3<Double>(0, 0, 1), SIMD3<Double>(300, 0, 1)]
+        let base = Brush.stroke(path, style: .init(width: 30, dry: 0, side: 0, bristles: 16), seed: 42)
+        for side in [-0.8, 0.8] {
+            let shaded = Brush.stroke(path, style: .init(width: 30, dry: 0, side: side, bristles: 16), seed: 42)
+            let ratios = zip(shaded.bristles, base.bristles).map { Double($0.0.alpha / $0.1.alpha) }
+            let increasing = side > 0 ? ratios : Array(ratios.reversed())
+            for (a, b) in zip(increasing, increasing.dropFirst()) {
+                XCTAssertGreaterThanOrEqual(b, a - 1e-6)
+                XCTAssertLessThan(b - a, 0.15, "中心线附近也应平滑过渡")
+            }
+            XCTAssertGreaterThan(Set(ratios).count, 8, "不能只分成浓 / 淡两档")
+        }
+    }
+
+    func testDarkDirectionFlipsTheInkSideAndPreservesPrefixes() {
+        var style = Brush.Style(width: 20, dry: 0.4, side: -0.8, darkDirection: SIMD2(0, 1),
+                                bristles: 16, gapLength: 400, profile: .even)
+        let path = [SIMD3<Double>(0, 0, 1), SIMD3<Double>(300, 0, 1)]
+        let down = Brush.stroke(path, style: style, seed: 42)
+        equal(down, Brush.stroke(path, style: .init(width: 20, dry: 0.4, side: 0.8,
+              bristles: 16, gapLength: 400, profile: .even), seed: 42))
+        style.darkDirection = SIMD2(0, -1)
+        let up = Brush.stroke(path, style: style, seed: 42)
+        equal(up, Brush.stroke(path, style: .init(width: 20, dry: 0.4, side: -0.8,
+              bristles: 16, gapLength: 400, profile: .even), seed: 42))
+        for direction in [SIMD2<Double>.zero, SIMD2(1, 0), SIMD2(.nan, 1)] {
+            style.darkDirection = direction
+            equal(up, Brush.stroke(path, style: style, seed: 42))
+        }
+        style.darkDirection = SIMD2(0, -1)
+        XCTAssertEqual(down.body, up.body)
+        for (i, pair) in zip(down.bristles, up.bristles).enumerated() {
+            XCTAssertEqual(pair.0.runs, pair.1.runs)
+            if i < 8 { XCTAssertLessThan(pair.0.alpha, pair.1.alpha) }
+            else { XCTAssertGreaterThan(pair.0.alpha, pair.1.alpha) }
+        }
+        // 使用方向在后半程发生变化的曲线, 防止按 progress 前缀重算平均法线。
+        let turn: [SIMD3<Double>] = [SIMD3(0, 0, 1), SIMD3(100, 0, 1), SIMD3(-100, 70, 1)]
+        let whole = Brush.stroke(turn, style: style, seed: 42)
+        let half = Brush.stroke(turn, style: style, seed: 42, progress: 0.5)
+        for (a, b) in zip(half.bristles, whole.bristles) {
+            XCTAssertEqual(a.alpha, b.alpha)
+            for (r, s) in zip(a.runs, b.runs) { XCTAssertEqual(r, Array(s.prefix(r.count))) }
+        }
+    }
+
+    func testNaPressureHasUnitPeak() {
+        let peakPosition = pow(0.7 / 8.7, 1.0 / 8)
+        XCTAssertEqual(Brush.pressure(.na, peakPosition), 1, accuracy: 1e-12)
+        for i in 0...1000 {
+            let pressure = Brush.pressure(.na, Double(i) / 1000)
+            XCTAssertGreaterThanOrEqual(pressure, 0)
+            XCTAssertLessThanOrEqual(pressure, 1 + 1e-12)
+        }
+    }
+
+    func testWidthNoiseAndJitterScaleWithBrushWidth() {
+        var baseline: Brush.Stroke?
+        for width in [1.0, 20, 130] {
+            // 保持长度 / 噪声参考尺度相同, 三档均触及 600 点上限, 便于逐点比较。
+            let length = (width * 1.3 + 1) * 100
+            let path = [SIMD3<Double>(0, 0, 1), SIMD3<Double>(length, 0, 1)]
+            let stroke = Brush.stroke(path, style: .init(width: width, dry: 0, bristles: 8,
+                                      rough: 0.8, profile: .even), seed: 42)
+            XCTAssertEqual(stroke.body.count, 1200)
+            if let baseline {
+                for (p, q) in zip(stroke.body, baseline.body) {
+                    XCTAssertEqual(Double(p.y) / width, Double(q.y), accuracy: 1e-6)
+                }
+                for (hair, base) in zip(stroke.bristles, baseline.bristles) {
+                    XCTAssertEqual(hair.runs.map(\.count), base.runs.map(\.count))
+                    for (p, q) in zip(hair.runs[0], base.runs[0]) {
+                        XCTAssertEqual(Double(p.y) / width, Double(q.y), accuracy: 1e-6)
+                    }
+                }
+            } else { baseline = stroke }
+        }
+    }
+
+    func testWideBrushGapScaleAndProgress() {
+        var baseline: Brush.Stroke?
+        for width in [20.0, 130] {
+            let length = width * 30
+            let path = [SIMD3<Double>(0, 0, 1), SIMD3<Double>(length, 0, 1)]
+            let style = Brush.Style(width: width, dry: 0.8, bristles: 16, gapLength: length, profile: .even)
+            let stroke = Brush.stroke(path, style: style, seed: 73)
+            let part = Brush.stroke(path, style: style, seed: 73, progress: 0.5)
+            for (a, b) in zip(part.bristles, stroke.bristles) {
+                XCTAssertEqual(a.alpha, b.alpha)
+                XCTAssertLessThanOrEqual(a.runs.count, b.runs.count)
+                for (r, s) in zip(a.runs, b.runs) { XCTAssertEqual(r, Array(s.prefix(r.count))) }
+            }
+            if let baseline {
+                for (a, b) in zip(stroke.bristles, baseline.bristles) {
+                    XCTAssertEqual(a.runs.map(\.count), b.runs.map(\.count))
+                    for (r, s) in zip(a.runs, b.runs) {
+                        for (p, q) in zip(r, s) {
+                            XCTAssertEqual(Double(p.x) / length, Double(q.x) / 600, accuracy: 1e-6)
+                        }
+                    }
+                }
+            } else { baseline = stroke }
+        }
     }
 
     /// 左右墨边的中点复原中心线, 排除宽度对缺口角度与压扁比的影响。
@@ -184,7 +325,7 @@ final class ZXArtBrushTests: XCTestCase {
             XCTAssertEqual(fill.red, palette.ink.red)
             XCTAssertEqual(fill.green, palette.ink.green)
             XCTAssertEqual(fill.blue, palette.ink.blue)
-            XCTAssertEqual(fill.alpha, Double(stroke.bodyAlpha.start + stroke.bodyAlpha.end) * 0.5)
+            XCTAssertEqual(fill.alpha, Double(stroke.bodyAlphaStart + stroke.bodyAlphaEnd) * 0.5)
             var index = 1
             for hair in stroke.bristles {
                 for run in hair.runs {
@@ -225,9 +366,20 @@ final class ZXArtBrushTests: XCTestCase {
 
     static func points(_ ps: [SIMD2<Float>]) -> [[Double]] { ps.map { [Double($0.x), Double($0.y)] } }
     static func record(_ stroke: Brush.Stroke) -> [String: Any] {
-        ["body": points(stroke.body), "bodyAlpha": [Double(stroke.bodyAlpha.start), Double(stroke.bodyAlpha.end)],
+        ["body": points(stroke.body), "bodyAlphaStart": Double(stroke.bodyAlphaStart), "bodyAlphaEnd": Double(stroke.bodyAlphaEnd),
          "bristles": stroke.bristles.map { ["width": Double($0.width), "alpha": Double($0.alpha),
                                            "runs": $0.runs.map(points)] as [String: Any] }]
+    }
+
+    static func record(_ style: Brush.Style) -> [String: Any] {
+        var out: [String: Any] = ["width": style.width, "tone": style.tone, "dry": style.dry,
+            "wet": style.wet, "side": style.side, "rough": style.rough, "profile": style.profile.rawValue,
+            "darkDirection": NSNull(), "bristles": NSNull(), "fade": NSNull(), "gapLength": NSNull()]
+        if let direction = style.darkDirection { out["darkDirection"] = [direction.x, direction.y] }
+        if let bristles = style.bristles { out["bristles"] = bristles }
+        if let fade = style.fade { out["fade"] = fade }
+        if let length = style.gapLength { out["gapLength"] = length }
+        return out
     }
 
     static func fixture() -> [String: Any] {
@@ -235,24 +387,36 @@ final class ZXArtBrushTests: XCTestCase {
         for (i, profile) in Brush.Profile.allCases.enumerated() {
             for dry in [0.0, 0.4, 0.8, 1.0] {
                 let style = Brush.Style(width: 8, tone: 0.82, dry: dry, side: 0.8, bristles: 8,
-                                        rough: 0.2, gapLength: 240, profile: profile)
+                                        rough: 0.2, gapLength: 300, profile: profile)
                 let seed = UInt32(i) &* 0x9E3779B9
                 let input: [String: Any] = ["centerline": path.map { [$0.x, $0.y, $0.z] }, "seed": seed,
-                    "style": ["width": 8, "tone": 0.82, "dry": dry, "wet": 0, "side": 0.8, "bristles": 8,
-                              "rough": 0.2, "fade": NSNull(), "gapLength": 240, "profile": profile.rawValue]]
+                                          "style": record(style)]
                 for p in [0.5, 1.0] {
                     cases.append(["kind": "stroke", "input": input, "progress": p,
                                   "output": record(Brush.stroke(path, style: style, seed: seed, progress: p))])
                 }
             }
         }
+        for width in [1.0, 20, 130] {
+            for direction in [-1.0, 1.0] {
+                let style = Brush.Style(width: width, dry: 0.8, side: 0.8, darkDirection: SIMD2(0, direction),
+                                        gapLength: 1200, profile: .na)
+                let path: [SIMD3<Double>] = [SIMD3(0, 0, 1), SIMD3(1100, 0, 1)]
+                let input: [String: Any] = ["centerline": path.map { [$0.x, $0.y, $0.z] },
+                                           "seed": 73, "style": record(style)]
+                for p in [0.5, 1.0] {
+                    cases.append(["kind": "stroke", "input": input, "progress": p,
+                                  "output": record(Brush.stroke(path, style: style, seed: 73, progress: p))])
+                }
+            }
+        }
         for seed in [UInt32(0), 42, UInt32.max] {
+            let style = Brush.Style(width: 2, dry: 0.55, gapLength: 500)
             cases.append(["kind": "ring", "input": ["center": [0, 0], "radius": 80, "squash": 0.3,
                 "seed": seed, "sweep": 1.86 * Double.pi,
-                "style": ["width": 2, "tone": 0.82, "dry": 0.55, "wet": 0, "side": 0, "bristles": NSNull(),
-                          "rough": 0.2, "fade": NSNull(), "gapLength": 240, "profile": "brush"]],
+                "style": record(style)],
                 "output": record(Brush.ring(center: .zero, radius: 80, squash: 0.3,
-                                           style: .init(width: 2, dry: 0.55, gapLength: 240), seed: seed))])
+                                           style: style, seed: seed))])
             cases.append(["kind": "blot", "input": ["center": [10, 20], "radius": 8, "squash": 0.6,
                 "angle": 0.4, "seed": seed],
                 "output": points(Brush.blot(center: SIMD2(10, 20), radius: 8, squash: 0.6, angle: 0.4, seed: seed))])
@@ -302,7 +466,7 @@ final class ZXArtBrushTests: XCTestCase {
     // MARK: - 目视样张
 
     func testModelSheet() throws {
-        let width = 1620, height = 1430
+        let width = 1620, height = 2320
         for (name, palette) in [("paperink", ZXArt.Palette.paperInk), ("night", .night)] {
             var shapes: [ZXArt.Shape] = [], labels: [(String, Double, Double)] = []
             for (column, pair) in [(0.0, 0.0), (0.0, 0.8), (0.4, 0.0), (0.4, 0.8), (0.8, 0.0), (0.8, 0.8)].enumerated() {
@@ -327,6 +491,23 @@ final class ZXArtBrushTests: XCTestCase {
                     shapes.append(.init(points: Brush.blot(center: p, radius: 12, squash: squash, angle: -0.3, seed: seed),
                                         fill: palette.ink, stroke: nil, lineWidth: 0, closed: true))
                 }
+            }
+            labels.append(("noise scale: width 1 / 20 / 130; dry 0.8; side 0.8", 12, 1440))
+            for (i, width) in [1.0, 20, 130].enumerated() {
+                let y = [1510.0, 1640, 1820][i]
+                labels.append(("w \(Int(width))", 12, y))
+                let path: [SIMD3<Double>] = [SIMD3(180, y, 1), SIMD3(700, y - 20, 1), SIMD3(1480, y, 1)]
+                shapes += ZXArt.shapes(from: Brush.stroke(path,
+                    style: .init(width: width, dry: 0.8, side: 0.8, gapLength: 1500), seed: 73), palette: palette)
+            }
+            labels.append(("darkDirection: down / up; same path + seed; width 40; dry 0.4", 12, 1970))
+            for (i, direction) in [1.0, -1.0].enumerated() {
+                let y = 2070.0 + Double(i) * 140
+                labels.append((direction > 0 ? "down" : "up", 12, y))
+                let path: [SIMD3<Double>] = [SIMD3(180, y, 1), SIMD3(1480, y, 1)]
+                let style = Brush.Style(width: 40, dry: 0.4, side: 0.8, darkDirection: SIMD2(0, direction),
+                                        gapLength: 1500, profile: .even)
+                shapes += ZXArt.shapes(from: Brush.stroke(path, style: style, seed: 42), palette: palette)
             }
             let drawing = ZXArt.Drawing(width: Double(width), height: Double(height), background: palette.paper,
                                          layers: [.init(blend: palette.isDark ? .normal : .multiply, shapes: shapes)])
