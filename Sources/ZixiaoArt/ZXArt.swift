@@ -303,6 +303,8 @@ public extension ZXArt {
         public var opacity: Double
         public var filter: LayerFilter?
         public var mist: LayerMist?
+        /// 山脊浓边; nil 保留旧渲染路径。与 mist 共用逐列 ridge, 在湿化之后调制 alpha。
+        public var rim: LayerRim?
         /// nil 保留原渲染路径。非空时在 filter / mist 之后湿化, 再做 tooth, 最后应用 blend / opacity。
         public var wash: LayerWash?
         /// 纸纹咬边强度 0…1。只调制本层 alpha; 无纸纹时用逻辑坐标值噪声。
@@ -310,11 +312,12 @@ public extension ZXArt {
         public var shapes: [Shape]
 
         public init(blend: BlendMode = .normal, opacity: Double = 1, filter: LayerFilter? = nil,
-                    mist: LayerMist? = nil, wash: LayerWash? = nil, tooth: Double? = nil, shapes: [Shape] = []) {
+                    mist: LayerMist? = nil, rim: LayerRim? = nil, wash: LayerWash? = nil, tooth: Double? = nil, shapes: [Shape] = []) {
             self.blend = blend
             self.opacity = opacity
             self.filter = filter
             self.mist = mist
+            self.rim = rim
             self.wash = wash
             self.tooth = tooth
             self.shapes = shapes
