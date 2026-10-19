@@ -98,15 +98,17 @@ extension ShanShuiEngine {
     /// 没有原 stroke/n0 的向量线 (树干、栏杆、篙) 用已有坐标推出种子。
     func coordinateSeedV3(_ p: P) -> UInt32 {
         guard p.x.isFinite, p.y.isFinite else { return 0 }
-        let x = UInt32(truncatingIfNeeded: Int64((p.x * 1024).rounded()))
-        let y = UInt32(truncatingIfNeeded: Int64((p.y * 1024).rounded()))
+        let x = UInt32(truncatingIfNeeded: Int64(floor(p.x * 1024)))
+        let y = UInt32(truncatingIfNeeded: Int64(floor(p.y * 1024)))
         return ZXArt.Brush.hash(x, y)
     }
 
     /// sin → lens; 恒宽 → even; 渐收 → brush; 起笔 → rise; 双瓣 / 非单峰 → nail。
     func profileV3(_ fun: (Double) -> Double) -> ZXArt.Brush.Profile {
         let a = fun(0), b = fun(0.5), c = fun(1)
-        if abs(a - b) < 0.02 && abs(b - c) < 0.02 { return .even }
+        let q1 = fun(0.25), q3 = fun(0.75)
+        if min(b, q1, q3) < -0.02 { return .nail }
+        if abs(a - b) < 0.02 && abs(b - c) < 0.02 && abs(q1 - b) < 0.02 && abs(q3 - b) < 0.02 { return .even }
         if abs(a) < 0.02 && abs(c) < 0.02 && b > 0.5 { return .lens }
         if a > c + 0.2 { return .brush }
         if c > a + 0.2 { return .rise }
