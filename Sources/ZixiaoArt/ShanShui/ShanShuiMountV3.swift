@@ -1,0 +1,378 @@
+// @3 隔离副本: 保留 @2 的循环、表达式与求值顺序; 只给旧几何附加画法。
+//  ShanShuiMountV3.swift — 山: mountainV3 / flatMountV3 (+flatDec) / distMountV3 / rockV3 / footV3
+//
+//  Ported from shan-shui-inf index.html (`var Mount = new function(){…}`).
+//  MIT License, (c) 2018 Lingdong Huang — https://github.com/LingDong-/shan-shui-inf
+//  Full license text: ZXArtLicenses.swift / LICENSES/.
+//
+//  原作 `for (j = 0; j < Math.random() * 5; j++)` 这类循环每轮都重新取随机数, 这里用
+//  while 逐轮重取, 保持消耗次数一致。
+
+import Foundation
+import ZixiaoColor
+
+extension ShanShuiEngine {
+    // MARK: footV3
+
+    func footV3(_ ptlist: [[P]], xof: Double = 0, yof: Double = 0) -> ZXArt.SSCanv {
+        var ftlist: [[P]] = []
+        let span = 10
+        var ni = 0
+        let count = ptlist.count
+        if count > 2 {
+            for i in 0..<(count - 2) where i == ni {
+                ni = min(ni + e.choice([1, 2]), count - 1)
+                var a: [P] = [], b: [P] = []
+                let row = ptlist[i]
+                var j = 0.0
+                while j < min(Double(row.count) / 8, 10) {
+                    let jj = Int(j)
+                    a.append(P(row[jj].x + n(j * 0.1, Double(i)) * 10, row[jj].y))
+                    b.append(P(row[row.count - 1 - jj].x - n(j * 0.1, Double(i)) * 10, row[row.count - 1 - jj].y))
+                    j += 1
+                }
+                a.reverse(); b.reverse()
+                for jj in 0..<span {
+                    let p = Double(jj) / Double(span)
+                    let x1 = row[0].x * (1 - p) + ptlist[ni][0].x * p
+                    var y1 = row[0].y * (1 - p) + ptlist[ni][0].y * p
+                    let x2 = row[row.count - 1].x * (1 - p) + ptlist[ni][row.count - 1].x * p
+                    var y2 = row[row.count - 1].y * (1 - p) + ptlist[ni][row.count - 1].y * p
+                    let vib = -1.7 * (p - 1) * pow(p, 1.0 / 5)
+                    y1 += vib * 5 + n(xof * 0.05, Double(i)) * 5
+                    y2 += vib * 5 + n(xof * 0.05, Double(i)) * 5
+                    a.append(P(x1, y1))
+                    b.append(P(x2, y2))
+                }
+                ftlist.append(a)
+                ftlist.append(b)
+            }
+        }
+        var canv: ZXArt.SSCanv = []
+        for ft in ftlist { canv.append(polyV3(ft, xof: xof, yof: yof, fil: .white, str: nil)) }
+        for ft in ftlist {
+            let c = C.ink(0.1 + r() * 0.1)
+            canv += strokeV3(ft.map { P($0.x + xof, $0.y + yof) }, wid: 1, col: c)
+        }
+        return canv
+    }
+
+    // MARK: mountainV3
+
+    func mountainV3(_ xoff: Double, _ yoff: Double, _ seed: Double = 0, hei hIn: Double? = nil, wid wIn: Double? = nil,
+                  tex: Double = 200, veg: Bool = true) -> ZXArt.SSCanv {
+        let hei = hIn ?? 100 + r() * 400
+        let wid = wIn ?? 400 + r() * 200
+        var canv: ZXArt.SSCanv = []
+        var ptlist: [[P]] = []
+        let h = hei, w = wid
+        let reso0 = 10, reso1 = 50
+        var hoff = 0.0
+        for j in 0..<reso0 {
+            hoff += (r() * yoff) / 100
+            var row: [P] = []
+            row.reserveCapacity(reso1)
+            for i in 0..<reso1 {
+                let x = (Double(i) / Double(reso1) - 0.5) * Double.pi
+                var y = cos(x)
+                y *= n(x + 10, Double(j) * 0.15, seed)
+                let p = 1 - Double(j) / Double(reso0)
+                row.append(P((x / Double.pi) * w * p, -y * h * p + hoff))
+            }
+            ptlist.append(row)
+        }
+
+        /// `kind` 只给锚点记录用 (见 ShanShuiAnchors.swift): 记下这一棵树 / 这间屋的笔画, 不取随机数、不改笔画。
+        func vegetate(_ treeFunc: (Double, Double) -> ZXArt.SSCanv, _ growth: (Int, Int) -> Bool,
+                      _ proof: ([P], Int) -> Bool, kind: ZXArt.AnchorPiece.Kind? = nil) {
+            var veglist: [P] = []
+            for i in 0..<ptlist.count {
+                for j in 0..<ptlist[i].count where growth(i, j) { veglist.append(ptlist[i][j]) }
+            }
+            for i in 0..<veglist.count where proof(veglist, i) {
+                let piece = treeFunc(veglist[i].x, veglist[i].y)
+                canv += piece
+                if let kind { noteAnchor(kind, piece) }
+            }
+        }
+        let always: ([P], Int) -> Bool = { _, _ in true }
+
+        // RIM
+        vegetate({ x, y in
+            self.tree02V3(x + xoff, y + yoff - 5, clu: 2,
+                        col: .ink(self.n(0.01 * x, 0.01 * y) * 0.5 * 0.3 + 0.5))
+        }, { i, j in
+            let ns = self.n(Double(j) * 0.1, seed)
+            return i == 0 && ns * ns * ns < 0.1 && abs(ptlist[i][j].y) / h > 0.2
+        }, always, kind: .tree(.tree02))
+
+        // WHITE BG
+        canv.append(surfaceV3(ptlist[0] + [P(0, Double(reso0) * 4)], xof: xoff, yof: yoff))
+        // OUTLINE
+        canv += strokeV3(ptlist[0].map { P($0.x + xoff, $0.y + yoff) }, wid: 3, col: .ink(0.3), noi: 1, profile: .brush)
+        canv += footV3(ptlist, xof: xoff, yof: yoff)
+        let sha = e.choice([0.0, 0, 0, 0, 5])
+        canv += textureV3(ptlist, xof: xoff, yof: yoff, tex: tex, sha: sha)
+
+        // TOP
+        vegetate({ x, y in
+            self.tree02V3(x + xoff, y + yoff, col: .ink(self.n(0.01 * x, 0.01 * y) * 0.5 * 0.3 + 0.5))
+        }, { i, j in
+            let ns = self.n(Double(i) * 0.1, Double(j) * 0.1, seed + 2)
+            return ns * ns * ns < 0.1 && abs(ptlist[i][j].y) / h > 0.5
+        }, always, kind: .tree(.tree02))
+
+        if veg {
+            // MIDDLE
+            vegetate({ x, y in
+                var ht = ((h + y) / h) * 70
+                ht = ht * 0.3 + self.r() * ht * 0.7
+                let tw = self.r() * 3 + 1
+                return self.tree01V3(x + xoff, y + yoff, hei: ht, wid: tw,
+                                   col: .ink(self.n(0.01 * x, 0.01 * y) * 0.5 * 0.3 + 0.3))
+            }, { i, j in
+                let ns = self.n(Double(i) * 0.2, Double(j) * 0.05, seed)
+                return j % 2 != 0 && ns * ns * ns * ns < 0.012 && abs(ptlist[i][j].y) / h < 0.3
+            }, { veglist, i in
+                var counter = 0
+                for j in 0..<veglist.count {
+                    let dx = veglist[i].x - veglist[j].x, dy = veglist[i].y - veglist[j].y
+                    if i != j && dx * dx + dy * dy < 30 * 30 { counter += 1 }
+                    if counter > 2 { return true }
+                }
+                return false
+            }, kind: .tree(.tree01))
+
+            // BOTTOM
+            vegetate({ x, y in
+                var ht = ((h + y) / h) * 120
+                ht = ht * 0.5 + self.r() * ht * 0.5
+                let bc = self.r() * 0.1
+                let bp = 1.0
+                return self.tree03V3(x + xoff, y + yoff, hei: ht, ben: { pow($0 * bc, bp) },
+                                   col: .ink(self.n(0.01 * x, 0.01 * y) * 0.5 * 0.3 + 0.3))
+            }, { i, j in
+                let ns = self.n(Double(i) * 0.2, Double(j) * 0.05, seed)
+                return (j == 0 || j == ptlist[i].count - 1) && ns * ns * ns * ns < 0.012
+            }, always, kind: .tree(.tree03))
+        }
+
+        // BOTT ARCH
+        vegetate({ x, y in
+            let tt = self.e.choice([0, 0, 1, 1, 1, 2])
+            if tt == 1 {
+                let w = self.e.normRand(40, 70)
+                let sto = self.e.choice([1.0, 2, 2, 3])
+                let rot = self.r()
+                let sty = self.e.choice([1, 2, 3])
+                let house = self.arch02V3(x + xoff, y + yoff, seed, wid: w, rot: rot, sto: sto, sty: sty)
+                self.noteAnchor(.building(.house), house)
+                return house
+            } else if tt == 2 {
+                let pavilion = self.arch04V3(x + xoff, y + yoff, seed, sto: self.e.choice([1.0, 1, 1, 2, 2]))
+                self.noteAnchor(.building(.pavilion), pavilion)
+                return pavilion
+            }
+            return []
+        }, { i, j in
+            let ns = self.n(Double(i) * 0.2, Double(j) * 0.05, seed + 10)
+            return i != 0 && (j == 1 || j == ptlist[i].count - 2) && ns * ns * ns * ns < 0.008
+        }, always)
+
+        // TOP ARCH
+        vegetate({ x, y in
+            let sto = self.e.choice([5.0, 7])
+            let w = 40 + self.r() * 20
+            return self.arch03V3(x + xoff, y + yoff, seed, wid: w, sto: sto)
+        }, { i, j in
+            i == 1 && abs(Double(j) - Double(ptlist[i].count) / 2) < 1 && self.r() < 0.02
+        }, always, kind: .building(.pagoda))
+
+        // TRANSM
+        vegetate({ x, y in
+            let t = self.transmissionTower01(x + xoff, y + yoff, seed)
+            return self.drawTowers ? t : []
+        }, { i, j in
+            let ns = self.n(Double(i) * 0.2, Double(j) * 0.05, seed + 20 * Double.pi)
+            return i % 2 == 0 && (j == 1 || j == ptlist[i].count - 2) && ns * ns * ns * ns < 0.002
+        }, always)
+
+        // BOTT ROCK
+        vegetate({ x, y in
+            let rw = 20 + self.r() * 20
+            let rh = 20 + self.r() * 20
+            return self.rockV3(x + xoff, y + yoff, seed, hei: rh, wid: rw, sha: 2)
+        }, { i, j in
+            (j == 0 || j == ptlist[i].count - 1) && self.r() < 0.1
+        }, always)
+
+        return canv
+    }
+
+    // MARK: flatMountV3
+
+
+    func flatMountV3(_ xoff: Double, _ yoff: Double, _ seed: Double = 0, hei hIn: Double? = nil, wid wIn: Double? = nil,
+                   tex: Double = 80, cho: Double = 0.5, dec: Bool = true) -> ZXArt.SSCanv {
+        let hei = hIn ?? 40 + r() * 400
+        let wid = wIn ?? 400 + r() * 200
+        var canv: ZXArt.SSCanv = []
+        var ptlist: [[P]] = []
+        let reso0 = 5, reso1 = 50
+        var hoff = 0.0
+        var flat: [[P]] = []
+        for j in 0..<reso0 {
+            hoff += (r() * yoff) / 100
+            ptlist.append([])
+            flat.append([])
+            for i in 0..<reso1 {
+                let x = (Double(i) / Double(reso1) - 0.5) * Double.pi
+                var y = cos(x * 2) + 1
+                y *= n(x + 10, Double(j) * 0.1, seed)
+                let p = 1 - (Double(j) / Double(reso0)) * 0.6
+                let nx = (x / Double.pi) * wid * p
+                var ny = -y * hei * p + hoff
+                let h = 100.0
+                if ny < -h * cho + hoff {
+                    ny = -h * cho + hoff
+                    if flat[flat.count - 1].count % 2 == 0 { flat[flat.count - 1].append(P(nx, ny)) }
+                } else {
+                    if flat[flat.count - 1].count % 2 == 1, let prev = ptlist[ptlist.count - 1].last {
+                        flat[flat.count - 1].append(prev)
+                    }
+                }
+                ptlist[ptlist.count - 1].append(P(nx, ny))
+            }
+        }
+        canv.append(surfaceV3(ptlist[0] + [P(0, Double(reso0) * 4)], xof: xoff, yof: yoff))
+        canv += strokeV3(ptlist[0].map { P($0.x + xoff, $0.y + yoff) }, wid: 3, col: .ink(0.3), noi: 1, profile: .brush)
+        canv += textureV3(ptlist, xof: xoff, yof: yoff, tex: tex, wid: 2, dis: {
+            if self.r() > 0.5 { return 0.1 + 0.4 * self.r() } else { return 0.9 - 0.4 * self.r() }
+        })
+        var gr1: [P] = [], gr2: [P] = []
+        var fi = 0
+        while fi < flat.count {
+            if flat[fi].count >= 2 { gr1.append(flat[fi][0]); gr2.append(flat[fi][flat[fi].count - 1]) }
+            fi += 2
+        }
+        if gr1.isEmpty { return canv }
+        var wb = (gr1[0].x, gr2[0].x)
+        for i in 0..<3 {
+            let p = 0.8 - Double(i) * 0.2
+            gr1.insert(P(wb.0 * p, gr1[0].y - 5), at: 0)
+            gr2.insert(P(wb.1 * p, gr2[0].y - 5), at: 0)
+        }
+        wb = (gr1[gr1.count - 1].x, gr2[gr2.count - 1].x)
+        for i in 0..<3 {
+            let p = 0.6 - Double(i * i) * 0.1
+            gr1.append(P(wb.0 * p, gr1[gr1.count - 1].y + 1))
+            gr2.append(P(wb.1 * p, gr2[gr2.count - 1].y + 1))
+        }
+        let d = 5.0
+        gr1 = ZXArt.div(gr1, d)
+        gr2 = ZXArt.div(gr2, d)
+        gr1.reverse()
+        var grlist = gr1 + gr2 + [gr1[0]]
+        // 原作: grlist 的首尾是同一个数组对象, 下面的 *= 会作用两次。
+        let last = grlist.count - 1
+        for i in 0..<grlist.count {
+            if i == last { grlist[last] = grlist[0] }
+            let v = (1 - abs(Double(i).truncatingRemainder(dividingBy: d) - d / 2) / (d / 2)) * 0.12
+            grlist[i].x *= 1 - v + n(grlist[i].y * 0.5) * v
+        }
+        grlist[0] = grlist[last]
+        canv.append(polyV3(grlist, xof: xoff, yof: yoff, fil: .white, str: nil, wid: 2))
+        canv += strokeV3(grlist.map { P($0.x + xoff, $0.y + yoff) }, wid: 3, col: .ink(0.2), profile: .nail)
+        var bd = Bound(xmin: .nan, xmax: .nan, ymin: .nan, ymax: .nan)
+        for (k, p) in grlist.enumerated() {
+            if k == 0 || p.x < bd.xmin { bd.xmin = p.x }
+            if k == 0 || p.x > bd.xmax { bd.xmax = p.x }
+            if k == 0 || p.y < bd.ymin { bd.ymin = p.y }
+            if k == 0 || p.y > bd.ymax { bd.ymax = p.y }
+        }
+        // dec = false: 竖幅构图不要原作的随机点景 (树 / 石 / 屋), 由构图自己布置。
+        if dec { canv += flatDec(xoff, yoff, bd) }
+        return canv
+    }
+
+    // MARK: distMountV3
+
+    func distMountV3(_ xoff: Double, _ yoff: Double, _ seed: Double = 0, hei: Double = 300, len: Double = 2000,
+                   seg: Double = 5) -> ZXArt.SSCanv {
+        var canv: ZXArt.SSCanv = []
+        let span = 10.0
+        var ptlist: [[P]] = []
+        var i = 0.0
+        while i < len / span / seg {
+            var row: [P] = []
+            var j = 0.0
+            while j < seg + 1 {
+                let k = i * seg + j
+                row.append(P(xoff + k * span,
+                             yoff - hei * n(k * 0.05, seed) * pow(sin((Double.pi * k) / (len / span)), 0.5)))
+                j += 1
+            }
+            j = 0
+            while j < seg / 2 + 1 {
+                let k = i * seg + j * 2
+                row.insert(P(xoff + k * span,
+                             yoff + 24 * n(k * 0.05, 2, seed) * pow(sin((Double.pi * k) / (len / span)), 1)), at: 0)
+                j += 1
+            }
+            ptlist.append(row)
+            i += 1
+        }
+        func getCol(_ x: Double, _ y: Double) -> C {
+            let c = Double(ZXArt.or0(n(x * 0.02, y * 0.02, yoff) * 55 + 200))
+            return C(c, c, c, 1)
+        }
+        for row in ptlist {
+            var p = polyV3(row, fil: getCol(row[row.count - 1].x, row[row.count - 1].y), str: nil, wid: 1)
+            p.wash = true
+            canv.append(p)
+            let T = ZXArt.triangulate(row, area: 100, convex: true, optimize: false)
+            for t in T {
+                let m = ZXArt.midPt(t)
+                let co = getCol(m.x, m.y)
+                var q = polyV3(t, fil: co, str: co, wid: 1)
+                q.wash = true
+                canv.append(q)
+            }
+        }
+        return canv
+    }
+
+    // MARK: rockV3
+
+    func rockV3(_ xoff: Double, _ yoff: Double, _ seed: Double = 0, hei: Double = 80, wid: Double = 100,
+              tex: Double = 40, sha: Double = 10) -> ZXArt.SSCanv {
+        var canv: ZXArt.SSCanv = []
+        let reso0 = 10, reso1 = 50
+        var ptlist: [[P]] = []
+        for i in 0..<reso0 {
+            var nslist: [Double] = []
+            for j in 0..<reso1 { nslist.append(n(Double(i), Double(j) * 0.2, seed)) }
+            ZXArt.loopNoise(&nslist)
+            var row: [P] = []
+            for j in 0..<reso1 {
+                let a = (Double(j) / Double(reso1)) * Double.pi * 2 - Double.pi / 2
+                let hc = hei * cos(a), ws = wid * sin(a)
+                var l = (wid * hei) / (hc * hc + ws * ws).squareRoot()
+                l *= 0.7 + 0.3 * nslist[j]
+                let p = 1 - Double(i) / Double(reso0)
+                let nx = cos(a) * l * p
+                var ny = -sin(a) * l * p
+                if Double.pi < a || a < 0 { ny *= 0.2 }
+                ny += hei * (Double(i) / Double(reso0)) * 0.2
+                row.append(P(nx, ny))
+            }
+            ptlist.append(row)
+        }
+        canv.append(surfaceV3(ptlist[0] + [P(0, 0)], xof: xoff, yof: yoff))
+        canv += strokeV3(ptlist[0].map { P($0.x + xoff, $0.y + yoff) }, wid: 3, col: .ink(0.3), noi: 1, profile: .brush)
+        canv += textureV3(ptlist, xof: xoff, yof: yoff, tex: tex, wid: 3, sha: sha,
+                        col: { _ in C(180, 180, 180, ZXArt.toFixed(0.3 + self.r() * 0.3, 3)) },
+                        dis: { self.r() > 0.5 ? 0.15 + 0.15 * self.r() : 0.85 - 0.15 * self.r() })
+        return canv
+    }
+}

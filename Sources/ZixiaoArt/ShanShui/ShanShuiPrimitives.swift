@@ -32,6 +32,8 @@ extension ZXArt {
         var wid: Double
         /// 远山的灰走淡墨映射。
         var wash: Bool = false
+        /// @3 只附带画法; p 仍是 @2 的构图 / fit / cull / 锚点几何。
+        var paintV3: SSPaintV3? = nil
     }
 
     typealias SSCanv = [SSPoly]
