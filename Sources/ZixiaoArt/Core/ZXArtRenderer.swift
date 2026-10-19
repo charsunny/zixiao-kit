@@ -212,9 +212,11 @@ extension ZXArt {
             ctx.draw(tile, in: CGRect(x: 0, y: 0, width: PaperTexture.side, height: PaperTexture.side), byTiling: true)
             ctx.restoreGState()
         }
-        let geo = Geo(s: s, ox: ox, oy: oy, ppu: Double(pixelsPerUnit), view: view, vy0: vy0, vy1: vy1)
+        let geo = Geo(s: s, ox: ox, oy: oy, ppu: Double(pixelsPerUnit), rect: rect, view: view, vy0: vy0, vy1: vy1)
         for (li, layer) in drawing.layers.enumerated() {
-            if let filter = layer.filter {
+            if layer.wash != nil || layer.tooth != nil {
+                drawWashed(prepared, li, in: ctx, geo)
+            } else if let filter = layer.filter {
                 drawFiltered(prepared, li, filter: filter, in: ctx, geo)
             } else if let mist = layer.mist {
                 drawMisted(prepared, li, mist: mist, in: ctx, geo)
@@ -238,6 +240,7 @@ extension ZXArt {
     /// 画布 → 上下文的变换与可见范围。
     struct Geo {
         var s: Double, ox: Double, oy: Double, ppu: Double
+        var rect: CGRect
         var view: CGRect
         var vy0: Float, vy1: Float
     }
@@ -335,7 +338,7 @@ extension ZXArt {
     }
 
     /// 滤镜层: 离屏画 → 逐像素 (只处理不透明像素, 只在形状包围盒 ∩ 可见区内) → 按混合模式贴回。
-    private static func drawFiltered(_ prepared: Prepared, _ li: Int, filter: LayerFilter, in ctx: CGContext, _ g: Geo) {
+    static func drawFiltered(_ prepared: Prepared, _ li: Int, filter: LayerFilter, in ctx: CGContext, _ g: Geo) {
         let layer = prepared.drawing.layers[li]
         guard let bb = bounds(of: layer.shapes) else { return }
         let s = g.s, ox = g.ox, oy = g.oy, ppu = g.ppu
@@ -416,7 +419,7 @@ extension ZXArt {
 
     /// 雾化层 (远山): 低分辨率离屏 → 按山脊深度淡出 → 两遍箱式模糊 → 平滑放大贴回。
     /// 低分辨率网格对齐整张图的原点, 离屏上下各多画一圈 (≥ 模糊半径), 分带渲染无接缝。
-    private static func drawMisted(_ prepared: Prepared, _ li: Int, mist: LayerMist, in ctx: CGContext, _ g: Geo) {
+    static func drawMisted(_ prepared: Prepared, _ li: Int, mist: LayerMist, in ctx: CGContext, _ g: Geo) {
         let layer = prepared.drawing.layers[li]
         guard let bb = bounds(of: layer.shapes) else { return }
         let s = g.s, ox = g.ox, oy = g.oy, ppu = g.ppu
@@ -516,5 +519,176 @@ extension ZXArt {
         if !(v > 0) { return 0 }
         if v >= 255 { return 255 }
         return v.rounded(.toNearestOrEven)
+    }
+}
+
+// MARK: - 选用的湿墨 / 干笔咬边
+
+extension ZXArt {
+    /// 半分辨率 alpha 源只读; 颜色按 64 行横带重画与处理, 不为整张图分配 RGBA 湿墨副本。
+    /// 源网格、输出横带、取样与贴回框都由整幅 rect 决定, 不依赖本次 visible / parallelRows 分法。
+    private static func drawWashed(_ prepared: Prepared, _ li: Int, in ctx: CGContext, _ g: Geo) {
+        let layer = prepared.drawing.layers[li]
+        guard let bb = bounds(of: layer.shapes), g.s > 0, g.ppu > 0 else { return }
+        let wash = layer.wash
+        let bleed = wash.map { $0.bleed.isFinite ? max(0, $0.bleed) : 0 } ?? 0
+        let rim = wash.map { $0.rim.isFinite ? max(0, $0.rim) : 0 } ?? 0
+        let grain = Brush.unit(wash?.grain ?? 0)
+        // wet = 半设备分辨率 (每格 2 像素, 缓冲边长至少 1); tooth-only = 原设备分辨率。
+        let unit = (wash == nil ? 1.0 : 2.0) / g.ppu
+        let logicalUnit = unit / g.s
+        // 最大位移 0.38 bleed + 外盘 1.35 bleed + 双线性邻格 + 贴回插值。
+        let support = 1.73 * bleed + 3 * logicalUnit
+        let strokePad = Double(layer.shapes.map(\.lineWidth).max() ?? 0) * 5 // miterLimit 10 × 半线宽
+        let pad = (support + strokePad) * g.s
+        let extent = CGRect(x: bb.minX * g.s + g.ox - pad, y: bb.minY * g.s + g.oy - pad,
+                            width: (bb.maxX - bb.minX) * g.s + 2 * pad,
+                            height: (bb.maxY - bb.minY) * g.s + 2 * pad)
+            .intersection(g.rect.insetBy(dx: -2 * unit, dy: -2 * unit))
+        guard !extent.isNull, extent.width > 0, extent.height > 0 else { return }
+        let x0 = Int(floor(Double(extent.minX) / unit)), x1 = Int(ceil(Double(extent.maxX) / unit))
+        let y0 = Int(floor(Double(extent.minY) / unit)), y1 = Int(ceil(Double(extent.maxY) / unit))
+        let halo = Int(ceil(support / logicalUnit))
+        let sx0 = x0 - halo, sy0 = y0 - halo
+        let sw = x1 - x0 + 2 * halo, sh = y1 - y0 + 2 * halo
+        guard sw > 0, sh > 0 else { return }
+
+        // filter / mist 先做, 但 blend / opacity 只在最终贴回时应用一次。
+        var baseLayer = layer
+        baseLayer.blend = .normal
+        baseLayer.opacity = 1
+        baseLayer.wash = nil
+        baseLayer.tooth = nil
+        var baseDrawing = prepared.drawing
+        baseDrawing.layers = [baseLayer]
+        let base = Prepared(baseDrawing)
+        func raster(_ off: CGContext, gx: Int, gy: Int, width: Int, height: Int) {
+            let box = CGRect(x: Double(gx) * unit, y: Double(gy) * unit,
+                             width: Double(width) * unit, height: Double(height) * unit)
+            off.translateBy(x: 0, y: CGFloat(height))
+            off.scaleBy(x: CGFloat(1 / unit), y: CGFloat(-1 / unit))
+            off.translateBy(x: -box.minX, y: -box.minY)
+            var sourceGeo = g
+            sourceGeo.ppu = 1 / unit
+            sourceGeo.view = box
+            sourceGeo.vy0 = -.infinity
+            sourceGeo.vy1 = .infinity
+            if let filter = baseLayer.filter {
+                drawFiltered(base, 0, filter: filter, in: off, sourceGeo)
+            } else if let mist = baseLayer.mist {
+                drawMisted(base, 0, mist: mist, in: off, sourceGeo)
+            } else {
+                withCG {
+                    off.translateBy(x: CGFloat(g.ox), y: CGFloat(g.oy))
+                    off.scaleBy(x: CGFloat(g.s), y: CGFloat(g.s))
+                    drawShapes(base, 0, in: off, vy0: -.infinity, vy1: .infinity)
+                }
+            }
+        }
+        // CGContext alphaOnly = 真正的一字节 alpha 缓冲, 不把颜色伪装成 4 通道蒙版。
+        let alpha: CGContext?
+        if wash != nil {
+            alpha = CGContext(data: nil, width: sw, height: sh, bitsPerComponent: 8, bytesPerRow: sw,
+                              space: nil, bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue)
+            guard let alpha else { return }
+            raster(alpha, gx: sx0, gy: sy0, width: sw, height: sh)
+        } else { alpha = nil }
+        let alphaSample = alpha.flatMap { off in
+            off.data.map { WashSamples(data: $0.assumingMemoryBound(to: UInt8.self), width: sw, height: sh,
+                                      bytesPerRow: off.bytesPerRow, channels: 1, x0: sx0, y0: sy0) }
+        }
+        if wash != nil, alphaSample == nil { return }
+        let paper = prepared.drawing.paper
+        let width = x1 - x0
+        // 条带始终锚在同一个 y0; 先多算两行再裁核心区, 双线性放大不会在条带边缘取到透明。
+        for start in stride(from: y0, to: y1, by: 64) {
+            let end = min(start + 64, y1)
+            let core = CGRect(x: Double(x0) * unit, y: Double(start) * unit,
+                              width: Double(width) * unit, height: Double(end - start) * unit)
+            guard core.intersects(g.view) else { continue }
+            let top = start - 2, bottom = end + 2, rows = bottom - top
+            let colorTop = top - halo, colorRows = rows + 2 * halo
+            guard let source = makeBitmap(width: sw, height: colorRows),
+                  let output = makeBitmap(width: width, height: rows),
+                  let colorData = source.data, let outputData = output.data else { return }
+            raster(source, gx: sx0, gy: colorTop, width: sw, height: colorRows)
+            let colors = WashSamples(data: colorData.assumingMemoryBound(to: UInt8.self), width: sw, height: colorRows,
+                                     bytesPerRow: source.bytesPerRow, channels: 4, x0: sx0, y0: colorTop)
+            let destination = SendableBuffer(pointer: outputData)
+            let outputStride = output.bytesPerRow
+            parallelRows(rows * width) { band in
+                let out = destination.pointer.assumingMemoryBound(to: UInt8.self)
+                for pixel in band {
+                    let row = pixel / width, column = pixel % width
+                    let gy = top + row
+                    let ly = ((Double(gy) + 0.5) * unit - g.oy) / g.s
+                    let gx = x0 + column
+                    let lx = ((Double(gx) + 0.5) * unit - g.ox) / g.s
+                    let originalColor = colors.at(Double(gx), Double(gy))
+                    var color = originalColor
+                    var opacity = originalColor.w
+                    if let alphaSample {
+                        let original = alphaSample.at(Double(gx), Double(gy)).x
+                        let displacement = WashNoise.displacement(lx, ly, bleed: bleed) / logicalUnit
+                        let qx = Double(gx) + displacement.x, qy = Double(gy) + displacement.y
+                        var a = 0.0, b = 0.0
+                        var inner = SIMD4<Double>.zero, outer = SIMD4<Double>.zero
+                        for point in WashNoise.disk {
+                            let p = point * (0.5 * bleed / logicalUnit)
+                            let q = point * (1.35 * bleed / logicalUnit)
+                            a += alphaSample.at(qx + p.x, qy + p.y).x / 12
+                            b += alphaSample.at(qx + q.x, qy + q.y).x / 12
+                            inner += colors.at(qx + p.x, qy + p.y) / 12
+                            outer += colors.at(qx + q.x, qy + q.y) / 12
+                        }
+                        let noise = WashNoise.fbm(lx, ly, seed: 0x94D049BB)
+                        opacity = (original * 0.28 + a * 0.72) * (0.86 + 0.22 * noise)
+                            + max(0, a - b) * rim * (0.8 + 0.5 * noise) + b * 0.1
+                        opacity *= 1 + grain * (WashNoise.value(lx * 2.3, ly * 2.3, seed: 0x369DEA0F) - 0.5) * 0.3
+                        // 颜色用相同采样盘的预乘色求加权平均, 透明区不会发黑, 也不强制改成黑墨。
+                        color = originalColor * 0.28 + inner * 0.72 + outer * 0.1
+                    }
+                    opacity = Brush.unit(opacity) * WashNoise.tooth(layer.tooth, paper: paper, x: lx, y: ly)
+                    let index = row * outputStride + column * 4
+                    let gain = color.w > 0 ? opacity / color.w : 0
+                    out[index] = UInt8((Brush.unit(color.x * gain) * 255).rounded())
+                    out[index + 1] = UInt8((Brush.unit(color.y * gain) * 255).rounded())
+                    out[index + 2] = UInt8((Brush.unit(color.z * gain) * 255).rounded())
+                    out[index + 3] = UInt8((opacity * 255).rounded())
+                }
+            }
+            guard let image = output.makeImage() else { return }
+            let box = CGRect(x: Double(x0) * unit, y: Double(top) * unit,
+                             width: Double(width) * unit, height: Double(rows) * unit)
+            withCG {
+                ctx.saveGState()
+                ctx.clip(to: core)
+                blit(image, into: ctx, box: box, blend: layer.blend, opacity: layer.opacity, interpolation: .low)
+                ctx.restoreGState()
+            }
+        }
+        // alpha 在所有取样完成之后释放 (WashSamples 的指针不逃逸本函数)。
+        withExtendedLifetime(alpha) {}
+    }
+
+    /// 全局低分辨率格点取样, 格点整数表示像素中心。越界读透明, 不夹住边缘而产生重复墨边。
+    private struct WashSamples {
+        let data: UnsafePointer<UInt8>
+        let width: Int, height: Int, bytesPerRow: Int, channels: Int, x0: Int, y0: Int
+
+        @inline(__always)
+        func at(_ x: Double, _ y: Double) -> SIMD4<Double> {
+            let fx = floor(x), fy = floor(y)
+            let ix = Int(fx) - x0, iy = Int(fy) - y0
+            let tx = x - fx, ty = y - fy
+            func pixel(_ x: Int, _ y: Int) -> SIMD4<Double> {
+                guard x >= 0, x < width, y >= 0, y < height else { return .zero }
+                let p = data + y * bytesPerRow + x * channels
+                if channels == 1 { return SIMD4(Double(p[0]) / 255, 0, 0, 0) }
+                return SIMD4(Double(p[0]) / 255, Double(p[1]) / 255, Double(p[2]) / 255, Double(p[3]) / 255)
+            }
+            let a = pixel(ix, iy), b = pixel(ix + 1, iy), c = pixel(ix, iy + 1), d = pixel(ix + 1, iy + 1)
+            return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty
+        }
     }
 }
