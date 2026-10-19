@@ -3,11 +3,11 @@
 //  契约 (poetryhub 画屏配方, 2026-09-30 定稿):
 //
 //      background.procedural = {
-//        generator: "shanshui@1" | "nonflowers@1" | "shanshui@2" | "nonflowers@2",
+//        generator: "shanshui@1" | "nonflowers@1" | "shanshui@2" | "nonflowers@2" | "shanshui@3",
 //        seed: string,
 //        variant: shanshui → "高山" | "江岸" | "远山";  nonflowers → "梅" | "荷" | "菊" | "兰" | "自然",
 //        params: { density?: number (0.5–1.5), hue?: number (0–360, 仅花), quiet_top?: number (0–0.5),
-//                  verse_side?: "left" | "right" | "top" (仅 @2), verse_columns?: int, verse_chars?: int (仅 @2) }
+//                  verse_side?: "left" | "right" | "top" (仅 @2 / 山水 @3), verse_columns?: int, verse_chars?: int (仅 @2 / 山水 @3) }
 //      }
 //
 //  @2 (2026-09-30): 构图给诗留一块「诗句框」(`verseLayout`, 见 ZXArtVerse.swift) —— 竖排是一侧的竖栏,
@@ -33,7 +33,7 @@ import ZixiaoColor
 public extension ZXArt {
     /// 配方里的程序化背景。Codable 的键与契约一致 (snake_case)。
     struct Procedural: Sendable, Hashable, Codable {
-        /// "shanshui@1" | "nonflowers@1" | "shanshui@2" | "nonflowers@2"
+        /// "shanshui@1" | "nonflowers@1" | "shanshui@2" | "nonflowers@2" | "shanshui@3"
         public var generator: String
         public var seed: String
         /// 山水: "高山" | "江岸" | "远山"; 花: "梅" | "荷" | "菊" | "兰" | "自然"
@@ -48,11 +48,11 @@ public extension ZXArt {
             /// 0–0.5: 顶部留白 (锁屏时钟 + 诗句) 占画面高度的份额。缺省 0.32。花的横幅 (中号小组件) 不用它,
             /// 花在右侧、左侧留白; 山水横幅两者都用 (主体在右下)。
             public var quietTop: Double?
-            /// 仅 @2: 诗句落在哪边 ("left" | "right" | "top"), 缺省 "right"。认不出的值 → 本库不画 (回退纸纹)。
+            /// 仅 @2 / 山水 @3: 诗句落在哪边 ("left" | "right" | "top"), 缺省 "right"。认不出的值 → 本库不画 (回退纸纹)。
             public var verseSide: String?
-            /// 仅 @2: 诗句几列 (竖) / 几行 (横), 定诗句框的宽 (竖) / 高 (横)。缺省 2, 夹到 1…4。
+            /// 仅 @2 / 山水 @3: 诗句几列 (竖) / 几行 (横), 定诗句框的宽 (竖) / 高 (横)。缺省 2, 夹到 1…4。
             public var verseColumns: Int?
-            /// 仅 @2: 最长一句几个字, 定诗句框的高 (竖) / 宽 (横)。缺省 7, 夹到 4…10。
+            /// 仅 @2 / 山水 @3: 最长一句几个字, 定诗句框的高 (竖) / 宽 (横)。缺省 7, 夹到 4…10。
             public var verseChars: Int?
 
             public init(density: Double? = nil, hue: Double? = nil, quietTop: Double? = nil,
@@ -109,13 +109,26 @@ public extension ZXArt {
         public var isSupported: Bool { resolved != nil }
 
         /// 支持的生成器版本 (客户端可据此决定是否回退纸纹)。
-        public static let supportedGenerators: Set<String> = ["shanshui@1", "nonflowers@1", "shanshui@2", "nonflowers@2"]
+        public static let supportedGenerators: Set<String> = ["shanshui@1", "nonflowers@1", "shanshui@2", "nonflowers@2", "shanshui@3"]
+
+        /// 供调用方的缓存键和画屏背景共用; 配方本身不改写。
+        public func effectiveGenerator(allowsShanShuiV3: Bool = true) -> String {
+            !allowsShanShuiV3 && generator == "shanshui@3" ? "shanshui@2" : generator
+        }
+
+        /// 纯函数退回入口: seed / variant / params 逐字段保留, 其他生成器原样返回。
+        public func downgraded() -> Procedural {
+            var copy = self
+            copy.generator = effectiveGenerator(allowsShanShuiV3: false)
+            return copy
+        }
 
         enum Resolved {
             case shanshuiV1(ShanShui.Variant)
             case nonflowersV1(Flowers.Season)
             case shanshuiV2(ShanShui.Variant, VerseSide)
             case nonflowersV2(Flowers.Season, VerseSide)
+            case shanshuiV3(ShanShui.Variant, VerseSide)
         }
 
         var resolved: Resolved? {
@@ -127,6 +140,9 @@ public extension ZXArt {
             case "shanshui@2":
                 guard let side = resolvedVerseSide else { return nil }
                 return ShanShui.Variant(rawValue: variant).map { .shanshuiV2($0, side) }
+            case "shanshui@3":
+                guard let side = resolvedVerseSide else { return nil }
+                return ShanShui.Variant(rawValue: variant).map { .shanshuiV3($0, side) }
             case "nonflowers@2":
                 guard let side = resolvedVerseSide else { return nil }
                 return Flowers.Season(rawValue: variant).map { .nonflowersV2($0, side) }
@@ -148,7 +164,7 @@ public extension ZXArt {
             let side: VerseSide
             switch kind {
             case .shanshuiV1, .nonflowersV1: return nil
-            case .shanshuiV2(_, let s), .nonflowersV2(_, let s): side = s
+            case .shanshuiV2(_, let s), .nonflowersV2(_, let s), .shanshuiV3(_, let s): side = s
             }
             let frame = Frame(pixelSize: pixelSize)
             let quiet = min(max(params.quietTop ?? frame.defaultQuietTop, 0), 0.5)
@@ -178,8 +194,9 @@ public extension ZXArt {
 
     /// 生成画 (矢量, 可交给 `ZXArtCanvas` 或 `render(_:pixelWidth:pixelHeight:)`)。
     /// 不认识的配方返回 nil。纯函数, 线程安全。
-    static func drawing(procedural p: Procedural, palette: Palette, pixelSize: CGSize) -> Drawing? {
-        traced(procedural: p, palette: palette, pixelSize: pixelSize)?.drawing
+    static func drawing(procedural p: Procedural, palette: Palette, pixelSize: CGSize,
+                        allowsShanShuiV3: Bool = true) -> Drawing? {
+        traced(procedural: p, palette: palette, pixelSize: pixelSize, allowsShanShuiV3: allowsShanShuiV3)?.drawing
     }
 }
 
@@ -190,7 +207,9 @@ extension ZXArt {
     /// - hue: 只作用于 nonflowers
     /// - 纸纹总是画 (不透明底; 配方的暗化遮罩由客户端叠在上面)
     /// - 版式按像素长宽比: 高/宽 ≥ 1.3 竖幅, 宽/高 > 1.3 横幅, 其余方幅
-    static func traced(procedural p: Procedural, palette: Palette, pixelSize: CGSize) -> (drawing: Drawing, trace: Trace)? {
+    static func traced(procedural recipe: Procedural, palette: Palette, pixelSize: CGSize,
+                       allowsShanShuiV3: Bool = true) -> (drawing: Drawing, trace: Trace)? {
+        let p = allowsShanShuiV3 ? recipe : recipe.downgraded()
         guard let kind = p.resolved, pixelSize.width >= 1, pixelSize.height >= 1 else { return nil }
         let frame = Frame(pixelSize: pixelSize)
         let quiet = min(max(p.params.quietTop ?? frame.defaultQuietTop, 0), 0.5)
@@ -211,6 +230,10 @@ extension ZXArt {
             var params = ShanShui.Params(palette: palette, density: density, variant: variant, quietTop: quiet)
             params.verse = verse
             return ShanShui.generateTraced(seed: seed, size: pixelSize, params: params)
+        case .shanshuiV3(let variant, _):
+            guard let verse = p.verseLayout(pixelSize: pixelSize) else { return nil }
+            let params = ShanShui.Params(palette: palette, density: density, variant: variant, quietTop: quiet)
+            return ShanShui.generateV3Traced(seed: seed, size: pixelSize, params: params, verse: verse)
         case .nonflowersV2(let season, _):
             guard let verse = p.verseLayout(pixelSize: pixelSize) else { return nil }
             let layout: Flowers.Layout = frame == .wide ? .widget : (frame == .portrait ? .portrait : .square)
@@ -226,14 +249,16 @@ public extension ZXArt {
 
     /// 配方 → 位图 (`pixelSize` 像素, 如锁屏 1206×2622、中号小组件 1062×498)。
     /// 不认识的 generator / 版本 / variant 返回 nil (调用方回退纸纹)。线程安全, 可在后台线程 / 小组件扩展里调用。
-    static func render(procedural p: Procedural, palette: Palette, pixelSize: CGSize) -> CGImage? {
-        guard let d = drawing(procedural: p, palette: palette, pixelSize: pixelSize) else { return nil }
+    static func render(procedural p: Procedural, palette: Palette, pixelSize: CGSize,
+                       allowsShanShuiV3: Bool = true) -> CGImage? {
+        guard let d = drawing(procedural: p, palette: palette, pixelSize: pixelSize, allowsShanShuiV3: allowsShanShuiV3) else { return nil }
         return render(d, pixelWidth: Int(pixelSize.width.rounded()), pixelHeight: Int(pixelSize.height.rounded()))
     }
 
     /// 同上, 直接给纸 / 墨 / 淡墨 (wash 缺省 = 墨 40% 叠在纸上)。
     static func render(procedural p: Procedural, paper: ZXHex, ink: ZXHex, wash: ZXHex? = nil,
-                       pixelSize: CGSize) -> CGImage? {
-        render(procedural: p, palette: Palette(paper: paper, ink: ink, wash: wash), pixelSize: pixelSize)
+                       pixelSize: CGSize, allowsShanShuiV3: Bool = true) -> CGImage? {
+        render(procedural: p, palette: Palette(paper: paper, ink: ink, wash: wash), pixelSize: pixelSize,
+               allowsShanShuiV3: allowsShanShuiV3)
     }
 }
