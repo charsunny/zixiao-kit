@@ -7,7 +7,11 @@
 //  random(seed, index) = Double(hash) / 4294967296, 范围 [0, 1)。
 //  noise(seed, x): k = floor(x), t = x-k, u = t*t*(3-2*t),
 //  a = random(seed, UInt32(k mod 2^32)), b = random(seed, UInt32((k+1) mod 2^32)),
-//  返回 a+(b-a)*u。所有噪声都是此一维值噪声, 不用三角函数取随机数。
+//  返回 a+(b-a)*u。笔触噪声采用此定义, 不用三角函数取随机数。
+//  blot 则用周期为 8 的值噪声: 对 i = 0..<48, a = i/48*2π, x = i/48*8,
+//  k = floor(x), t = x-k, u = t*t*(3-2*t), n = random(seed,k)
+//  + (random(seed,(k+1)%8)-random(seed,k))*u。r = radius*(0.82+0.3*n),
+//  局部点为 (r*cos(a), r*squash*sin(a)), 旋转 angle 后加 center; 不重复末点。
 
 import Foundation
 import ZixiaoColor
@@ -27,36 +31,44 @@ public extension ZXArt {
             public var dry: Double
             /// 留给湿层的比例; 第 1 步只存值, 不改变几何与出图。
             public var wet: Double
-            /// 正值表示中心线前进方向的左侧含墨更多, 范围 −1…1。
+            /// y 向下的屏幕坐标中, 正值表示前进方向右侧含墨更多, 范围 −1…1。
             public var side: Double
+            /// 非空时以整笔平均法线与此方向的点积决定 side 正负, 强度取 |side|。
+            /// 零向量、垂直或非有限方向不覆盖 side; 不随 progress 改变。
+            public var darkDirection: SIMD2<Double>?
             public var bristles: Int?
             public var rough: Double
             public var fade: Double?
             /// 动画固定参考弧长, 也固定笔毫采样数; 墨体仍按实际弧长采样。
+            /// 应 ≥ 动画中的最大弧长; 给得更小会使笔毫采样变稀。采样数仍以 600 为上限。
             public var gapLength: Double?
             public var profile: Profile
 
             public init(width: Double = 4, tone: Double = 0.82, dry: Double = 0.4, wet: Double = 0,
-                        side: Double = 0, bristles: Int? = nil, rough: Double = 0.2, fade: Double? = nil,
+                        side: Double = 0, darkDirection: SIMD2<Double>? = nil, bristles: Int? = nil,
+                        rough: Double = 0.2, fade: Double? = nil,
                         gapLength: Double? = nil, profile: Profile = .brush) {
                 self.width = width; self.tone = tone; self.dry = dry; self.wet = wet
                 self.side = side; self.bristles = bristles; self.rough = rough; self.fade = fade
+                self.darkDirection = darkDirection
                 self.gapLength = gapLength; self.profile = profile
             }
         }
 
-        /// 墨体按左边正序、右边倒序围合; 首点不重复, 转 Shape 时显式闭合。
-        public struct Stroke: Sendable {
+        /// 墨体按正法线侧正序、负法线侧倒序围合; 首点不重复, 转 Shape 时显式闭合。
+        public struct Stroke: Sendable, Hashable {
             public var body: [SIMD2<Float>]
-            public var bodyAlpha: (start: Float, end: Float)
+            public var bodyAlphaStart: Float
+            public var bodyAlphaEnd: Float
             public var bristles: [Bristle]
 
-            public init(body: [SIMD2<Float>] = [], bodyAlpha: (start: Float, end: Float) = (0, 0),
+            public init(body: [SIMD2<Float>] = [], bodyAlphaStart: Float = 0, bodyAlphaEnd: Float = 0,
                         bristles: [Bristle] = []) {
-                self.body = body; self.bodyAlpha = bodyAlpha; self.bristles = bristles
+                self.body = body; self.bodyAlphaStart = bodyAlphaStart; self.bodyAlphaEnd = bodyAlphaEnd
+                self.bristles = bristles
             }
 
-            public struct Bristle: Sendable {
+            public struct Bristle: Sendable, Hashable {
                 public var runs: [[SIMD2<Float>]]
                 public var width: Float
                 public var alpha: Float
@@ -90,36 +102,48 @@ public extension ZXArt {
             let hairCount = sampleCount(length: reference, step: gapLength == nil ? step : 0.5)
             let bodyLast = Int((progress * Double(bodyCount - 1)).rounded(.down))
             let hairLast = Int((progress * Double(hairCount - 1)).rounded(.down))
+            let widthScale = style.width * 1.3 + 1
+            var side = min(1, max(-1, style.side.isFinite ? style.side : 0))
+            if let direction = style.darkDirection, direction.x.isFinite, direction.y.isFinite {
+                let normal = curve.averageNormal
+                let alignment = normal.x * direction.x + normal.y * direction.y
+                if alignment > 0 { side = abs(side) }
+                else if alignment < 0 { side = -abs(side) }
+            }
 
             func frame(_ i: Int, _ count: Int) -> (point: SIMD2<Double>, normal: SIMD2<Double>, width: Double) {
                 let u = Double(i) / Double(count - 1), sample = curve.at(u)
                 let w = style.width * pressure(style.profile, u) * max(0, sample.point.z)
-                    * (1 + unit(style.rough) * (noise(seed ^ 0xA511E9B3, u * reference * 0.12) - 0.5) * 2)
+                    * (1 + unit(style.rough) * (noise(seed ^ 0xA511E9B3, u * reference / widthScale) - 0.5) * 2)
                 return (SIMD2(sample.point.x, sample.point.y), sample.normal, max(style.width * 0.04, w))
             }
-            var left: [SIMD2<Float>] = [], right: [SIMD2<Float>] = []
+            var positive: [SIMD2<Float>] = [], negative: [SIMD2<Float>] = []
             if bodyLast >= 1 {
                 for i in 0...bodyLast {
                     let f = frame(i, bodyCount)
-                    left.append(floatPoint(f.point + f.normal * (f.width * 0.5)))
-                    right.append(floatPoint(f.point - f.normal * (f.width * 0.5)))
+                    positive.append(floatPoint(f.point + f.normal * (f.width * 0.5)))
+                    negative.append(floatPoint(f.point - f.normal * (f.width * 0.5)))
                 }
             }
             let bodyOpacity = tone * pow(1 - dry, 1.6)
             let bodyEnd = Double(bodyLast) / Double(bodyCount - 1)
-            var out = Stroke(body: left + Array(right.reversed()),
-                             bodyAlpha: (Float(bodyOpacity), Float(bodyOpacity * (1 - fade * bodyEnd))))
+            var out = Stroke(body: positive + Array(negative.reversed()),
+                             bodyAlphaStart: Float(bodyOpacity), bodyAlphaEnd: Float(bodyOpacity * (1 - fade * bodyEnd)))
             let count = style.bristles.map { min(56, max(0, $0)) }
                 ?? Int(min(56, max(4, (style.width * 1.1).rounded())))
             guard count > 0 else { return out }
+            // 二分查弧长与压力计算每点只做一次, 所有笔毫共享同一组 frame。
+            let hairFrames = (0...hairLast).map { frame($0, hairCount) }
             for j in 0..<count {
                 let key = hash(seed ^ 0x63D83595, UInt32(j))
                 let off = (Double(j) + 0.15 + 0.7 * random(key, 0)) / Double(count) - 0.5
                 let load = 1 - dry * (0.15 + 0.85 * abs(off) * 2) * random(key, 1)
-                let scale = 0.035 + random(key, 2) * 0.065
+                let g = 0.5 + random(key, 2) * 1.6
+                let gapScale = max(6, style.width * 1.4) * g
                 let end = 1 - dry * 0.2 * random(key, 3)
-                let side = min(1, max(-1, style.side.isFinite ? style.side : 0))
-                let sideAlpha = off * side < 0 ? 1 - abs(side) : 1
+                let sign = side < 0 ? -1.0 : 1.0
+                let blend = unit(off * sign * 1.6 + 0.5)
+                let sideAlpha = (1 - abs(side)) + abs(side) * blend
                 var runs: [[SIMD2<Float>]] = [], run: [SIMD2<Float>] = []
                 // 单点不成线, 暂不输出; 随 progress 增长后才成为完整段的前缀。
                 func flush() {
@@ -129,11 +153,11 @@ public extension ZXArt {
                 for i in 0...hairLast {
                     let u = Double(i) / Double(hairCount - 1), x = u * reference
                     let ink = load - dry * (0.08 + 1.15 * pow(u, 1.25))
-                        + dry * ((noise(key ^ 0xB5297A4D, x * scale) - 0.5) * 1.15
-                               + (noise(key ^ 0x68E31DA4, x * scale * 3.7) - 0.5) * 0.35)
+                        + dry * ((noise(key ^ 0xB5297A4D, x / gapScale) - 0.5) * 1.15
+                               + (noise(key ^ 0x68E31DA4, x / gapScale * 5.5) - 0.5) * 0.35)
                     if dry == 0 || (u <= end && ink > 0.16) {
-                        let f = frame(i, hairCount)
-                        let jitter = (noise(key ^ 0x1B56C4E9, x * 0.09) - 0.5) * 0.06
+                        let f = hairFrames[i]
+                        let jitter = (noise(key ^ 0x1B56C4E9, x / widthScale) - 0.5) * 0.06
                         run.append(floatPoint(f.point + f.normal * ((off + jitter) * f.width)))
                     } else { flush() }
                 }
@@ -209,7 +233,10 @@ extension ZXArt.Brush {
         case .brush: return (0.45 + 0.55 * min(1, s / 0.08)) * pow(1 - s, 0.65)
         case .tip: return pow(max(0, sin(.pi * s)), 0.7)
         case .nail: return (0.22 + 0.78 * exp(-s * 12)) * pow(1 - s, 0.35)
-        case .na: return pow(s, 0.7) * (1 - pow(s, 8)) * 1.8
+        case .na:
+            // s^8 = 0.7/8.7 时达到峰值, 用解析峰值归一化到 1。
+            let peak = pow(0.7 / 8.7, 0.7 / 8) * (8 / 8.7)
+            return pow(s, 0.7) * (1 - pow(s, 8)) / peak
         case .press: return 0.25 + 0.75 * pow(max(0, sin(.pi * s)), 0.5)
         case .rise: return pow(s, 0.6)
         case .lens: return pow(max(0, sin(.pi * s)), 1.6)
@@ -224,6 +251,12 @@ extension ZXArt.Brush {
         var points: [SIMD3<Double>] = []
         var distances: [Double] = [0]
         var length: Double { distances.last ?? 0 }
+        /// 按弧长加权的平均单位法线: 各段 (-dy, dx) 的和 / 总弧长。
+        var averageNormal: SIMD2<Double> {
+            guard let first = points.first, let last = points.last, length > 0 else { return .zero }
+            let delta = last - first
+            return SIMD2(-delta.y / length, delta.x / length)
+        }
 
         init(_ input: [SIMD3<Double>]) {
             for i in 0..<(input.count - 1) {
@@ -268,7 +301,7 @@ public extension ZXArt {
     static func shapes(from stroke: Brush.Stroke, palette: Palette = .paperInk) -> [Shape] {
         var shapes: [Shape] = []
         if stroke.body.count >= 3 {
-            let alpha = Double(stroke.bodyAlpha.start + stroke.bodyAlpha.end) * 0.5
+            let alpha = Double(stroke.bodyAlphaStart + stroke.bodyAlphaEnd) * 0.5
             shapes.append(Shape(points: stroke.body, fill: palette.mapGray(0, alpha: alpha), stroke: nil,
                                 lineWidth: 0, closed: true))
         }
