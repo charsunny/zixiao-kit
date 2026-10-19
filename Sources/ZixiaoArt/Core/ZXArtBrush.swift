@@ -29,7 +29,7 @@ public extension ZXArt {
             /// 焦 .96 / 浓 .82 / 重 .60 / 淡 .34 / 清 .16; 以墨色的 alpha 表达。
             public var tone: Double
             public var dry: Double
-            /// 留给湿层的比例; 第 1 步只存值, 不改变几何与出图。
+            /// 湿晕光环的墨体比例; layers(from:styles:…) 使用, 不改变几何与 shapes(from:)。
             public var wet: Double
             /// y 向下的屏幕坐标中, 正值表示前进方向右侧含墨更多, 范围 −1…1。
             public var side: Double
@@ -312,5 +312,27 @@ public extension ZXArt {
             }
         }
         return shapes
+    }
+}
+
+public extension ZXArt {
+    /// 每笔与一个 Style 对应 (数量必须相同), 不向 Stroke 增加状态, 保持原 Hashable / fixture。
+    /// 干层保留完整墨体与全部笔毫, 湿层额外叠墨体 × wet, 避免分流墨体使原笔密度下降。
+    /// 按 wet → dry 的顺序绘制; tooth 仅作用于干层, wash 仅作用于湿层。
+    static func layers(from strokes: [Brush.Stroke], styles: [Brush.Style], palette: Palette = .paperInk,
+                       wash: LayerWash? = nil, tooth: Double? = nil) -> (wet: Layer, dry: Layer) {
+        precondition(strokes.count == styles.count, "每笔需要一个对应的 Style")
+        var wet: [Shape] = [], dry: [Shape] = []
+        for (stroke, style) in zip(strokes, styles) {
+            dry.append(contentsOf: shapes(from: stroke, palette: palette))
+            let amount = Brush.unit(style.wet)
+            if amount > 0, stroke.body.count >= 3 {
+                let alpha = Double(stroke.bodyAlphaStart + stroke.bodyAlphaEnd) * 0.5 * amount
+                wet.append(Shape(points: stroke.body, fill: palette.mapGray(0, alpha: alpha), stroke: nil,
+                                 lineWidth: 0, closed: true))
+            }
+        }
+        let blend: BlendMode = palette.isDark ? .normal : .multiply
+        return (Layer(blend: blend, wash: wash, shapes: wet), Layer(blend: blend, tooth: tooth, shapes: dry))
     }
 }

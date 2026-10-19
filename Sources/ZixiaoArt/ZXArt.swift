@@ -284,19 +284,39 @@ public extension ZXArt {
         }
     }
 
+    /// 选用的湿墨后处理。bleed 是逻辑单位; rim、grain 是无量纲强度。
+    /// 不消耗生成器随机数, 只由逻辑坐标确定。
+    struct LayerWash: Sendable, Hashable {
+        public var bleed: Double
+        public var rim: Double
+        public var grain: Double
+
+        public init(bleed: Double = 3, rim: Double = 0.6, grain: Double = 0.12) {
+            self.bleed = bleed
+            self.rim = rim
+            self.grain = grain
+        }
+    }
+
     struct Layer: Sendable {
         public var blend: BlendMode
         public var opacity: Double
         public var filter: LayerFilter?
         public var mist: LayerMist?
+        /// nil 保留原渲染路径。非空时在 filter / mist 之后湿化, 再做 tooth, 最后应用 blend / opacity。
+        public var wash: LayerWash?
+        /// 纸纹咬边强度 0…1。只调制本层 alpha; 无纸纹时用逻辑坐标值噪声。
+        public var tooth: Double?
         public var shapes: [Shape]
 
         public init(blend: BlendMode = .normal, opacity: Double = 1, filter: LayerFilter? = nil,
-                    mist: LayerMist? = nil, shapes: [Shape] = []) {
+                    mist: LayerMist? = nil, wash: LayerWash? = nil, tooth: Double? = nil, shapes: [Shape] = []) {
             self.blend = blend
             self.opacity = opacity
             self.filter = filter
             self.mist = mist
+            self.wash = wash
+            self.tooth = tooth
             self.shapes = shapes
         }
     }
