@@ -657,6 +657,8 @@ extension ZXArt {
                     out[index + 3] = UInt8((opacity * 255).rounded())
                 }
             }
+            // colors 只借用指针; 必须把拥有内存的 CGContext 留到同步并行取样完成。
+            withExtendedLifetime(source) {}
             guard let image = output.makeImage() else { return }
             let box = CGRect(x: Double(x0) * unit, y: Double(top) * unit,
                              width: Double(width) * unit, height: Double(rows) * unit)
@@ -672,7 +674,8 @@ extension ZXArt {
     }
 
     /// 全局低分辨率格点取样, 格点整数表示像素中心。越界读透明, 不夹住边缘而产生重复墨边。
-    private struct WashSamples {
+    // 只读借用; 拥有者 CGContext 在 parallelRows 返回前保持存活, 没有并行写源缓冲。
+    private struct WashSamples: @unchecked Sendable {
         let data: UnsafePointer<UInt8>
         let width: Int, height: Int, bytesPerRow: Int, channels: Int, x0: Int, y0: Int
 
