@@ -130,7 +130,7 @@ final class ZXArtRenderTests: XCTestCase {
 
     func testUnknownGeneratorVersionOrVariantRendersNil() {
         let size = CGSize(width: 300, height: 600)
-        for (g, v) in [("shanshui@3", "高山"), ("nonflowers@3", "梅"), ("shanshui", "高山"), ("nonflowers@0", "梅"), ("bamboo@1", "竹"),
+        for (g, v) in [("shanshui@4", "高山"), ("nonflowers@3", "梅"), ("shanshui", "高山"), ("nonflowers@0", "梅"), ("bamboo@1", "竹"),
                        ("shanshui@1", "梅"), ("nonflowers@1", "高山"), ("nonflowers@1", "竹")] {
             let p = ZXArt.Procedural(generator: g, seed: "a", variant: v)
             XCTAssertFalse(p.isSupported, "\(g) \(v)")

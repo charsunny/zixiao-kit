@@ -60,6 +60,27 @@ final class ZXArtProceduralFixtureTests: XCTestCase {
     static let fixtureURLV2 = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         .appendingPathComponent("Fixtures/zxart/procedural-v2.json")
 
+    /// @3: 三种变体 × 三种画幅 × 三种诗句边; 密度、种子和 quiet_top 覆盖分支。
+    static let casesV3: [Case] = {
+        var result: [Case] = []
+        let sizes = [(510, 510), (1206, 2622), (1062, 498)]
+        for (vi, variant) in ["高山", "江岸", "远山"].enumerated() {
+            for (fi, size) in sizes.enumerated() {
+                for (si, side) in ["left", "right", "top"].enumerated() {
+                    let i = vi + fi + si
+                    result.append(Case(generator: "shanshui@3", seed: ["秋分-1", "a", "2026"][i % 3], variant: variant,
+                                       density: [0.6, 1.0, 1.5][i % 3], quietTop: i % 2 == 0 ? 0.4 : nil,
+                                       width: size.0, height: size.1, verseSide: side,
+                                       verseColumns: side == "top" ? 2 : 4, verseChars: 7))
+                }
+            }
+        }
+        return result
+    }()
+
+    static let fixtureURLV3 = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/zxart/procedural-v3.json")
+
     static func record(_ c: Case) throws -> [String: Any] {
         var params: [String: Any] = [:]
         if let v = c.density { params["density"] = v }
@@ -77,8 +98,17 @@ final class ZXArtProceduralFixtureTests: XCTestCase {
         for l in d.layers {
             var np = 0, sx = 0.0, sy = 0.0
             for sh in l.shapes { for v in sh.points { np += 1; sx += Double(v.x); sy += Double(v.y) } }
-            layers.append(["kind": l.mist != nil ? "mist" : (l.filter != nil ? "filter" : "plain"),
-                           "shapes": l.shapes.count, "points": np, "sumX": sx, "sumY": sy])
+            var layer: [String: Any] = ["kind": l.mist != nil ? "mist" : (l.rim != nil ? "rim" : (l.filter != nil ? "filter" : "plain")),
+                                        "shapes": l.shapes.count, "points": np, "sumX": sx, "sumY": sy]
+            if c.generator == "shanshui@3" {
+                layer["blend"] = l.blend == .multiply ? "multiply" : "normal"
+                layer["opacity"] = l.opacity
+                layer["tooth"] = l.tooth ?? 0
+                layer["wash"] = l.wash.map { [$0.bleed, $0.rim, $0.grain] } ?? []
+                layer["rim"] = l.rim.map { [$0.width, $0.power, $0.peakOpacity, $0.ridgeX0, $0.ridgeStep, Double($0.seed)] } ?? []
+                layer["alphaSum"] = l.shapes.reduce(0.0) { $0 + ($1.fill?.alpha ?? 0) + ($1.stroke?.alpha ?? 0) }
+            }
+            layers.append(layer)
         }
         var engine: [String: Any] = ["polys": t.polys, "points": t.points, "sumX": t.sumX, "sumY": t.sumY,
                                      "prngAfter": t.prngAfter]
@@ -103,10 +133,21 @@ final class ZXArtProceduralFixtureTests: XCTestCase {
                   note: "ZixiaoArt @2 cross-platform fixtures (verse-aware composition). Same fields as procedural-v1.json; engine for shanshui@2 = the composition parts after fit/cull (what is drawn); verse = the verse rect in unit coordinates (x, y, width, height; origin top-left) that the art keeps clear and the client typesets into. Counts must match exactly; sums to ~1e-6 relative; verse rect to 1e-9.")
     }
 
+    func testProceduralV3Fingerprints() throws {
+        try check(Self.casesV3, url: Self.fixtureURLV3, resource: "procedural-v3", writeTag: "v3",
+                  note: "shanshui@3 Swift-first fixtures. engine = frozen @2 layout skeleton after fit/cull; drawing = final Brush bodies/bristles, rims, wash and tooth. 4b will port these to JS. Generated on Mac only; never synthesize a golden on the VPS.",
+                  skipMissing: true)
+    }
+
     /// 写 (ZXART_WRITE_FIXTURES=1 写全部 / =v2 只写 @2) 或逐项比对。
-    func check(_ cases: [Case], url fixtureURL: URL, resource: String, writeTag: String, note: String) throws {
-        let records = try cases.map(Self.record)
+    func check(_ cases: [Case], url fixtureURL: URL, resource: String, writeTag: String, note: String, skipMissing: Bool = false) throws {
         let flag = ProcessInfo.processInfo.environment["ZXART_WRITE_FIXTURES"]
+        let bundled = Bundle.module.url(forResource: resource, withExtension: "json", subdirectory: "Fixtures/zxart")
+        let source = FileManager.default.fileExists(atPath: fixtureURL.path) ? fixtureURL : nil
+        if skipMissing, flag != "1", flag != writeTag, bundled == nil, source == nil {
+            throw XCTSkip("尚无 \(resource).json; 请在 Mac 首次运行 ZXART_WRITE_FIXTURES=v3，审阅样张后提交真实金标。")
+        }
+        let records = try cases.map(Self.record)
         if flag == "1" || flag == writeTag {
             let doc: [String: Any] = ["note": note, "cases": records]
             let data = try JSONSerialization.data(withJSONObject: doc, options: [.prettyPrinted, .sortedKeys])
@@ -114,7 +155,7 @@ final class ZXArtProceduralFixtureTests: XCTestCase {
             print("wrote \(fixtureURL.path)")
             return
         }
-        let url = try XCTUnwrap(Bundle.module.url(forResource: resource, withExtension: "json", subdirectory: "Fixtures/zxart"))
+        let url = try XCTUnwrap(bundled ?? (skipMissing ? source : nil))
         let doc = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let want = try XCTUnwrap(doc["cases"] as? [[String: Any]])
         XCTAssertEqual(want.count, records.count)
@@ -139,6 +180,15 @@ final class ZXArtProceduralFixtureTests: XCTestCase {
                 XCTAssertEqual(a["points"] as? Int, b["points"] as? Int, "\(label) layer \(i) points")
                 close(a["sumX"], b["sumX"], "\(label) layer \(i) Σx")
                 close(a["sumY"], b["sumY"], "\(label) layer \(i) Σy")
+                if got["generator"] as? String == "shanshui@3" {
+                    XCTAssertEqual(a["blend"] as? String, b["blend"] as? String)
+                    for key in ["opacity", "tooth", "alphaSum"] { close(a[key], b[key], "\(label) layer \(i) \(key)") }
+                    for key in ["wash", "rim"] {
+                        let av = try XCTUnwrap(a[key] as? [Double]), bv = try XCTUnwrap(b[key] as? [Double])
+                        XCTAssertEqual(av.count, bv.count)
+                        for (x, y) in zip(av, bv) { close(x, y, "\(label) layer \(i) \(key)") }
+                    }
+                }
             }
             let gv = got["verse"] as? [String: Any], wv = w["verse"] as? [String: Any]
             XCTAssertEqual(gv == nil, wv == nil, "\(label) verse rect presence")
