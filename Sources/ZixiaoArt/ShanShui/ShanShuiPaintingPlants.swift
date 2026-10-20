@@ -132,24 +132,31 @@ extension ShanShuiEngine {
         for leaf in leaves {
             let seed = r() * 10, notch = r() * 2 * Double.pi
             let cy = leaf.y - leaf.raised
+            // A raised leaf is seen side-on and tipped: a tilted, flattened bowl, not a flat plate.
+            let tilt = leaf.raised > 0 ? (r() < 0.5 ? -1.0 : 1.0) * (0.25 + r() * 0.2) : 0
+            let squash = leaf.raised > 0 ? 0.55 : 1.0
             let edge = (0...56).map { i -> P in
                 let a = Double(i) / 56 * 2 * Double.pi
                 var v = 0.86 + 0.18 * n(a * 2.2 + seed)
                 let gap = abs(atan2(sin(a - notch), cos(a - notch)))
                 if gap < 0.22 { v *= 0.55 + gap * 2 }          // the notch where the stem joins
-                return P(leaf.x + cos(a) * leaf.rx * v, cy + sin(a) * leaf.ry * v)
+                let ex = cos(a) * leaf.rx * v, ey = sin(a) * leaf.ry * v * squash
+                return P(leaf.x + ex * cos(tilt) - ey * sin(tilt), cy + ex * sin(tilt) + ey * cos(tilt))
             }
-            let tone = 0.15 + r() * 0.16 + (leaf.raised > 0 ? 0.05 : 0)
+            // 泼墨: leaves are the darkest masses of the pond; raised ones darkest of all.
+            let tone = 0.32 + r() * 0.2 + (leaf.raised > 0 ? 0.12 : 0)
             c.append(poly(edge, fil: .white, str: nil))
             c.append(poly(edge, fil: .gray(0, tone), str: nil))
             // A darker loaded stroke along the far rim gives the leaf its curl.
             let rim = Array(edge[30...54])
             c += inkLine(rim, width: 1.6 + r(), tone: min(0.85, tone + 0.3), dry: 0.35)
-            // A few veins from the centre, only on the near half.
-            for k in 0..<4 {
-                let a = 0.3 + Double(k) * 0.65
-                c += inkLine([P(leaf.x, cy), P(leaf.x + cos(a) * leaf.rx * 0.7, cy + sin(a) * leaf.ry * 0.7)],
-                    width: 0.5, tone: min(0.7, tone + 0.15), dry: 0.4)
+            // Veins lifted out in paper white, radiating from the stem point.
+            for k in 0..<6 {
+                let a = Double(k) / 6 * 2 * Double.pi + seed
+                let ex = cos(a) * leaf.rx * 0.72, ey = sin(a) * leaf.ry * 0.72 * squash
+                c.append(poly([P(leaf.x, cy), P(leaf.x + ex * cos(tilt) - ey * sin(tilt) + 0.9, cy + ex * sin(tilt) + ey * cos(tilt)),
+                               P(leaf.x + ex * cos(tilt) - ey * sin(tilt), cy + ex * sin(tilt) + ey * cos(tilt) + 0.9)],
+                    fil: C(255, 255, 255, 0.45), str: nil))
             }
             if leaf.raised > 0 {
                 c += inkLine(inkCurve([P(leaf.x + 2, cy + leaf.ry * 0.6), P(leaf.x - 1, leaf.y - leaf.raised * 0.4),

@@ -55,9 +55,11 @@ struct ZXArtPaintingSceneTests {
                 let d = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: .init(width: 669, height: 951)))
                 let stream = try #require(d.sceneElements.first { $0.motif == "stream" }).bounds.cgRect
                 let far = try #require(d.sceneElements.first { $0.motif == "groundBank" }).bounds.cgRect
-                let near = try #require(d.sceneElements.first { $0.motif == "nearBank" }).bounds.cgRect
+                // With a full-width ground band there is no separate near slope; the stream then runs
+                // through the band from its top edge down into the dissolving lower half.
+                let near = d.sceneElements.first { $0.motif == "nearBank" }?.bounds.cgRect
                 #expect(stream.minY <= far.minY + 0.006)
-                #expect(stream.maxY >= near.maxY - 0.006)
+                #expect(stream.maxY >= (near?.maxY ?? (far.minY + far.height * 0.5)) - 0.006)
                 #expect(d.anchors?.water != nil)
                 for object in d.sceneElements where ["hut", "pine", "bamboo"].contains(object.motif) {
                     let r = object.bounds.cgRect

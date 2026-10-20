@@ -680,7 +680,7 @@ private final class PaintingStage {
             include(.layeredTree, slot(0.65, 0.34, 0.32, 0.47))
             include(.path, slot(0.2, 0.02, 0.48, 0.9, front: true))
         case .lotusPond:
-            include(.lotus, slot(0.0, 0.0, 0.78, 0.95, front: true))
+            include(.lotus, slot(0.0, 0.05, 0.56, 0.90, front: true))
             include(.willow, slot(0.61, 0.03, 0.37, 0.59))
             if chosen.contains(.stream), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
                 // A spring entering a pond opens into shallow ripples at the bank, not a
@@ -759,10 +759,10 @@ private final class PaintingStage {
             // 幽州台: a small stone terrace on the summit, the figure standing on it.
             if let summit = mainSummit {
                 let size = h * 0.034
-                let terraceW = size * 2.6, terraceH = size * 0.55
+                let terraceW = size * 1.7, terraceH = size * 0.40
                 var deck = summit.y + terraceH * 0.4
                 if chosen.contains(.terrace),
-                   add(.terrace, CGRect(x: summit.x - terraceW / 2, y: max(art.minY + size, summit.y - terraceH * 0.6),
+                   add(.terrace, CGRect(x: summit.x - terraceW / 2, y: max(art.minY + size, summit.y - terraceH * 0.05),
                                         width: terraceW, height: terraceH)),
                    let t = elements.last(where: { $0.motif == "terrace" })?.bounds.cgRect {
                     deck = t.minY * h + 1
