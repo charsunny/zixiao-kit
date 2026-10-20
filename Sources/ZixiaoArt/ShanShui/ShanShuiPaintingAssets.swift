@@ -15,6 +15,8 @@ extension ShanShuiEngine {
         case .dunes: return paintingDunes()
         case .beaconSmoke, .cookingSmoke: return paintingSmoke(beacon: motif == .beaconSmoke)
         case .reeds, .grass: return paintingReeds()
+        case .vine: return paintingVine()
+        case .horse: return paintingHorse()
         case .boat, .angler, .mooredBoat, .sail: return paintingBoat(motif)
         case .traveler: return paintingPerson()
         case .egret: return paintingEgret()
@@ -86,7 +88,7 @@ extension ShanShuiEngine {
             let pull = 1 - min(1, shade(p.x, p.y) * 1.6)
             return P(p.x + (x1 - p.x) * pull * 0.55, p.y + (y1 - p.y) * pull * 0.45)
         }
-        result.append(poly(shadow, fil: .gray(0, 0.06), str: nil))
+        result.append(poly(shadow, fil: .gray(0, 0.10), str: nil))
 
         // Texture strokes: density and tone follow the shade.
         let count = min(900, max(50, Int(w * h / 45)))
@@ -100,51 +102,106 @@ extension ShanShuiEngine {
             guard keep, inside(P(x, y)), inside(end) else { continue }
             let moisture = 0.5 + 0.8 * n(x * 0.04, y * 0.04)
             result += inkLine([P(x, y), P(x + lean * 0.5, y + length * 0.45), end],
-                width: 0.45 + r() * 0.9, tone: (0.08 + 0.32 * s) * moisture, dry: 0.55 + 0.25 * (1 - s))
+                width: 0.45 + r() * 0.9, tone: (0.08 + 0.42 * s) * moisture, dry: 0.55 + 0.25 * (1 - s))
         }
 
         // Moss dots (点苔) along the upper contour: small, dark, in clusters of two or three.
         let tops = points.enumerated().filter { _, p in p.y < y0 + h * 0.4 }.map(\.offset)
         if !tops.isEmpty {
-            let clusters = max(2, min(9, Int(w / 28)))
+            // Few clusters, sitting on the crest itself: flat horizontal dabs, not round dots.
+            let clusters = max(1, min(5, Int(w / 55)))
             for _ in 0..<clusters {
                 let p = points[tops[Int(r() * Double(tops.count)) % tops.count]]
-                let dots = 2 + Int(r() * 2.5)
+                let dots = 2 + Int(r() * 2)
                 for k in 0..<dots {
-                    let x = p.x + (r() - 0.5) * 5, y = p.y + 1.2 + r() * 2.5 + Double(k) * 0.4
-                    result += inkBlot(x, y, radius: 0.8 + r() * 0.9, squash: 0.55 + r() * 0.3,
-                        angle: -0.4 + r() * 0.8, tone: 0.55 + r() * 0.3)
+                    let x = p.x + (Double(k) - 1) * (1.6 + r() * 1.4), y = p.y + 0.3 + r() * 1.0
+                    result += inkBlot(x, y, radius: 0.55 + r() * 0.5, squash: 0.38 + r() * 0.2,
+                        angle: -0.25 + r() * 0.5, tone: 0.42 + r() * 0.28)
                 }
             }
         }
         return result
     }
 
+    /// Withered vine (枯藤) hanging from branches: a few strands of unequal length that sway
+    /// slightly, with small dark leaves bunched near the top. Drawn in the crown's own frame.
+    func paintingVine() -> ZXArt.SSCanv {
+        var c: ZXArt.SSCanv = []
+        let strands = 5 + Int(r() * 3)
+        for k in 0..<strands {
+            let x = 8 + Double(k) * (84 / Double(strands)) + (r() - 0.5) * 8
+            let length = 40 + r() * 70
+            let sway = (r() - 0.5) * 10
+            let line = inkCurve([P(x, 0), P(x + sway * 0.4, length * 0.35), P(x + sway, length * 0.7),
+                                 P(x + sway * 0.6, length)])
+            c += inkLine(line, width: 0.6 + r() * 0.4, tone: 0.55 + r() * 0.2, dry: 0.45)
+            for _ in 0..<(3 + Int(r() * 4)) {
+                let t = pow(r(), 1.6) * 0.8
+                let i = min(line.count - 1, Int(t * Double(line.count - 1)))
+                c += inkBlot(line[i].x + (r() - 0.5) * 3, line[i].y, radius: 1.2 + r() * 1.3,
+                    squash: 0.5 + r() * 0.3, angle: r() * 3, tone: 0.5 + r() * 0.3)
+            }
+        }
+        return c
+    }
+
+    /// A lean, tired horse (瘦马): one wash for the body, the neck falling forward and the head
+    /// low, thin legs with a slight bend, a hanging tail. A few strokes, not an outline drawing.
+    func paintingHorse() -> ZXArt.SSCanv {
+        let body = inkCurve([P(22, 46), P(34, 38), P(56, 37), P(74, 40), P(80, 48), P(76, 58),
+                             P(56, 62), P(34, 61), P(22, 55), P(22, 46)])
+        var c = [poly(body, fil: .gray(0, 0.38), str: nil)]
+        // Neck and head: a loaded stroke sweeping down and forward.
+        let neck = inkCurve([P(74, 42), P(84, 40), P(93, 48), P(99, 60)])
+        c += inkLine(neck, width: 7.5, tone: 0.55, dry: 0.25, profile: .cone)
+        c += inkBlot(100, 62, radius: 4.2, squash: 0.62, angle: 0.9, tone: 0.62)
+        c += inkLine([P(82, 39), P(87, 37), P(91, 41)], width: 1.4, tone: 0.8, dry: 0.4) // mane
+        // Spine and belly accents.
+        c += inkLine(inkCurve([P(24, 46), P(40, 38), P(62, 38), P(76, 42)]), width: 1.4, tone: 0.72, dry: 0.4)
+        c += inkLine(inkCurve([P(30, 60), P(52, 63), P(72, 58)]), width: 0.9, tone: 0.5, dry: 0.5)
+        // Legs: thin, slightly bent, hooves dotted.
+        for (x0, dx, lean) in [(30.0, -2.0, -1.0), (38, 1, 1), (66, -1, 1), (73, 3, -1)] {
+            let knee = P(x0 + dx + lean * 2, 76), hoof = P(x0 + dx * 2 + lean, 92)
+            c += inkLine([P(x0, 58), knee, hoof], width: 1.6, tone: 0.72, dry: 0.35)
+            c += inkBlot(hoof.x + 1, hoof.y, radius: 1.3, squash: 0.6, tone: 0.75)
+        }
+        c += inkLine(inkCurve([P(23, 47), P(16, 54), P(14, 66), P(12, 74)]), width: 2.2, tone: 0.6, dry: 0.5)
+        return c
+    }
+
+    /// A thatched cottage (茅屋) as landscape painters draw it: a low, broad roof with deep eaves
+    /// and a slightly lifted ridge, short walls mostly in shadow, one open bay. Wider than tall,
+    /// so it sits into the ground instead of standing on it like a box.
     func paintingHouse() -> ZXArt.SSCanv {
-        let front = [P(20, 63), P(99, 86), P(99, 130), P(20, 106)]
-        let side = [P(99, 86), P(128, 43), P(165, 75), P(165, 115), P(99, 130)]
-        let backRoof = [P(48, 21), P(128, 43), P(172, 75), P(92, 53)]
-        let roof = [P(6, 62), P(48, 21), P(128, 43), P(100, 89)]
-        var c = [poly(front, fil: .white, str: nil), poly(side, fil: .white, str: nil)]
-        c.append(poly(side, fil: .gray(0, 0.12), str: nil))
-        c.append(poly(backRoof, fil: .gray(0, 0.12), str: nil))
+        let lift = 2 + r() * 2
+        let ridge = inkCurve([P(34, 30 + lift), P(60, 26), P(100, 25), P(128, 28 + lift)])
+        let eave = inkCurve([P(4, 62), P(50, 58), P(112, 57), P(158, 60)])
+        let roof = [P(34, 30 + lift)] + ridge.dropFirst() + [P(158, 60)] + eave.reversed().dropFirst()
+        let wall = [P(18, 60), P(146, 59), P(146, 92), P(18, 94)]
+        var c = [poly(wall, fil: .white, str: nil), poly(wall, fil: .gray(0, 0.07), str: nil)]
+        // The open bay and the shadow under the eaves carry the darkest ink of the building.
+        let bay = [P(64, 62), P(98, 61), P(98, 92), P(64, 93)]
+        c.append(poly(bay, fil: .gray(0, 0.55), str: nil))
+        c.append(poly([P(18, 60), P(146, 59), P(146, 66), P(18, 67)], fil: .gray(0, 0.22), str: nil))
         c.append(poly(roof, fil: .white, str: nil))
-        c.append(poly(roof, fil: .gray(0, 0.17), str: nil))
-        c += inkEdges([P(3, 56), P(6, 62), P(48, 21), P(128, 43), P(172, 75), P(176, 71)], width: 1.8, tone: 0.75, dry: 0.43)
-        c += inkEdges([P(6, 62), P(100, 89), P(105, 85)], width: 2.6, tone: 0.85, dry: 0.4)
-        c += inkEdges([P(100, 89), P(128, 43)], width: 1.9, tone: 0.65, dry: 0.5)
-        for k in 0..<16 {
-            let t = Double(k + 1) / 17
-            c += inkLine([P(48 + 80 * t, 21 + 22 * t), P(6 + 94 * t, 62 + 27 * t)],
-                width: 0.5 + r() * 0.35, tone: 0.18 + r() * 0.22, dry: 0.65)
+        c.append(poly(roof, fil: .gray(0, 0.20), str: nil))
+        // Thatch: strokes fall from the ridge to the eave, denser and darker toward the eave.
+        for k in 0..<22 {
+            let t = (Double(k) + r() * 0.6) / 22
+            let top = P(34 + 94 * t, 27 + lift * (1 - sin(t * .pi)) - 1)
+            let bottom = P(6 + 150 * t + (r() - 0.5) * 3, 59 - (r() * 2))
+            c += inkLine([top, P((top.x + bottom.x) / 2, (top.y + bottom.y) / 2 + 2), bottom],
+                width: 0.5 + r() * 0.5, tone: 0.20 + r() * 0.25, dry: 0.6)
         }
-        c += inkEdges([P(20, 67), P(20, 106), P(99, 130), P(165, 115), P(165, 79)], width: 1.0, tone: 0.5)
-        c += inkLine([P(99, 89), P(99, 130)], width: 1.1, tone: 0.55)
-        for x in [40.0, 68] {
-            let y = 86 + (x - 40) * 0.28
-            c += inkLine([P(x, y), P(x + 10, y + 3)], width: 3, tone: 0.65, dry: 0.25)
+        c += inkLine(ridge, width: 2.4, tone: 0.80, dry: 0.35)
+        c += inkLine(eave, width: 2.0, tone: 0.85, dry: 0.30)
+        c += inkEdges([P(34, 30 + lift), P(4, 62)], width: 1.4, tone: 0.65, dry: 0.45)
+        c += inkEdges([P(128, 28 + lift), P(158, 60)], width: 1.4, tone: 0.65, dry: 0.45)
+        // Posts and a plinth; the side walls are left mostly to the paper.
+        for x in [22.0, 64, 98, 142] {
+            c += inkLine([P(x, 63), P(x + 0.5, 93)], width: 1.3, tone: 0.62, dry: 0.3)
         }
-        c += inkLine([P(127, 99), P(127, 121)], width: 5.5, tone: 0.62, dry: 0.12)
+        c += inkLine([P(12, 95), P(80, 94), P(152, 93)], width: 1.6, tone: 0.55, dry: 0.5)
         return c
     }
 

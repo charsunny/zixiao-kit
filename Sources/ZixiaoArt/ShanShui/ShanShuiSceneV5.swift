@@ -143,7 +143,7 @@ private final class PaintingStage {
         case .depth:
             art = CGRect(x: left, y: start, width: available, height: high * 0.96)
         }
-        let low = options.purpose == .reading ? height * 0.74 : max(self.verse.maxY + pad, height * 0.74)
+        let low = options.purpose == .reading ? height * 0.66 : max(self.verse.maxY + pad, height * 0.58)
         if width <= height * 1.3, footer - low > 28 {
             foreground = CGRect(x: pad, y: low, width: width - 2 * pad, height: footer - low)
         } else {
@@ -154,8 +154,17 @@ private final class PaintingStage {
 
     private func slot(_ x: Double, _ y: Double, _ width: Double, _ height: Double, front: Bool = false) -> CGRect {
         let box = front ? foreground : art
-        return CGRect(x: box.minX + x * box.width, y: box.minY + y * box.height,
-                      width: width * box.width, height: height * box.height)
+        let r = CGRect(x: box.minX + x * box.width, y: box.minY + y * box.height,
+                       width: width * box.width, height: height * box.height)
+        // Like an inscribed hanging scroll: the verse sits in the sky on one side, and the ground
+        // beneath it runs the full width of the page. Anything wholly below the verse keeps its
+        // relative place but spreads across the lower band instead of staying in the side column.
+        guard !front, !verse.isNull, r.minY >= verse.maxY else { return r }
+        let pad = min(w, h) * 0.045
+        let band = CGRect(x: pad, y: 0, width: w - 2 * pad, height: h)
+        let u0 = (r.minX - art.minX) / art.width, u1 = (r.maxX - art.minX) / art.width
+        return CGRect(x: band.minX + u0 * band.width, y: r.minY,
+                      width: (u1 - u0) * band.width, height: r.height)
     }
 
     @discardableResult
@@ -376,8 +385,8 @@ private final class PaintingStage {
             // 山腰云锁: the lower third of the main peak dissolves into cloud instead of
             // standing on the bank like a monument.
             let r = object.bounds
-            parts.append(.init(canv: object.canv, mist: .init(depth: r.height * 10, blur: 0.25, peak: 1,
-                floorY: r.maxY - r.height * 0.06, floorDepth: r.height * 0.38)))
+            parts.append(.init(canv: object.canv))
+            parts.append(.init(canv: engine.paintingCloud(over: r)))
             engine.noted(.ridge(.main), object.canv)
             elements.append(.init(motif: "mainMountain", bounds: .init(x: r.minX / w, y: r.minY / h,
                 width: r.width / w, height: r.height / h)))
@@ -596,11 +605,16 @@ private final class PaintingStage {
             include(.dragonfly, slot(0.24, 0.33, 0.18, 0.08))
         case .autumnTravel:
             include(.bareTree, slot(0.0, 0.08, 0.76, 0.72))
-            include(.vine, slot(0.18, 0.21, 0.30, 0.35))
+            // The vine hangs from the old tree's crown; it never floats on its own.
+            if chosen.contains(.vine), let tree = elements.first(where: { $0.motif == "bareTree" })?.bounds.cgRect {
+                add(.vine, CGRect(x: (tree.minX + tree.width * 0.12) * w, y: (tree.minY + tree.height * 0.06) * h,
+                    width: tree.width * w * 0.76, height: tree.height * h * 0.55))
+            }
             include(.crow, slot(0.12, 0.23, 0.13, 0.08))
             include(.path, slot(0.05, 0, 0.52, 0.95, front: true))
-            include(.traveler, slot(0.49, 0.72, 0.06, 0.08))
-            include(.horse, slot(0.58, 0.26, 0.18, 0.44, front: true))
+            // Rider and horse share one ground plane and one scale (马与人同高): a small pair on the road.
+            include(.traveler, slot(0.50, 0.30, 0.045, 0.16, front: true))
+            include(.horse, slot(0.555, 0.33, 0.10, 0.13, front: true))
             include(.bridge, slot(0.01, 0.08, 0.42, 0.29, front: true))
             include(.stream, slot(0.02, 0.36, 0.35, 0.55, front: true))
         case .winterForest:
@@ -653,6 +667,7 @@ private final class PaintingStage {
             case .stream: add(motif, slot(0.60, 0.02, 0.22, 0.88, front: true))
             case .mist, .afterRain: add(motif, slot(0.02, 0.42, 0.96, 0.10))
             case .rain: break
+            case .vine: continue // only ever hangs from a tree crown
             case .snow: add(motif, slot(0, 0.2, 1, 0.65, front: true))
             case .path: add(motif, slot(0.1, 0.1, 0.4, 0.8, front: true))
             case .reeds, .grass: add(motif, slot(0.03, 0.1, 0.20, 0.8, front: true))

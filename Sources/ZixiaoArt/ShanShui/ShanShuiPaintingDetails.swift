@@ -66,15 +66,32 @@ extension ShanShuiEngine {
         return c
     }
 
+    /// A clump of reeds leaning one way in the wind: stems of unequal height rising from one root
+    /// area, long leaves arching out at different heights, pale plumes at the tips.
     func paintingReeds() -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
-        for k in 0..<12 {
-            let x = 4 + Double(k) * 5, end = P(x - 15 + r() * 22, 15 + r() * 35)
-            c += inkLine(inkCurve([P(x, 110), P(x - 6, 76), end]), width: 0.9, tone: 0.55)
-            c += inkLine([P(end.x - 1, end.y + 9), end, P(end.x + 3, end.y - 7)], width: 3, tone: 0.52, profile: .lens)
-            for side in [-1.0, 1] {
-                c += inkLine([P(x - 1, 87), P(x + side * 8, 70), P(x + side * 17, 66)],
-                    width: 2.3, tone: 0.58, dry: 0.22, profile: .lens)
+        let wind = r() < 0.5 ? -1.0 : 1.0
+        let stems = 9 + Int(r() * 6)
+        for k in 0..<stems {
+            let root = P(30 + (r() - 0.5) * 34 + Double(k) * 1.5, 112 + r() * 4)
+            let height = 55 + r() * 50
+            let bend = wind * (8 + r() * 18) * height / 100
+            let tip = P(root.x + bend, root.y - height)
+            let stem = inkCurve([root, P(root.x + bend * 0.25, root.y - height * 0.5), tip])
+            c += inkLine(stem, width: 0.7 + r() * 0.5, tone: 0.42 + r() * 0.25, dry: 0.35)
+            // One or two leaves per stem, leaving at different heights and arching downwind.
+            for _ in 0..<(1 + Int(r() * 2)) {
+                let t = 0.25 + r() * 0.45
+                let i = min(stem.count - 1, Int(t * Double(stem.count - 1)))
+                let base = stem[i], length = 18 + r() * 22
+                let leaf = inkCurve([base, P(base.x + wind * length * 0.5, base.y - length * 0.35),
+                                     P(base.x + wind * length, base.y - length * 0.05 + r() * 8)])
+                c += inkLine(leaf, width: 1.8 + r() * 1.4, tone: 0.40 + r() * 0.3, dry: 0.2, profile: .lens)
+            }
+            // Plume: a soft, pale dab trailing downwind from the tip.
+            if r() < 0.75 {
+                c += inkBlot(tip.x + wind * 2.5, tip.y + 3, radius: 3 + r() * 2, squash: 0.35,
+                    angle: wind * 1.1, tone: 0.16 + r() * 0.12)
             }
         }
         return c

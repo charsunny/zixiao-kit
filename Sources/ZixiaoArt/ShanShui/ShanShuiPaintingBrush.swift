@@ -1,5 +1,6 @@
 // shanshui@5 painting path. Preserve this version when adding future painting styles.
 // Brush vocabulary for shanshui@5. Earlier generators never call these routines.
+import CoreGraphics
 import Foundation
 
 extension ShanShuiEngine {
@@ -116,6 +117,29 @@ extension ShanShuiEngine {
         let profile = PaintingMountainProfile(random: { self.r() })
         return paintingLegacy(mountain(140, 420, r() * 80, hei: profile.height,
             wid: profile.width, tex: 240, veg: false, architecture: false, profile: profile), textured: true)
+    }
+
+    /// Cloud at the foot of a peak (山腰云锁), painted by leaving paper: stacked paper-coloured
+    /// bands with billowing upper edges, thin near the waist and solid at the foot, so the peak
+    /// rises out of cloud instead of standing on the bank.
+    func paintingCloud(over peak: CGRect) -> ZXArt.SSCanv {
+        var c: ZXArt.SSCanv = []
+        let top = peak.maxY - peak.height * (0.36 + r() * 0.08), bottom = peak.maxY + peak.height * 0.04
+        let x0 = peak.minX - peak.width * 0.08, x1 = peak.maxX + peak.width * 0.08
+        let bands = 6
+        for k in 0..<bands {
+            let t = Double(k) / Double(bands - 1)
+            let y = top + (bottom - top) * t * 0.82
+            let phase = r() * 6, freq = 0.035 + r() * 0.03
+            let edge = (0...60).map { i -> P in
+                let x = x0 + (x1 - x0) * Double(i) / 60
+                let billow = abs(sin(x * freq + phase)) * (5 + 6 * (1 - t))
+                return P(x, y - billow + 4 * (n(x * 0.02, Double(k)) - 0.5))
+            }
+            let alpha = k == bands - 1 ? 0.85 : 0.22 + 0.10 * t
+            c.append(poly(edge + [P(x1, bottom), P(x0, bottom)], fil: C(255, 255, 255, alpha), str: nil))
+        }
+        return c
     }
 
     /// Distant range: a few peaks of unequal height (one leads, the others fall away), with a
