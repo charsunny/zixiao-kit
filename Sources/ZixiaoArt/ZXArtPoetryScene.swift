@@ -16,7 +16,7 @@ public extension ZXArt {
         case stream, waterfall, dunes, beaconSmoke, cookingSmoke, mist, moon, crescent, sunrise, sunset, stars, snow, afterRain, rain, waves, reef
     }
 
-    /// Optional, versioned presentation. Missing values preserve the first @5 painting exactly.
+    /// Page presentation; omitted fields use the current inscription composition.
     enum ScenePurpose: String, Sendable, Hashable, Codable, CaseIterable {
         case inscription = "inscription-v1", reading = "reading-v1", recommendation = "recommendation-v1"
     }
@@ -38,6 +38,23 @@ public extension ZXArt {
             return SceneMotif.allCases.filter(selected.contains)
         }
         public func contains(_ motif: SceneMotif) -> Bool { motifs.contains(motif) }
+
+        func resolvedForPainting(scene: PoetryScene, seed: String) -> Self {
+            var result = self
+            result.purpose = purpose ?? .inscription
+            if composition == nil {
+                var hash: UInt32 = 2_166_136_261
+                for byte in seed.utf8 { hash = (hash ^ UInt32(byte)) &* 16_777_619 }
+                let candidates: [SceneComposition]
+                switch scene {
+                case .fishing, .waterTown, .farewell, .lotusPond, .ocean, .desert: candidates = [.oppositeBank, .corner]
+                case .retreat, .temple, .historic: candidates = [.depth, .corner]
+                default: candidates = SceneComposition.allCases
+                }
+                result.composition = candidates[Int(hash) % candidates.count]
+            }
+            return result
+        }
     }
 
     struct SceneSelection: Sendable, Hashable {
@@ -50,19 +67,12 @@ public extension ZXArt {
                                        purpose: ScenePurpose? = nil, composition: SceneComposition? = nil) -> Procedural {
             var result = procedural(seed: seed, verseSide: verseSide, columns: columns, chars: chars)
             result.generator = "shanshui@5"
-            if let purpose {
-                var hash: UInt32 = 2_166_136_261
-                for byte in seed.utf8 { hash = (hash ^ UInt32(byte)) &* 16_777_619 }
-                let candidates: [SceneComposition]
-                switch scene {
-                case .fishing, .waterTown, .farewell, .lotusPond, .ocean, .desert: candidates = [.oppositeBank, .corner]
-                case .retreat, .temple, .historic: candidates = [.depth, .corner]
-                default: candidates = SceneComposition.allCases
-                }
-                result.params.scene?.purpose = purpose
-                result.params.scene?.composition = composition ?? candidates[Int(hash) % candidates.count]
-                result.params.quietTop = purpose == .recommendation ? 0.22 : (purpose == .reading ? 0.12 : 0.18)
-            } else if let composition { result.params.scene?.composition = composition }
+            var options = options
+            options.purpose = purpose ?? options.purpose
+            options.composition = composition ?? options.composition
+            options = options.resolvedForPainting(scene: scene, seed: seed)
+            result.params.scene = options
+            result.params.quietTop = options.purpose == .recommendation ? 0.22 : (options.purpose == .reading ? 0.12 : 0.18)
             return result
         }
 

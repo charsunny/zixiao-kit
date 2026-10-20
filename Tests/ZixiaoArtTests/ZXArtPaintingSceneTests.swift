@@ -4,22 +4,22 @@ import Testing
 @testable import ZixiaoArt
 
 struct ZXArtPaintingSceneTests {
-    @Test func versionAndSavedSelectionRemainIndependent() throws {
+    @Test func omittedPresentationUsesTheCurrentPainting() throws {
         let selection = ZXArt.poetryScene(text: "明月松间照，清泉石上流", title: "山居秋暝")
-        let legacy = selection.procedural(seed: "same-poem")
         let painting = selection.paintingProcedural(seed: "same-poem")
-        #expect(legacy.generator == "shanshui@4")
         #expect(painting.generator == "shanshui@5")
-        #expect(legacy.seed == painting.seed)
-        #expect(legacy.params == painting.params)
-        #expect(painting.downgraded() == painting)
+        #expect(painting.params.scene?.purpose == .inscription)
+        #expect(painting.params.scene?.composition != nil)
         #expect(painting.isSupported)
         #expect(try JSONDecoder().decode(ZXArt.Procedural.self, from: JSONEncoder().encode(painting)) == painting)
+        var unmarked = painting
+        unmarked.params.scene?.purpose = nil
+        unmarked.params.scene?.composition = nil
         let size = CGSize(width: 375, height: 500)
-        let old = try #require(ZXArt.drawing(procedural: legacy, palette: .paperInk, pixelSize: size))
-        let new = try #require(ZXArt.drawing(procedural: painting, palette: .paperInk, pixelSize: size))
-        #expect(old.pointCount != new.pointCount)
-        #expect(old.sceneElements != new.sceneElements)
+        let implicit = try #require(ZXArt.drawing(procedural: unmarked, palette: .paperInk, pixelSize: size))
+        let explicit = try #require(ZXArt.drawing(procedural: painting, palette: .paperInk, pixelSize: size))
+        #expect(implicit.pointCount == explicit.pointCount)
+        #expect(implicit.sceneElements == explicit.sceneElements)
     }
 
     @Test(arguments: ZXArt.PoetryScene.allCases)
@@ -129,7 +129,7 @@ struct ZXArtPaintingSceneTests {
     @Test func standaloneMountainDoesNotSmuggleInRandomBuildings() {
         let engine = ShanShuiEngine(seed: .init("page-scale"))
         engine.anchorLog = []
-        _ = engine.paintingMountain(standalone: true)
+        _ = engine.paintingMountain()
         #expect(engine.anchorLog?.contains { piece in
             if case .building = piece.kind { return true }
             return false

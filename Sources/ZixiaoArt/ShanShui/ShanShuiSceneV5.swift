@@ -1,4 +1,4 @@
-// shanshui@5 painting path. Preserve this version when adding future painting styles.
+// Current shanshui@5 painting path; all page profiles share one composition and scale model.
 import CoreGraphics
 import Foundation
 import ZixiaoColor
@@ -8,6 +8,7 @@ extension ZXArt {
     enum PoetryPaintingRenderer {
         static func generate(seed: Seed, size: CGSize, palette: Palette, scene: PoetryScene,
                              options: SceneOptions, quietTop: Double, verse: VerseLayout) -> (drawing: Drawing, trace: Trace) {
+            let options = options.resolvedForPainting(scene: scene, seed: seed.string)
             let ratio = Double(size.height / size.width)
             let w = 420 * max(1, 1 / ratio), h = 420 * max(1, ratio)
             let stage = PaintingStage(seed: seed, width: w, height: h, palette: palette, verse: verse, quietTop: quietTop, options: options)
@@ -95,8 +96,8 @@ private final class PaintingStage {
     let verse: CGRect
     let art: CGRect
     let foreground: CGRect
-    let purpose: ZXArt.ScenePurpose?
-    let composition: ZXArt.SceneComposition?
+    let purpose: ZXArt.ScenePurpose
+    let composition: ZXArt.SceneComposition
     let seed: String
     var parts: [ShanShuiEngine.Part] = []
     var elements: [ZXArt.SceneElement] = []
@@ -109,67 +110,43 @@ private final class PaintingStage {
     init(seed: ZXArt.Seed, width: Double, height: Double, palette: ZXArt.Palette, verse: ZXArt.VerseLayout, quietTop: Double, options: ZXArt.SceneOptions) {
         self.w = width; self.h = height; self.palette = palette
         self.seed = seed.string
-        purpose = options.purpose; composition = options.composition
+        purpose = options.purpose ?? .inscription; composition = options.composition ?? .corner
         self.verse = options.purpose == .reading ? .null : verse.rect(in: CGSize(width: width, height: height)).insetBy(dx: -8, dy: -8)
         engine = ShanShuiEngine(seed: .init("poetry-painting-v1:" + seed.string))
         engine.drawTowers = false
         engine.anchorLog = []
         let pad = min(width, height) * 0.045
         let top = max(pad, quietTop * height)
-        if options.purpose == nil && options.composition == nil {
-            switch verse.side {
-            case .right:
-                art = CGRect(x: pad, y: top, width: max(60, self.verse.minX - pad * 2), height: height - top - pad)
-            case .left:
-                art = CGRect(x: self.verse.maxX + pad, y: top,
-                             width: max(60, width - self.verse.maxX - pad * 2), height: height - top - pad)
-            case .top:
-                if width > height * 1.3 {
-                    art = CGRect(x: self.verse.maxX + pad, y: pad,
-                                 width: max(60, width - self.verse.maxX - pad * 2), height: height - 2 * pad)
-                } else {
-                    art = CGRect(x: pad, y: max(top, self.verse.maxY + pad), width: width - 2 * pad,
-                                 height: max(60, height - max(top, self.verse.maxY + pad) - pad))
-                }
-            }
-            let bottomTop = max(self.verse.maxY + pad, height * 0.75)
-            if width <= height * 1.3, bottomTop < height - pad - 40 {
-                foreground = CGRect(x: pad, y: bottomTop, width: width - 2 * pad, height: height - bottomTop - pad)
-            } else {
-                foreground = CGRect(x: art.minX, y: art.minY + art.height * 0.72, width: art.width, height: art.height * 0.28)
-            }
+        let footer = options.purpose == .recommendation ? height * 0.87 : height - pad
+        let left: Double, available: Double
+        if options.purpose == .reading {
+            left = pad; available = width - 2 * pad
+        } else if verse.side == .right {
+            left = pad; available = max(60, self.verse.minX - 2 * pad)
+        } else if verse.side == .left || width > height * 1.3 {
+            left = self.verse.maxX + pad; available = max(60, width - left - pad)
         } else {
-            let footer = options.purpose == .recommendation ? height * 0.87 : height - pad
-            let left: Double, available: Double
-            if options.purpose == .reading {
-                left = pad; available = width - 2 * pad
-            } else if verse.side == .right {
-                left = pad; available = max(60, self.verse.minX - 2 * pad)
-            } else if verse.side == .left || width > height * 1.3 {
-                left = self.verse.maxX + pad; available = max(60, width - left - pad)
-            } else {
-                left = pad; available = width - 2 * pad
-            }
-            let start = verse.side == .top && options.purpose != .reading && width <= height * 1.3
-                ? max(top, self.verse.maxY + pad) : top
-            let high = max(60, footer - start)
-            switch options.composition ?? .corner {
-            case .corner:
-                let inset = options.purpose == .reading ? available * 0.15 : 0
-                art = CGRect(x: left + (verse.side == .left ? inset : 0), y: start + high * 0.08,
-                    width: available - inset, height: high * 0.87)
-            case .oppositeBank:
-                art = CGRect(x: left, y: start, width: available, height: high * 0.70)
-            case .depth:
-                art = CGRect(x: left, y: start, width: available, height: high * 0.96)
-            }
-            let low = options.purpose == .reading ? height * 0.74 : max(self.verse.maxY + pad, height * 0.74)
-            if width <= height * 1.3, footer - low > 28 {
-                foreground = CGRect(x: pad, y: low, width: width - 2 * pad, height: footer - low)
-            } else {
-                foreground = CGRect(x: art.minX, y: art.minY + art.height * 0.72,
-                    width: art.width, height: art.height * 0.28)
-            }
+            left = pad; available = width - 2 * pad
+        }
+        let start = verse.side == .top && options.purpose != .reading && width <= height * 1.3
+            ? max(top, self.verse.maxY + pad) : top
+        let high = max(60, footer - start)
+        switch options.composition ?? .corner {
+        case .corner:
+            let inset = options.purpose == .reading ? available * 0.15 : 0
+            art = CGRect(x: left + (verse.side == .left ? inset : 0), y: start + high * 0.08,
+                width: available - inset, height: high * 0.87)
+        case .oppositeBank:
+            art = CGRect(x: left, y: start, width: available, height: high * 0.70)
+        case .depth:
+            art = CGRect(x: left, y: start, width: available, height: high * 0.96)
+        }
+        let low = options.purpose == .reading ? height * 0.74 : max(self.verse.maxY + pad, height * 0.74)
+        if width <= height * 1.3, footer - low > 28 {
+            foreground = CGRect(x: pad, y: low, width: width - 2 * pad, height: footer - low)
+        } else {
+            foreground = CGRect(x: art.minX, y: art.minY + art.height * 0.72,
+                width: art.width, height: art.height * 0.28)
         }
     }
 
@@ -186,7 +163,7 @@ private final class PaintingStage {
         let scaled = scaledSlot(motif, box)
         let placement = motif == .window ? groundedSlot(motif, scaled) : scaled
         guard var object = fitted(raw, to: placement) else { return false }
-        if purpose != nil, motif != .window {
+        if motif != .window {
             // Ground the fitted object: its actual canopy / roof size can be much smaller than the slot.
             let landed = groundedSlot(motif, object.bounds)
             if landed != object.bounds {
@@ -230,7 +207,6 @@ private final class PaintingStage {
 
     /// Scale by the scene's common ground plane, rather than filling each independent placeholder.
     private func scaledSlot(_ motif: Motif, _ requested: CGRect) -> CGRect {
-        guard purpose != nil else { return requested }
         var maxWidth = requested.width, maxHeight = requested.height
         switch motif {
         case .house, .hut, .pavilion, .templeGate, .cityGate:
@@ -280,7 +256,6 @@ private final class PaintingStage {
 
     /// Buildings and trees meet the actual bank silhouette, not independent percentage baselines.
     private func groundedSlot(_ motif: Motif, _ requested: CGRect) -> CGRect {
-        guard purpose != nil else { return requested }
         if motif == .window, currentScene == .moonNight,
            let house = elements.first(where: { $0.motif == "house" })?.bounds.cgRect {
             return CGRect(x: (house.minX + house.width * 0.32) * w,
@@ -318,7 +293,6 @@ private final class PaintingStage {
     }
 
     private func recordBank(_ object: (canv: ZXArt.SSCanv, bounds: CGRect)) {
-        guard purpose != nil else { return }
         let count = 64, x0 = object.bounds.minX, step = object.bounds.width / Double(63)
         guard step > 0 else { return }
         var heights = Array(repeating: Double.infinity, count: count)
@@ -347,7 +321,7 @@ private final class PaintingStage {
             .courtyard, .terrace, .ruins]
         guard rooted.contains(motif) else { return }
         let buildings: Set<Motif> = [.house, .hut, .pavilion, .pagoda, .templeGate, .cityGate]
-        let height = purpose != nil && buildings.contains(motif)
+        let height = buildings.contains(motif)
             ? max(1, min(4, bounds.height * 0.10)) : min(24, max(5, bounds.height * 0.13))
         let box = CGRect(x: max(art.minX, bounds.minX - 3), y: bounds.maxY - height * 0.15,
             width: min(art.width, bounds.width + 8), height: height)
@@ -386,14 +360,12 @@ private final class PaintingStage {
                 engine.noted(.ridge(.far), object.canv)
             }
         }
-        if main, let object = fitted(engine.paintingMountain(standalone: purpose != nil), to: slot(0.02, 0.01, 0.95, 0.75)) {
+        if main, let object = fitted(engine.paintingMountain(), to: slot(0.02, 0.01, 0.95, 0.75)) {
             parts.append(.init(canv: object.canv))
             engine.noted(.ridge(.main), object.canv)
-            if purpose != nil {
-                let r = object.bounds
-                elements.append(.init(motif: "mainMountain", bounds: .init(x: r.minX / w, y: r.minY / h,
-                    width: r.width / w, height: r.height / h)))
-            }
+            let r = object.bounds
+            elements.append(.init(motif: "mainMountain", bounds: .init(x: r.minX / w, y: r.minY / h,
+                width: r.width / w, height: r.height / h)))
         }
     }
 
@@ -458,11 +430,10 @@ private final class PaintingStage {
             include(.path, slot(0.05, 0, 0.28, 0.8, front: true))
             include(.mooredBoat, slot(0.60, 0.55, 0.30, 0.17, front: true))
         case .village:
-            if purpose == nil { include(.cookingSmoke, slot(0.56, 0.33, 0.12, 0.24)) }
             add(.layeredTree, slot(0.01, 0.20, 0.46, 0.53))
             include(.house, slot(0.39, 0.56, 0.44, 0.18))
             if chosen.contains(.house) { add(.house, slot(0.67, 0.59, 0.30, 0.13), repeatable: true) }
-            if purpose != nil, chosen.contains(.cookingSmoke), let house = elements.first(where: { $0.motif == "house" })?.bounds.cgRect {
+            if chosen.contains(.cookingSmoke), let house = elements.first(where: { $0.motif == "house" })?.bounds.cgRect {
                 let smokeHeight = house.height * h * 1.8
                 add(.cookingSmoke, CGRect(x: (house.minX + house.width * 0.5) * w,
                     y: (house.minY + house.height * 0.15) * h - smokeHeight,
@@ -500,7 +471,7 @@ private final class PaintingStage {
             include(.boat, slot(0.08, 0.65, 0.5, 0.14, front: true))
         case .temple:
             include(.templeGate, slot(0.52, 0.61, 0.44, 0.20))
-            include(.pagoda, purpose == nil ? slot(0.04, 0.20, 0.22, 0.32) : slot(0.06, 0.48, 0.14, 0.25))
+            include(.pagoda, slot(0.06, 0.48, 0.14, 0.25))
             include(.bamboo, slot(0.01, 0.50, 0.40, 0.32))
             include(.path, slot(0.15, 0, 0.45, 0.95, front: true))
         case .courtyard:
