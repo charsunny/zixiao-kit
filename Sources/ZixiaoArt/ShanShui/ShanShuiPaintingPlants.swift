@@ -92,7 +92,7 @@ extension ShanShuiEngine {
         for k in 0..<stalks {
             let far = k < stalks / 3
             let x = 20 + Double(k) * (90 / Double(stalks)) + (r() - 0.5) * 8
-            let height = (far ? 120 : 135) + r() * 40, lean = (r() - 0.5) * 16
+            let height = (far ? 110 : 130) + r() * 40, lean = (r() - 0.5) * 34
             let tone = far ? 0.28 + r() * 0.1 : 0.55 + r() * 0.25
             c += inkLine([P(x, 175), P(x + lean * 0.4, 175 - height * 0.55), P(x + lean, 175 - height)],
                 width: (far ? 1.6 : 2.4) + r() * 0.8, tone: tone, dry: 0.25, profile: .even)
@@ -102,18 +102,18 @@ extension ShanShuiEngine {
                 c += inkLine([P(xx - 2, y), P(xx + 2.5, y - 0.5)], width: 1.0, tone: min(0.9, tone + 0.2))
             }
             // Leaf clusters: three to five blades fanning from one point, 个 or 介.
-            let clusters = far ? 2 : 3 + Int(r() * 2)
+            let clusters = far ? 3 : 5 + Int(r() * 3)
             for q in 0..<clusters {
-                let t = 0.55 + 0.45 * (Double(q) + r() * 0.6) / Double(clusters)
+                let t = 0.32 + 0.68 * (Double(q) + r() * 0.6) / Double(clusters)
                 let base = P(x + lean * t, 175 - height * t)
                 let side = r() < 0.5 ? -1.0 : 1.0
                 let blades = 3 + Int(r() * 2.5)
                 for b in 0..<blades {
                     let angle = side * (0.35 + Double(b) * 0.42) + (r() - 0.5) * 0.2
-                    let length = 13 + r() * 9
+                    let length = 20 + r() * 14
                     let tip = P(base.x + sin(angle) * length, base.y + cos(angle) * length * 0.55 - 2)
                     c += inkLine([base, P((base.x + tip.x) / 2, (base.y + tip.y) / 2 + 1), tip],
-                        width: 3.0 + r() * 1.6, tone: far ? 0.30 : 0.62 + r() * 0.25, dry: 0.1, profile: .lens)
+                        width: 4.2 + r() * 2.2, tone: far ? 0.30 : 0.62 + r() * 0.25, dry: 0.1, profile: .lens)
                 }
             }
         }

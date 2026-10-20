@@ -176,7 +176,7 @@ extension ShanShuiEngine {
         // Many faint, overlapping rings fade the halo smoothly; no outline on the disc.
         for k in 0..<10 {
             let radius = 40 - Double(k) * 1.8
-            c += sceneEllipse(40, 40, radius, radius, fill: C(0, 0, 0, 0.012), tone: 0)
+            c += sceneEllipse(40, 40, radius, radius, fill: C(0, 0, 0, 0.02), tone: 0)
         }
         c += sceneEllipse(40, 40, 21, 21, fill: .white, tone: 0)
         return c

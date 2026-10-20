@@ -261,7 +261,9 @@ private final class PaintingStage {
             let mountainScene = [ZXArt.PoetryScene.retreat, .temple, .historic].contains(currentScene)
             maxHeight = min(maxHeight, min(art.height * (mountainScene ? 0.46 : 0.62), art.width * (mountainScene ? 0.85 : 0.65)))
             if let main = elements.first(where: { $0.motif == "mainMountain" }) {
-                maxHeight = min(maxHeight, main.bounds.cgRect.height * h * 0.28)
+                // The pine of 明月松间照 is the protagonist of a mountain retreat, not a sapling.
+                let lead = motif == .pine && currentScene == .retreat
+                maxHeight = min(maxHeight, main.bounds.cgRect.height * h * (lead ? 0.55 : 0.28))
             }
         case .bamboo:
             maxHeight = min(maxHeight, art.height * 0.34)
@@ -607,7 +609,14 @@ private final class PaintingStage {
             if chosen.contains(.angler) { add(.angler, slot(0.39, 0.58, 0.55, 0.14)) }
             else if chosen.contains(.sail) { add(.sail, slot(0.16, 0.47, 0.7, 0.29)) }
             else { include(.boat, slot(0.14, 0.62, 0.75, 0.15)) }
-            include(.reeds, slot(0.03, 0.15, 0.27, 0.8, front: true))
+            // Reeds grow at the water's edge of the near bank, not floating below it.
+            if chosen.contains(.reeds), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
+                let b = CGRect(x: bank.minX * w, y: bank.minY * h, width: bank.width * w, height: bank.height * h)
+                let reedH = max(b.height * 2.4, h * 0.10)
+                let towardWater = verse.isNull || verse.minX > w / 2
+                add(.reeds, CGRect(x: towardWater ? b.maxX - b.width * 0.30 : b.minX - b.width * 0.05,
+                                   y: b.maxY - reedH, width: b.width * 0.35, height: reedH))
+            } else { include(.reeds, slot(0.03, 0.15, 0.27, 0.8, front: true)) }
         case .waterTown:
             include(.house, slot(0.53, 0.60, 0.43, 0.19))
             if chosen.contains(.house) { add(.house, slot(0.68, 0.61, 0.26, 0.12), repeatable: true) }
