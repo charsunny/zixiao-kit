@@ -126,8 +126,8 @@ extension ShanShuiEngine {
     func paintingLotus() -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
         let leaves: [(x: Double, y: Double, rx: Double, ry: Double, raised: Double)] = [
-            (46, 114, 34, 10, 0), (98, 120, 40, 11, 0), (130, 108, 26, 8, 5),
-            (72, 106, 30, 9, 8), (16, 108, 20, 6, 3),
+            (46, 116, 34, 10, 0), (100, 122, 40, 11, 0), (16, 112, 22, 7, 0),
+            (132, 96, 28, 9, 30), (66, 92, 32, 10, 40),
         ]
         for leaf in leaves {
             let seed = r() * 10, notch = r() * 2 * Double.pi

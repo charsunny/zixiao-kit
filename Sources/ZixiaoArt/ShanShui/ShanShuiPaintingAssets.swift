@@ -18,6 +18,7 @@ extension ShanShuiEngine {
         case .moon: return paintingMoon()
         case .vine: return paintingVine()
         case .horse: return paintingHorse()
+        case .terrace: return paintingTerrace()
         case .boat, .angler, .mooredBoat, .sail: return paintingBoat(motif)
         case .traveler: return paintingPerson()
         case .egret: return paintingEgret()
@@ -103,7 +104,7 @@ extension ShanShuiEngine {
             guard keep, inside(P(x, y)), inside(end) else { continue }
             let moisture = 0.5 + 0.8 * n(x * 0.04, y * 0.04)
             result += inkLine([P(x, y), P(x + lean * 0.5, y + length * 0.45), end],
-                width: 0.45 + r() * 0.9, tone: (0.08 + 0.42 * s) * moisture, dry: 0.55 + 0.25 * (1 - s))
+                width: 0.45 + r() * 0.9, tone: (0.08 + 0.42 * s) * moisture * snowLight, dry: 0.55 + 0.25 * (1 - s))
         }
 
         // Moss dots (点苔) along the upper contour: small, dark, in clusters of two or three.
@@ -179,6 +180,24 @@ extension ShanShuiEngine {
             c += sceneEllipse(40, 40, radius, radius, fill: C(0, 0, 0, 0.02), tone: 0)
         }
         c += sceneEllipse(40, 40, 21, 21, fill: .white, tone: 0)
+        return c
+    }
+
+    /// An ancient terrace (古台): a low platform of dressed stone with a battered face and a
+    /// short broken parapet, seen slightly from below.
+    func paintingTerrace() -> ZXArt.SSCanv {
+        let top = [P(14, 8), P(106, 8)], base = [P(0, 30), P(120, 30)]
+        let face = [top[0], top[1], base[1], base[0]]
+        var c = [poly(face, fil: .white, str: nil), poly(face, fil: .gray(0, 0.16), str: nil)]
+        c += inkEdges([P(0, 30), P(14, 8), P(106, 8), P(120, 30)], width: 1.4, tone: 0.7, dry: 0.4)
+        c += inkLine([P(0, 30), P(120, 30)], width: 1.8, tone: 0.75, dry: 0.4)
+        for k in 1..<4 {  // stone courses
+            let y = 8 + Double(k) * 5.5, inset = 14 * (1 - Double(k) * 5.5 / 22)
+            c += inkLine([P(inset + 2, y), P(120 - inset - 2, y)], width: 0.5, tone: 0.3, dry: 0.6)
+        }
+        for x in stride(from: 18.0, to: 102, by: 14) where r() < 0.7 {  // broken parapet
+            c += inkLine([P(x, 8), P(x, 2 + r() * 2)], width: 1.2, tone: 0.65, dry: 0.4)
+        }
         return c
     }
 

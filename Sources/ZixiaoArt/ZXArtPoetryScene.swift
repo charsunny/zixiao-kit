@@ -166,7 +166,7 @@ public extension ZXArt {
         case .moonNight: return [.window, .moon, .boat]
         case .temple: return [.templeGate, .pagoda, .bamboo, .path]
         case .courtyard: return [.courtyard, .window, .curtain, .willow]
-        case .historic: return [.terrace, .ruins, .cityGate, .traveler]
+        case .historic: return [.terrace, .traveler]
         case .desert: return [.dunes]
         case .ocean: return [.waves, .reef]
         }

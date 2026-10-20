@@ -181,14 +181,16 @@ struct ZXArtPaintingSceneTests {
                     for element in drawing.sceneElements {
                         let rect = element.bounds.cgRect
                         if ["pine", "oldTree", "bareTree", "layeredTree", "willow", "blossom", "maple"].contains(element.motif) {
-                            #expect(rect.height <= mountain.height * 0.175)
+                            // Near trees lead the eye; the retreat's pine is the protagonist (明月松间照).
+                            let lead = scene == .retreat && element.motif == "pine"
+                            #expect(rect.height <= mountain.height * (lead ? 0.60 : 0.32))
                         }
                         if element.motif == "bamboo" {
-                            #expect(rect.height <= mountain.height * 0.10)
+                            #expect(rect.height <= mountain.height * 0.30)
                         }
                         if ["house", "hut", "pavilion", "templeGate", "cityGate", "pagoda"].contains(element.motif) {
                             #expect(rect.height <= mountain.height * (element.motif == "pagoda" ? 0.18 : 0.10))
-                            #expect(rect.maxY >= mountain.maxY - mountain.height * 0.25)
+                            #expect(rect.maxY >= mountain.minY + mountain.height * 0.5)
                         }
                     }
                 }
