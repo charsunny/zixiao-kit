@@ -3,7 +3,7 @@
 //  契约 (poetryhub 画屏配方, 2026-09-30 定稿):
 //
 //      background.procedural = {
-//        generator: "shanshui@1" | "nonflowers@1" | "shanshui@2" | "nonflowers@2" | "shanshui@3",
+//        generator: "shanshui@1" | "nonflowers@1" | "shanshui@2" | "nonflowers@2" | "shanshui@3" | "shanshui@4",
 //        seed: string,
 //        variant: shanshui → "高山" | "江岸" | "远山";  nonflowers → "梅" | "荷" | "菊" | "兰" | "自然",
 //        params: { density?: number (0.5–1.5), hue?: number (0–360, 仅花), quiet_top?: number (0–0.5),
@@ -14,6 +14,9 @@
 //  横排是时钟区下的横带 —— 山与花绕开它, 客户端把诗排进这个框。生成器 (随机序列、笔触) 与 @1 相同,
 //  只是构图 (山水: `composeV2`; 花: 摆放的区域) 不同。@1 的代码路径一字未动 (山水 @1 / @2 另有只记录的意象锚点,
 //  `Drawing.anchors`, 见 ShanShuiAnchors.swift: 不取随机数、不改出图, 指纹与逐位对照测试保证)。
+//
+//  @4 (诗意场景): variant 为 PoetryScene，params.scene 固化景物；原有三个版本冻结。
+//  该路径的 density / hue 不生效，quiet_top 与 verse_* 仍约束构图。
 //
 //  配色取 style.palette 的 paper / ink; wash 缺省 = ink 以 40% 叠在 paper 上。
 //  未知 generator / 版本 / variant → `render` 返回 nil, 调用方回退纸纹 (配方原样保留)。
@@ -33,10 +36,10 @@ import ZixiaoColor
 public extension ZXArt {
     /// 配方里的程序化背景。Codable 的键与契约一致 (snake_case)。
     struct Procedural: Sendable, Hashable, Codable {
-        /// "shanshui@1" | "nonflowers@1" | "shanshui@2" | "nonflowers@2" | "shanshui@3"
+        /// 山水 @1…@4；花 @1…@2。
         public var generator: String
         public var seed: String
-        /// 山水: "高山" | "江岸" | "远山"; 花: "梅" | "荷" | "菊" | "兰" | "自然"
+        /// 山水 @1…@3: "高山" | "江岸" | "远山"；@4: PoetryScene.rawValue; 花: "梅" | "荷" | "菊" | "兰" | "自然"
         public var variant: String
         public var params: Params
 
@@ -48,25 +51,29 @@ public extension ZXArt {
             /// 0–0.5: 顶部留白 (锁屏时钟 + 诗句) 占画面高度的份额。缺省 0.32。花的横幅 (中号小组件) 不用它,
             /// 花在右侧、左侧留白; 山水横幅两者都用 (主体在右下)。
             public var quietTop: Double?
-            /// 仅 @2 / 山水 @3: 诗句落在哪边 ("left" | "right" | "top"), 缺省 "right"。认不出的值 → 本库不画 (回退纸纹)。
+            /// 仅 @2 / 山水 @3、@4: 诗句落在哪边 ("left" | "right" | "top"), 缺省 "right"。认不出的值 → 本库不画 (回退纸纹)。
             public var verseSide: String?
-            /// 仅 @2 / 山水 @3: 诗句几列 (竖) / 几行 (横), 定诗句框的宽 (竖) / 高 (横)。缺省 2, 夹到 1…4。
+            /// 仅 @2 / 山水 @3、@4: 诗句几列 (竖) / 几行 (横), 定诗句框的宽 (竖) / 高 (横)。缺省 2, 夹到 1…4。
             public var verseColumns: Int?
-            /// 仅 @2 / 山水 @3: 最长一句几个字, 定诗句框的高 (竖) / 宽 (横)。缺省 7, 夹到 4…10。
+            /// 仅 @2 / 山水 @3、@4: 最长一句几个字, 定诗句框的高 (竖) / 宽 (横)。缺省 7, 夹到 4…10。
             public var verseChars: Int?
+            /// Only shanshui@4. Frozen scene selection, independent of device date / network.
+            public var scene: SceneOptions?
 
             public init(density: Double? = nil, hue: Double? = nil, quietTop: Double? = nil,
-                        verseSide: String? = nil, verseColumns: Int? = nil, verseChars: Int? = nil) {
+                        verseSide: String? = nil, verseColumns: Int? = nil, verseChars: Int? = nil,
+                        scene: SceneOptions? = nil) {
                 self.density = density
                 self.hue = hue
                 self.quietTop = quietTop
                 self.verseSide = verseSide
                 self.verseColumns = verseColumns
                 self.verseChars = verseChars
+                self.scene = scene
             }
 
             enum CodingKeys: String, CodingKey {
-                case density, hue
+                case density, hue, scene
                 case quietTop = "quiet_top"
                 case verseSide = "verse_side"
                 case verseColumns = "verse_columns"
@@ -109,7 +116,7 @@ public extension ZXArt {
         public var isSupported: Bool { resolved != nil }
 
         /// 支持的生成器版本 (客户端可据此决定是否回退纸纹)。
-        public static let supportedGenerators: Set<String> = ["shanshui@1", "nonflowers@1", "shanshui@2", "nonflowers@2", "shanshui@3"]
+        public static let supportedGenerators: Set<String> = ["shanshui@1", "nonflowers@1", "shanshui@2", "nonflowers@2", "shanshui@3", "shanshui@4"]
 
         /// 供调用方的缓存键和画屏背景共用; 配方本身不改写。
         public func effectiveGenerator(allowsShanShuiV3: Bool = true) -> String {
@@ -129,6 +136,7 @@ public extension ZXArt {
             case shanshuiV2(ShanShui.Variant, VerseSide)
             case nonflowersV2(Flowers.Season, VerseSide)
             case shanshuiV3(ShanShui.Variant, VerseSide)
+            case shanshuiV4(PoetryScene, VerseSide)
         }
 
         var resolved: Resolved? {
@@ -143,6 +151,9 @@ public extension ZXArt {
             case "shanshui@3":
                 guard let side = resolvedVerseSide else { return nil }
                 return ShanShui.Variant(rawValue: variant).map { .shanshuiV3($0, side) }
+            case "shanshui@4":
+                guard let side = resolvedVerseSide else { return nil }
+                return PoetryScene(rawValue: variant).map { .shanshuiV4($0, side) }
             case "nonflowers@2":
                 guard let side = resolvedVerseSide else { return nil }
                 return Flowers.Season(rawValue: variant).map { .nonflowersV2($0, side) }
@@ -164,7 +175,7 @@ public extension ZXArt {
             let side: VerseSide
             switch kind {
             case .shanshuiV1, .nonflowersV1: return nil
-            case .shanshuiV2(_, let s), .nonflowersV2(_, let s), .shanshuiV3(_, let s): side = s
+            case .shanshuiV2(_, let s), .nonflowersV2(_, let s), .shanshuiV3(_, let s), .shanshuiV4(_, let s): side = s
             }
             let frame = Frame(pixelSize: pixelSize)
             let quiet = min(max(params.quietTop ?? frame.defaultQuietTop, 0), 0.5)
@@ -217,6 +228,10 @@ extension ZXArt {
         let density = min(max((p.params.density ?? 1) - 0.5, 0), 1)
         let seed = Seed(p.seed)
         switch kind {
+        case .shanshuiV4(let scene, _):
+            guard let verse = p.verseLayout(pixelSize: pixelSize) else { return nil }
+            return PoetrySceneRenderer.generate(seed: seed, size: pixelSize, palette: palette, scene: scene,
+                options: p.params.scene ?? SceneOptions(motifs: defaultMotifs(for: scene)), quietTop: quiet, verse: verse)
         case .shanshuiV1(let variant):
             return ShanShui.generateTraced(seed: seed, size: pixelSize,
                                            params: .init(palette: palette, density: density, variant: variant, quietTop: quiet))
