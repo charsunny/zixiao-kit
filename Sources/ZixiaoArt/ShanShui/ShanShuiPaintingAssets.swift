@@ -150,7 +150,7 @@ extension ShanShuiEngine {
     func paintingHorse() -> ZXArt.SSCanv {
         let body = inkCurve([P(22, 46), P(34, 38), P(56, 37), P(74, 40), P(80, 48), P(76, 58),
                              P(56, 62), P(34, 61), P(22, 55), P(22, 46)])
-        var c = [poly(body, fil: .gray(0, 0.38), str: nil)]
+        var c = [poly(body, fil: .gray(0, 0.55), str: nil)]
         // Neck and head: a loaded stroke sweeping down and forward.
         let neck = inkCurve([P(74, 42), P(84, 40), P(93, 48), P(99, 60)])
         c += inkLine(neck, width: 7.5, tone: 0.55, dry: 0.25, profile: .cone)

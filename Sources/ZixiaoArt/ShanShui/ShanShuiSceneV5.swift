@@ -562,6 +562,16 @@ private final class PaintingStage {
         for motif in [Motif.mist, .afterRain] where chosen.contains(motif) {
             add(motif, slot(0.02, 0.16, 0.96, 0.10))
         }
+        // 一河两岸: scenes without a main peak get a pale far bank in the middle distance, so the
+        // eye travels near bank → water → far bank → distant hills instead of across empty paper.
+        let farShoreScenes: Set<ZXArt.PoetryScene> = [.fishing, .waterTown, .farewell, .village, .spring,
+            .lotusPond, .autumnTravel, .winterForest, .moonNight]
+        if farShoreScenes.contains(scene),
+           let shore = fitted(engine.paintingFarShore(), to: slot(0, composition == .oppositeBank ? 0.24 : 0.30, 1, 0.16)) {
+            parts.append(.init(canv: shore.canv))
+            elements.append(.init(motif: "farShore", bounds: .init(x: shore.bounds.minX / w, y: shore.bounds.minY / h,
+                width: shore.bounds.width / w, height: shore.bounds.height / h)))
+        }
         ground(for: scene)
         switch scene {
         case .retreat:
@@ -608,7 +618,7 @@ private final class PaintingStage {
             include(.layeredTree, slot(0.65, 0.34, 0.32, 0.47))
             include(.path, slot(0.2, 0.02, 0.48, 0.9, front: true))
         case .lotusPond:
-            include(.lotus, slot(0.0, 0.33, 0.94, 0.52))
+            include(.lotus, slot(0.0, 0.10, 0.60, 0.62, front: true))
             include(.willow, slot(0.61, 0.03, 0.37, 0.59))
             if chosen.contains(.stream), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
                 // A spring entering a pond opens into shallow ripples at the bank, not a
@@ -657,8 +667,8 @@ private final class PaintingStage {
         case .courtyard:
             // Willow heaped above the wall first, so the wall overlaps its trunk; then the wall,
             // and a curtained window set into the wall's near end.
-            include(.willow, slot(0.50, 0.04, 0.48, 0.60))
-            include(.courtyard, slot(0, 0.36, 1, 0.52))
+            include(.willow, slot(0.30, 0.00, 0.62, 0.74))
+            include(.courtyard, slot(0, 0.46, 0.86, 0.40))
             if let wall = elements.first(where: { $0.motif == "courtyard" })?.bounds.cgRect {
                 let near = CGRect(x: (wall.minX + wall.width * 0.04) * w, y: (wall.minY + wall.height * 0.30) * h,
                                   width: wall.width * w * 0.20, height: wall.height * h * 0.34)
@@ -704,8 +714,15 @@ private final class PaintingStage {
             case .stars: add(motif, slot(0.05, 0.0, 0.85, 0.18))
             case .cookingSmoke: add(motif, slot(0.56, 0.25, 0.15, 0.24))
             case .beaconSmoke: add(motif, slot(0.28, 0.22, 0.06, 0.4))
-            case .egret: add(motif, slot(0.7, 0.58, 0.13, 0.17))
-            case .crow, .swallow, .dragonfly, .butterfly: add(motif, slot(0.48, 0.32, 0.17, 0.12))
+            case .egret: add(motif, slot(0.72, 0.60, 0.06, 0.08))
+            case .butterfly:
+                // A pair of butterflies near the blossoms, at the scale of a petal cluster.
+                if let tree = elements.first(where: { ["blossom", "willow", "layeredTree"].contains($0.motif) })?.bounds.cgRect {
+                    let size = max(5, tree.width * w * 0.07)
+                    add(motif, CGRect(x: tree.maxX * w - size * 0.5, y: (tree.minY + tree.height * 0.30) * h,
+                        width: size, height: size * 0.8))
+                } else { add(motif, slot(0.48, 0.32, 0.04, 0.03)) }
+            case .crow, .swallow, .dragonfly: add(motif, slot(0.30, 0.18, 0.07, 0.04))
             case .waterfall: add(motif, slot(0.15, 0.34, 0.18, 0.45))
             case .stream: add(motif, slot(0.60, 0.02, 0.22, 0.88, front: true))
             case .mist, .afterRain: add(motif, slot(0.02, 0.42, 0.96, 0.10))

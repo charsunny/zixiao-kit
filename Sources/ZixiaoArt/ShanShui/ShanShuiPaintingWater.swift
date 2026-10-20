@@ -13,7 +13,7 @@ struct PaintingWaterChannel {
     let broad: Bool
 
     func point(_ t: Double, across: Double) -> ZXArt.P {
-        let half = width * (0.035 + (broad ? 0.39 : 0.20) * pow(t, 0.85))
+        let half = width * (broad ? 0.035 + 0.39 * pow(t, 0.85) : 0.02 + 0.10 * pow(t, 0.9))
         let sway = width * (broad ? 0.11 : 0.23) * sin(t * .pi * 2 + phase)
         let center = min(width - half - width * 0.025, max(half + width * 0.025, width * 0.5 + sway))
         return .init(center + half * across, height * t)
@@ -30,11 +30,31 @@ extension ShanShuiEngine {
         // The unpainted water cuts through the rock bed rather than becoming another rock contour.
         var c = [poly(left + right.reversed(), fil: .white, str: nil)]
         for bank in [left, right] {
-            for start in stride(from: 0, to: 36, by: 9) {
-                let segment = Array(bank[start...min(start + 7, 40)])
-                c += inkLine(segment, width: river ? 2.8 : 3.2, tone: 0.08, dry: 0.35)
-                c += inkLine(segment, width: river ? 0.9 : 1.2, tone: 0.38, dry: 0.42)
+            // Broken banks: short runs with real gaps, so the water is felt, not fenced.
+            var start = Int(r() * 4)
+            while start < 36 {
+                let length = river ? 7 : 3 + Int(r() * 4)
+                let segment = Array(bank[start...min(start + length, 40)])
+                if river { c += inkLine(segment, width: 2.8, tone: 0.08, dry: 0.35) }
+                c += inkLine(segment, width: river ? 0.9 : 0.8 + r() * 0.5, tone: river ? 0.38 : 0.26 + r() * 0.14, dry: 0.45)
+                start += length + (river ? 2 : 2 + Int(r() * 4))
             }
+        }
+        if !river {
+            // A mountain stream: a few current lines bending with the channel, no cross-hatching.
+            for lane in [-0.35, 0.25] {
+                for start in [0.10, 0.40, 0.68] {
+                    let points = (0...7).map { channel.point(start + Double($0) * 0.02, across: lane + 0.1 * sin(Double($0))) }
+                    c += inkLine(points, width: 0.55, tone: 0.20, dry: 0.55)
+                }
+            }
+            for (t, side) in [(0.30, -1.0), (0.58, 1.0), (0.84, -1.0)] {
+                let p = channel.point(t, across: side * 0.9)
+                let size = width * (0.03 + t * 0.03)
+                c += inkBlot(p.x + side * size * 0.6, p.y, radius: size, squash: 0.55, angle: 0, tone: 0.32)
+                c += inkBlot(p.x + side * size * 0.5, p.y - size * 0.4, radius: size * 0.25, squash: 0.5, tone: 0.6)
+            }
+            return c
         }
         // Longitudinal currents bend with the channel. Short transverse marks signal shallow riffles.
         for lane in river ? [0.08] : [-0.55, 0.08, 0.55] {

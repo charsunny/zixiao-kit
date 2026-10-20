@@ -132,12 +132,63 @@ extension ShanShuiEngine {
             let y = top + (bottom - top) * t * 0.82
             let phase = r() * 6, freq = 0.035 + r() * 0.03
             let edge = (0...60).map { i -> P in
-                let x = x0 + (x1 - x0) * Double(i) / 60
+                let u = Double(i) / 60, x = x0 + (x1 - x0) * u
                 let billow = abs(sin(x * freq + phase)) * (5 + 6 * (1 - t))
-                return P(x, y - billow + 4 * (n(x * 0.02, Double(k)) - 0.5))
+                // The band thins to nothing at both ends, so no straight edge cuts the hills behind.
+                let taper = pow(sin(u * .pi), 0.6)
+                let rise = (bottom - y) * (1 - taper)
+                return P(x, y + rise - billow * taper + 4 * (n(x * 0.02, Double(k)) - 0.5))
             }
             let alpha = k == bands - 1 ? 0.85 : 0.22 + 0.10 * t
             c.append(poly(edge + [P(x1, bottom), P(x0, bottom)], fil: C(255, 255, 255, alpha), str: nil))
+        }
+        return c
+    }
+
+    /// The far bank (对岸) of a river scene, in the manner of Ni Zan: low rounded hills on one
+    /// side flattening into a level shore, distant trees as small upright dabs along the crest,
+    /// a broken shore line. Pale, because it sits across the water.
+    func paintingFarShore() -> ZXArt.SSCanv {
+        var c: ZXArt.SSCanv = []
+        let flip = r() < 0.5
+        let humps = 2 + Int(r() * 2)
+        var tops: [(x: Double, h: Double, w: Double)] = []
+        for k in 0..<humps {
+            tops.append((x: 0.10 + 0.16 * Double(k) + r() * 0.06, h: 18 + r() * 16 - Double(k) * 4, w: 0.10 + r() * 0.05))
+        }
+        let ridge = (0...100).map { i -> P in
+            let t = Double(i) / 100, u = flip ? 1 - t : t
+            var y = 0.0
+            for top in tops { y = max(y, top.h * exp(-pow(abs(u - top.x) / top.w, 2))) }
+            let shelf = 4 * (n(t * 7, 3) - 0.5)
+            return P(t * 300, 56 - y - (u < 0.75 ? 3 : 3 * (1 - (u - 0.75) / 0.25)) + shelf)
+        }
+        let base = ridge.map { P($0.x, 60) }
+        c.append(poly(ridge + base.reversed(), fil: .white, str: nil))
+        c.append(poly(ridge + base.reversed(), fil: .gray(0, 0.10), str: nil))
+        c += inkLine(ridge, width: 0.8, tone: 0.30, dry: 0.5)
+        // Hemp-fibre texture, sparse, on the hill faces only.
+        for _ in 0..<26 {
+            let i = Int(r() * 100), p = ridge[i]
+            guard 56 - p.y > 10 else { continue }
+            let len = 4 + r() * (56 - p.y) * 0.5
+            c += inkLine([P(p.x, p.y + 2), P(p.x - 1, p.y + 2 + len)], width: 0.5, tone: 0.16, dry: 0.6)
+        }
+        // Distant trees: clustered upright dabs riding the crest (远树无枝).
+        for _ in 0..<(5 + Int(r() * 4)) {
+            let i = 5 + Int(r() * 90), p = ridge[i]
+            for k in 0..<(2 + Int(r() * 3)) {
+                let x = p.x + Double(k) * (2.2 + r()) - 2, height = 4 + r() * 5
+                c += inkBlot(x, p.y - height * 0.45, radius: height * 0.5, squash: 0.45, angle: 1.5708, tone: 0.30 + r() * 0.2)
+                c += inkLine([P(x, p.y), P(x, p.y - height * 0.3)], width: 0.45, tone: 0.4)
+            }
+        }
+        // Broken shore line at the water.
+        var x = r() * 20
+        while x < 290 {
+            let run = 18 + r() * 40
+            c += inkLine([P(x, 60), P(min(300, x + run), 60 + (r() - 0.5))], width: 0.6, tone: 0.22, dry: 0.55)
+            x += run + 8 + r() * 20
         }
         return c
     }

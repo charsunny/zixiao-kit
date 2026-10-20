@@ -44,9 +44,13 @@ extension ShanShuiEngine {
                 let wave = pow(abs(sin(t * .pi * freq + phase)), 1.4)
                 return P(t * 300, layer.y - layer.amp * (0.35 + 0.65 * wave) - 3 * (n(t * 5 + phase, Double(k)) - 0.5))
             }
-            let floor = layer.y + 40
-            c.append(poly(crest + [P(300, floor), P(0, floor)], fil: .white, str: nil))
-            c.append(poly(crest + [P(300, floor), P(0, floor)], fil: .gray(0, layer.tone), str: nil))
+            // Each ridge is a long lens: it thins to nothing at both ends, so layers overlap
+            // without the hard vertical edges of a rectangle.
+            let base = crest.enumerated().map { i, p in
+                P(p.x, p.y + 4 + 36 * pow(sin(Double(i) / 90 * .pi), 0.6))
+            }
+            c.append(poly(crest + base.reversed(), fil: .white, str: nil))
+            c.append(poly(crest + base.reversed(), fil: .gray(0, layer.tone), str: nil))
             // Lee side: a darker sliver hanging under the crest, thinning away from the peaks.
             let lee = crest.map { p in P(p.x, p.y + 3 + 6 * abs(sin(p.x * 0.03 + phase))) }
             c.append(poly(crest + lee.reversed(), fil: .gray(0, layer.tone * 0.9), str: nil))

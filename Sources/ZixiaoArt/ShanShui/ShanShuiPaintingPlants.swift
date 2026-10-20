@@ -109,8 +109,8 @@ extension ShanShuiEngine {
     func paintingLotus() -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
         let leaves: [(x: Double, y: Double, rx: Double, ry: Double, raised: Double)] = [
-            (46, 112, 34, 10, 0), (98, 120, 40, 11, 0), (128, 100, 26, 8, 14),
-            (70, 96, 30, 9, 22), (18, 98, 20, 6, 10),
+            (46, 114, 34, 10, 0), (98, 120, 40, 11, 0), (130, 108, 26, 8, 5),
+            (72, 106, 30, 9, 8), (16, 108, 20, 6, 3),
         ]
         for leaf in leaves {
             let seed = r() * 10, notch = r() * 2 * Double.pi
@@ -122,7 +122,7 @@ extension ShanShuiEngine {
                 if gap < 0.22 { v *= 0.55 + gap * 2 }          // the notch where the stem joins
                 return P(leaf.x + cos(a) * leaf.rx * v, cy + sin(a) * leaf.ry * v)
             }
-            let tone = 0.26 + r() * 0.2 + (leaf.raised > 0 ? 0.06 : 0)
+            let tone = 0.15 + r() * 0.16 + (leaf.raised > 0 ? 0.05 : 0)
             c.append(poly(edge, fil: .white, str: nil))
             c.append(poly(edge, fil: .gray(0, tone), str: nil))
             // A darker loaded stroke along the far rim gives the leaf its curl.
@@ -140,7 +140,7 @@ extension ShanShuiEngine {
             }
         }
         // The bud: pointed, pale, on a slender stem rising above the leaves.
-        let stem = inkCurve([P(84, 104), P(86, 82), P(84, 58)])
+        let stem = inkCurve([P(84, 108), P(86, 86), P(84, 62)])
         c += inkLine(stem, width: 1.1, tone: 0.55, dry: 0.4)
         let bud = inkCurve([P(84, 60), P(78, 52), P(81, 40), P(84, 32), P(88, 41), P(90, 52), P(84, 60)])
         c.append(poly(bud, fil: .white, str: nil))
