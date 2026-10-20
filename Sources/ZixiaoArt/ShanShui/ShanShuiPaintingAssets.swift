@@ -173,14 +173,12 @@ extension ShanShuiEngine {
     /// 烘云托月: the moon is left as paper; a soft ring of pale wash around it makes it glow.
     func paintingMoon() -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
-        for (k, radius) in [52.0, 44, 37, 31].enumerated() {
-            c += sceneEllipse(40, 40, radius * 0.75, radius * 0.75, fill: C(0, 0, 0, 0.035 + Double(k) * 0.012), tone: 0)
+        // Many faint, overlapping rings fade the halo smoothly; no outline on the disc.
+        for k in 0..<10 {
+            let radius = 40 - Double(k) * 1.8
+            c += sceneEllipse(40, 40, radius, radius, fill: C(0, 0, 0, 0.012), tone: 0)
         }
         c += sceneEllipse(40, 40, 21, 21, fill: .white, tone: 0)
-        c += inkLine((0...40).map { i in
-            let a = Double(i) / 40 * 2 * Double.pi * 0.92 + 0.4
-            return P(40 + cos(a) * 21, 40 + sin(a) * 21)
-        }, width: 0.5, tone: 0.18, dry: 0.6)
         return c
     }
 

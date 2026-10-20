@@ -180,6 +180,15 @@ private final class PaintingStage {
             raw = currentScene == .desert ? waterEngine.paintingLongRiver()
                 : waterEngine.paintingChannel(width: box.width, height: box.height)
         } else { raw = engine.paintingAsset(motif) }
+        var box = box
+        // Paths and fields are drawn on the ground they belong to, never hanging below it.
+        if groundInBand, [.path, .fields].contains(motif),
+           let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
+            let b = CGRect(x: bank.minX * w, y: bank.minY * h, width: bank.width * w, height: bank.height * h)
+            box = motif == .path
+                ? CGRect(x: b.minX + b.width * 0.30, y: b.minY + b.height * 0.25, width: b.width * 0.22, height: b.height * 0.70)
+                : CGRect(x: b.minX + b.width * 0.48, y: b.minY + b.height * 0.18, width: b.width * 0.46, height: b.height * 0.55)
+        }
         let scaled = scaledSlot(motif, box)
         let placement = motif == .window ? groundedSlot(motif, scaled) : scaled
         guard var object = fitted(raw, to: placement) else { return false }
@@ -549,7 +558,13 @@ private final class PaintingStage {
             groundInBand = true
         }
         if let object = fitted(engine.paintingBank(), to: box) {
-            parts.append(.near(object.canv))
+            // In the band beneath the verse the near ground dissolves downward into mist and water,
+            // instead of ending in a hard edge like an island floating on the paper.
+            let b = object.bounds
+            parts.append(groundInBand
+                ? .init(canv: object.canv, near: true, fade: .init(top: b.minY + b.height * 0.40,
+                        bottom: b.maxY + b.height * 0.08, seed: engine.inkSeed()))
+                : .near(object.canv))
             recordBank(object)
         }
         // Foreground slope: a small dark corner, not a second ground plane across the page.

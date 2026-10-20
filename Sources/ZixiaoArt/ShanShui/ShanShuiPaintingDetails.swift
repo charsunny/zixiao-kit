@@ -103,13 +103,13 @@ extension ShanShuiEngine {
             let drift = r() < 0.5 ? -1.0 : 1.0
             let core = (0...30).map { i -> P in
                 let t = Double(i) / 30
-                return P(30 + drift * 10 * pow(max(0, t - 0.8) / 0.2, 2), 130 - t * 130)
+                return P(30 + drift * 4 * pow(max(0, t - 0.85) / 0.15, 2), 130 - t * 130)
             }
             let left = core.enumerated().map { i, p in P(p.x - (2.2 + 2.5 * pow(Double(i) / 30, 3)), p.y) }
             let right = core.enumerated().map { i, p in P(p.x + (2.2 + 2.5 * pow(Double(i) / 30, 3)), p.y) }
             c.append(poly(left + right.reversed(), fil: .gray(0, 0.10), str: nil))
             c += inkLine(core, width: 0.6, tone: 0.16, dry: 0.6)
-            c += inkBlot(core.last!.x + drift * 4, 4, radius: 7, squash: 0.35, angle: drift * 0.3, tone: 0.06)
+            c += inkBlot(core.last!.x + drift * 3, 3, radius: 5, squash: 0.4, angle: drift * 0.2, tone: 0.05)
             return c
         }
         for k in 0..<4 {
