@@ -32,6 +32,13 @@ public extension ZXArt {
         public var options: SceneOptions
         public var matched: [String]
 
+        /// Painterly scene version. The first scene draft (@4) remains reproducible.
+        public func paintingProcedural(seed: String, verseSide: String? = "right", columns: Int? = nil, chars: Int? = nil) -> Procedural {
+            var result = procedural(seed: seed, verseSide: verseSide, columns: columns, chars: chars)
+            result.generator = "shanshui@5"
+            return result
+        }
+
         public func procedural(seed: String, verseSide: String? = "right", columns: Int? = nil, chars: Int? = nil) -> Procedural {
             .init(generator: "shanshui@4", seed: seed, variant: scene.rawValue,
                   params: .init(quietTop: 0.18, verseSide: verseSide, verseColumns: columns, verseChars: chars, scene: options))

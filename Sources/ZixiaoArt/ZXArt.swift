@@ -103,7 +103,7 @@ public extension ZXArt {
         /// shanshui@1 / @2: 普通层里属于近景 (水纹、船、近岸) 的形状区间, 分层渲染用 (`restricted(to:)`)。
         /// 其余形状是中景, 带雾化的图层是远山。花、原作第一屏为空。不影响出图。
         public var nearSpans: [ShapeSpan] = []
-        /// shanshui@4: only objects actually placed in the drawing; used by scene inspection / editing.
+        /// shanshui@4 / @5: only objects actually placed in the drawing; used by scene inspection / editing.
         public var sceneElements: [SceneElement] = []
 
         public init(width: Double, height: Double, background: ZXHex, paper: PaperTexture? = nil,
