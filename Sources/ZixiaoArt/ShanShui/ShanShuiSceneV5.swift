@@ -10,7 +10,7 @@ extension ZXArt {
                              options: SceneOptions, quietTop: Double, verse: VerseLayout) -> (drawing: Drawing, trace: Trace) {
             let ratio = Double(size.height / size.width)
             let w = 420 * max(1, 1 / ratio), h = 420 * max(1, ratio)
-            let stage = PaintingStage(seed: seed, width: w, height: h, palette: palette, verse: verse, quietTop: quietTop)
+            let stage = PaintingStage(seed: seed, width: w, height: h, palette: palette, verse: verse, quietTop: quietTop, options: options)
             stage.compose(scene: scene, options: options)
             var layers: [Layer] = []
             var nearSpans: [ShapeSpan] = []
@@ -58,7 +58,9 @@ extension ZXArt {
             paper.tint = palette.ink
             paper.strength *= 0.32
             var drawing = Drawing(width: w, height: h, background: palette.paper, paper: paper, layers: layers)
-            drawing.setVerse(verse, quietTop: quietTop)
+            if options.purpose == .reading {
+                drawing.quietRect = .init(x: 0, y: 0, width: w, height: quietTop * h)
+            } else { drawing.setVerse(verse, quietTop: quietTop) }
             drawing.nearSpans = nearSpans
             drawing.sceneElements = stage.elements
             drawing.anchors = Anchors.build(pieces: stage.engine.anchorPieces, width: w, height: h,
@@ -82,41 +84,79 @@ private final class PaintingStage {
     let verse: CGRect
     let art: CGRect
     let foreground: CGRect
+    let purpose: ZXArt.ScenePurpose?
+    let composition: ZXArt.SceneComposition?
     var parts: [ShanShuiEngine.Part] = []
     var elements: [ZXArt.SceneElement] = []
     var placed = Set<Motif>()
     var celestialLayers: [(layer: Int, motif: Motif)] = []
     var boats: [ZXArt.Anchors.Boat] = []
     var currentScene: ZXArt.PoetryScene = .retreat
+    var bankSurface: (x0: Double, step: Double, heights: [Double])?
 
-    init(seed: ZXArt.Seed, width: Double, height: Double, palette: ZXArt.Palette, verse: ZXArt.VerseLayout, quietTop: Double) {
+    init(seed: ZXArt.Seed, width: Double, height: Double, palette: ZXArt.Palette, verse: ZXArt.VerseLayout, quietTop: Double, options: ZXArt.SceneOptions) {
         self.w = width; self.h = height; self.palette = palette
-        self.verse = verse.rect(in: CGSize(width: width, height: height)).insetBy(dx: -8, dy: -8)
+        purpose = options.purpose; composition = options.composition
+        self.verse = options.purpose == .reading ? .null : verse.rect(in: CGSize(width: width, height: height)).insetBy(dx: -8, dy: -8)
         engine = ShanShuiEngine(seed: .init("poetry-painting-v1:" + seed.string))
         engine.drawTowers = false
         engine.anchorLog = []
         let pad = min(width, height) * 0.045
         let top = max(pad, quietTop * height)
-        switch verse.side {
-        case .right:
-            art = CGRect(x: pad, y: top, width: max(60, self.verse.minX - pad * 2), height: height - top - pad)
-        case .left:
-            art = CGRect(x: self.verse.maxX + pad, y: top,
-                         width: max(60, width - self.verse.maxX - pad * 2), height: height - top - pad)
-        case .top:
-            if width > height * 1.3 {
-                art = CGRect(x: self.verse.maxX + pad, y: pad,
-                             width: max(60, width - self.verse.maxX - pad * 2), height: height - 2 * pad)
-            } else {
-                art = CGRect(x: pad, y: max(top, self.verse.maxY + pad), width: width - 2 * pad,
-                             height: max(60, height - max(top, self.verse.maxY + pad) - pad))
+        if options.purpose == nil && options.composition == nil {
+            switch verse.side {
+            case .right:
+                art = CGRect(x: pad, y: top, width: max(60, self.verse.minX - pad * 2), height: height - top - pad)
+            case .left:
+                art = CGRect(x: self.verse.maxX + pad, y: top,
+                             width: max(60, width - self.verse.maxX - pad * 2), height: height - top - pad)
+            case .top:
+                if width > height * 1.3 {
+                    art = CGRect(x: self.verse.maxX + pad, y: pad,
+                                 width: max(60, width - self.verse.maxX - pad * 2), height: height - 2 * pad)
+                } else {
+                    art = CGRect(x: pad, y: max(top, self.verse.maxY + pad), width: width - 2 * pad,
+                                 height: max(60, height - max(top, self.verse.maxY + pad) - pad))
+                }
             }
-        }
-        let bottomTop = max(self.verse.maxY + pad, height * 0.75)
-        if width <= height * 1.3, bottomTop < height - pad - 40 {
-            foreground = CGRect(x: pad, y: bottomTop, width: width - 2 * pad, height: height - bottomTop - pad)
+            let bottomTop = max(self.verse.maxY + pad, height * 0.75)
+            if width <= height * 1.3, bottomTop < height - pad - 40 {
+                foreground = CGRect(x: pad, y: bottomTop, width: width - 2 * pad, height: height - bottomTop - pad)
+            } else {
+                foreground = CGRect(x: art.minX, y: art.minY + art.height * 0.72, width: art.width, height: art.height * 0.28)
+            }
         } else {
-            foreground = CGRect(x: art.minX, y: art.minY + art.height * 0.72, width: art.width, height: art.height * 0.28)
+            let footer = options.purpose == .recommendation ? height * 0.87 : height - pad
+            let left: Double, available: Double
+            if options.purpose == .reading {
+                left = pad; available = width - 2 * pad
+            } else if verse.side == .right {
+                left = pad; available = max(60, self.verse.minX - 2 * pad)
+            } else if verse.side == .left || width > height * 1.3 {
+                left = self.verse.maxX + pad; available = max(60, width - left - pad)
+            } else {
+                left = pad; available = width - 2 * pad
+            }
+            let start = verse.side == .top && options.purpose != .reading && width <= height * 1.3
+                ? max(top, self.verse.maxY + pad) : top
+            let high = max(60, footer - start)
+            switch options.composition ?? .corner {
+            case .corner:
+                let inset = options.purpose == .reading ? available * 0.15 : 0
+                art = CGRect(x: left + (verse.side == .left ? inset : 0), y: start + high * 0.08,
+                    width: available - inset, height: high * 0.87)
+            case .oppositeBank:
+                art = CGRect(x: left, y: start, width: available, height: high * 0.70)
+            case .depth:
+                art = CGRect(x: left, y: start, width: available, height: high * 0.96)
+            }
+            let low = options.purpose == .reading ? height * 0.74 : max(self.verse.maxY + pad, height * 0.74)
+            if width <= height * 1.3, footer - low > 28 {
+                foreground = CGRect(x: pad, y: low, width: width - 2 * pad, height: footer - low)
+            } else {
+                foreground = CGRect(x: art.minX, y: art.minY + art.height * 0.72,
+                    width: art.width, height: art.height * 0.28)
+            }
         }
     }
 
@@ -130,7 +170,8 @@ private final class PaintingStage {
     private func add(_ motif: Motif, _ box: CGRect, repeatable: Bool = false) -> Bool {
         guard repeatable || !placed.contains(motif) else { return false }
         let raw = motif == .stream && currentScene == .desert ? engine.paintingLongRiver() : engine.paintingAsset(motif)
-        guard let object = fitted(raw, to: box) else { return false }
+        let placement = groundedSlot(motif, scaledSlot(motif, box))
+        guard let object = fitted(raw, to: placement) else { return false }
         // Each object gets its own layer, retaining stable ordering and inspection metadata.
         let actual = object.bounds
         support(motif, bounds: actual)
@@ -165,13 +206,99 @@ private final class PaintingStage {
         return true
     }
 
+    /// Scale by the scene's common ground plane, rather than filling each independent placeholder.
+    private func scaledSlot(_ motif: Motif, _ requested: CGRect) -> CGRect {
+        guard purpose != nil else { return requested }
+        var maxWidth = requested.width, maxHeight = requested.height
+        switch motif {
+        case .house, .hut, .pavilion, .templeGate, .cityGate:
+            let close = currentScene == .moonNight
+            let village = currentScene == .village
+            maxWidth = min(maxWidth, art.width * (close ? 0.50 : (village ? 0.33 : 0.26)))
+            maxHeight = min(maxHeight, art.height * (close ? 0.18 : (village ? 0.14 : 0.11)))
+            if let main = elements.first(where: { $0.motif == "mainMountain" }) {
+                maxHeight = min(maxHeight, main.bounds.cgRect.height * h * 0.28)
+            }
+        case .pagoda:
+            maxWidth = min(maxWidth, art.width * 0.14)
+            maxHeight = min(maxHeight, art.height * 0.25)
+            if let main = elements.first(where: { $0.motif == "mainMountain" }) {
+                maxHeight = min(maxHeight, main.bounds.cgRect.height * h * 0.30)
+            }
+        case .pine, .oldTree, .bareTree, .layeredTree, .willow, .blossom, .maple:
+            let mountainScene = [ZXArt.PoetryScene.retreat, .temple, .historic].contains(currentScene)
+            maxHeight = min(maxHeight, min(art.height * (mountainScene ? 0.46 : 0.62), art.width * (mountainScene ? 0.85 : 0.65)))
+            if let main = elements.first(where: { $0.motif == "mainMountain" }) {
+                maxHeight = min(maxHeight, main.bounds.cgRect.height * h * 0.68)
+            }
+        case .bamboo:
+            maxHeight = min(maxHeight, art.height * 0.25)
+            if let main = elements.first(where: { $0.motif == "mainMountain" }) {
+                maxHeight = min(maxHeight, main.bounds.cgRect.height * h * 0.42)
+            }
+        default: break
+        }
+        return CGRect(x: requested.midX - maxWidth / 2, y: requested.maxY - maxHeight,
+            width: maxWidth, height: maxHeight)
+    }
+
+    /// Buildings and trees meet the actual bank silhouette, not independent percentage baselines.
+    private func groundedSlot(_ motif: Motif, _ requested: CGRect) -> CGRect {
+        guard purpose != nil else { return requested }
+        if motif == .window, currentScene == .moonNight,
+           let house = elements.first(where: { $0.motif == "house" })?.bounds.cgRect {
+            return CGRect(x: (house.minX + house.width * 0.32) * w,
+                y: (house.minY + house.height * 0.60) * h, width: house.width * w * 0.14, height: house.height * h * 0.22)
+        }
+        let rooted: Set<Motif> = [.oldTree, .bareTree, .layeredTree, .pine, .bamboo, .willow,
+            .blossom, .maple, .house, .hut, .pavilion, .pagoda, .templeGate, .cityGate]
+        guard rooted.contains(motif), let surface = bankSurface else { return requested }
+        let position = (requested.midX - surface.x0) / surface.step
+        guard position >= 0, position <= Double(surface.heights.count - 1) else { return requested }
+        let lo = Int(position), hi = min(lo + 1, surface.heights.count - 1)
+        var y = min(surface.heights[lo], surface.heights[hi])
+        if [.house, .hut, .pavilion, .pagoda, .templeGate, .cityGate].contains(motif) {
+            // A broad foundation must reach the lower bank under both walls, not perch on a single high stone.
+            let first = max(0, Int(floor((requested.midX - requested.width * 0.36 - surface.x0) / surface.step)))
+            let last = min(surface.heights.count - 1, Int(ceil((requested.midX + requested.width * 0.36 - surface.x0) / surface.step)))
+            if first <= last, let base = surface.heights[first...last].filter(\.isFinite).max() { y = base }
+        }
+        guard y.isFinite else { return requested }
+        return CGRect(x: requested.minX, y: y - requested.height, width: requested.width, height: requested.height)
+    }
+
+    private func recordBank(_ object: (canv: ZXArt.SSCanv, bounds: CGRect)) {
+        guard purpose != nil else { return }
+        let count = 64, x0 = object.bounds.minX, step = object.bounds.width / Double(63)
+        guard step > 0 else { return }
+        var heights = Array(repeating: Double.infinity, count: count)
+        for poly in object.canv {
+            for (a, b) in zip(poly.p, poly.p.dropFirst()) {
+                let lo = max(0, Int(ceil((min(a.x, b.x) - x0) / step)))
+                let hi = min(count - 1, Int(floor((max(a.x, b.x) - x0) / step)))
+                guard lo <= hi else { continue }
+                for i in lo...hi {
+                    let x = x0 + Double(i) * step
+                    let t = abs(b.x - a.x) < 0.0001 ? 0 : (x - a.x) / (b.x - a.x)
+                    heights[i] = min(heights[i], a.y + (b.y - a.y) * t)
+                }
+            }
+        }
+        bankSurface = (x0, step, heights)
+        let r = object.bounds
+        elements.append(.init(motif: "groundBank", bounds: .init(x: r.minX / w, y: r.minY / h,
+            width: r.width / w, height: r.height / h)))
+    }
+
     /// Rooted rock shelves connect the tree groups, houses and paths into terrain.
     private func support(_ motif: Motif, bounds: CGRect) {
         let rooted: Set<Motif> = [.oldTree, .bareTree, .layeredTree, .pine, .bamboo, .willow,
             .blossom, .maple, .house, .hut, .pavilion, .pagoda, .templeGate, .cityGate,
             .courtyard, .terrace, .ruins]
         guard rooted.contains(motif) else { return }
-        let height = min(24, max(5, bounds.height * 0.13))
+        let buildings: Set<Motif> = [.house, .hut, .pavilion, .pagoda, .templeGate, .cityGate]
+        let height = purpose != nil && buildings.contains(motif)
+            ? max(1, min(4, bounds.height * 0.10)) : min(24, max(5, bounds.height * 0.13))
         let box = CGRect(x: max(art.minX, bounds.minX - 3), y: bounds.maxY - height * 0.15,
             width: min(art.width, bounds.width + 8), height: height)
         if let rock = fitted(engine.paintingRock(width: 125, height: 24, tone: 0.7), to: box) {
@@ -200,16 +327,23 @@ private final class PaintingStage {
     private func hills(_ main: Bool = false) {
         for k in 0..<2 {
             let raw = engine.paintingDistant(k)
-            let box = slot(0, 0.07 + Double(k) * 0.17, 1, 0.29)
+            let box = slot(composition == .depth ? Double(k) * 0.10 : 0,
+                0.07 + Double(k) * (composition == .oppositeBank ? 0.10 : 0.17),
+                composition == .depth ? 0.88 : 1, 0.29)
             if let object = fitted(raw, to: box) {
                 parts.append(.init(canv: object.canv, mist: .init(depth: object.bounds.height * 3,
                     blur: 0.7, peak: 0.92, floorY: object.bounds.maxY, floorDepth: object.bounds.height * 0.6)))
                 engine.noted(.ridge(.far), object.canv)
             }
         }
-        if main, let object = fitted(engine.paintingMountain(), to: slot(0.02, 0.01, 0.95, 0.75)) {
+        if main, let object = fitted(engine.paintingMountain(standalone: purpose != nil), to: slot(0.02, 0.01, 0.95, 0.75)) {
             parts.append(.init(canv: object.canv))
             engine.noted(.ridge(.main), object.canv)
+            if purpose != nil {
+                let r = object.bounds
+                elements.append(.init(motif: "mainMountain", bounds: .init(x: r.minX / w, y: r.minY / h,
+                    width: r.width / w, height: r.height / h)))
+            }
         }
     }
 
@@ -226,9 +360,12 @@ private final class PaintingStage {
     private func ground(for scene: ZXArt.PoetryScene) {
         guard ![.desert, .ocean].contains(scene) else { return }
         let narrow = [.fishing, .lotusPond].contains(scene)
-        let box = narrow ? slot(0.01, 0.67, 0.34, 0.25) : slot(0, 0.65, 1, 0.22)
+        let box: CGRect
+        if composition == .oppositeBank { box = slot(0.01, 0.63, narrow ? 0.42 : 1, 0.14) }
+        else { box = narrow ? slot(0.01, 0.67, 0.34, 0.25) : slot(0, 0.65, 1, 0.22) }
         if let object = fitted(engine.paintingBank(), to: box) {
             parts.append(.near(object.canv))
+            recordBank(object)
         }
         if !narrow, let object = fitted(engine.paintingBank(),
                                         to: slot(0.0, 0.12, 0.75, 0.74, front: true)) {
@@ -271,10 +408,16 @@ private final class PaintingStage {
             include(.path, slot(0.05, 0, 0.28, 0.8, front: true))
             include(.mooredBoat, slot(0.60, 0.55, 0.30, 0.17, front: true))
         case .village:
-            include(.cookingSmoke, slot(0.56, 0.33, 0.12, 0.24))
+            if purpose == nil { include(.cookingSmoke, slot(0.56, 0.33, 0.12, 0.24)) }
             add(.layeredTree, slot(0.01, 0.20, 0.46, 0.53))
             include(.house, slot(0.39, 0.56, 0.44, 0.18))
             if chosen.contains(.house) { add(.house, slot(0.67, 0.59, 0.30, 0.13), repeatable: true) }
+            if purpose != nil, chosen.contains(.cookingSmoke), let house = elements.first(where: { $0.motif == "house" })?.bounds.cgRect {
+                let smokeHeight = house.height * h * 1.8
+                add(.cookingSmoke, CGRect(x: (house.minX + house.width * 0.5) * w,
+                    y: (house.minY + house.height * 0.15) * h - smokeHeight,
+                    width: house.width * w * 0.3, height: smokeHeight))
+            }
             include(.fields, slot(0.05, 0.0, 0.9, 0.92, front: true))
             include(.fence, slot(0.10, 0.76, 0.66, 0.06))
             include(.path, slot(0.65, 0.62, 0.24, 0.34))
@@ -307,7 +450,7 @@ private final class PaintingStage {
             include(.boat, slot(0.08, 0.65, 0.5, 0.14, front: true))
         case .temple:
             include(.templeGate, slot(0.52, 0.61, 0.44, 0.20))
-            include(.pagoda, slot(0.04, 0.20, 0.22, 0.32))
+            include(.pagoda, purpose == nil ? slot(0.04, 0.20, 0.22, 0.32) : slot(0.06, 0.48, 0.14, 0.25))
             include(.bamboo, slot(0.01, 0.50, 0.40, 0.32))
             include(.path, slot(0.15, 0, 0.45, 0.95, front: true))
         case .courtyard:

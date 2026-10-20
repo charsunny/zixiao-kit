@@ -182,6 +182,15 @@ public extension ZXArt {
             case .shanshuiV1, .nonflowersV1: return nil
             case .shanshuiV2(_, let s), .nonflowersV2(_, let s), .shanshuiV3(_, let s), .shanshuiV4(_, let s), .shanshuiV5(_, let s): side = s
             }
+            if case .shanshuiV5 = kind {
+                if params.scene?.purpose == .reading { return nil }
+                if params.scene?.purpose == .recommendation {
+                    // Today's date occupies the top, the fixed vertical verse sits on the right.
+                    let wide = pixelSize.width > pixelSize.height * 1.3
+                    return VerseLayout(side: .right, rect: CGRect(x: wide ? 0.49 : 0.43, y: 0.22,
+                        width: wide ? 0.46 : 0.52, height: wide ? 0.58 : 0.50))
+                }
+            }
             let frame = Frame(pixelSize: pixelSize)
             let quiet = min(max(params.quietTop ?? frame.defaultQuietTop, 0), 0.5)
             return ZXArt.verseLayout(side: side, frame: frame,
@@ -233,8 +242,8 @@ extension ZXArt {
         let density = min(max((p.params.density ?? 1) - 0.5, 0), 1)
         let seed = Seed(p.seed)
         switch kind {
-        case .shanshuiV5(let scene, _):
-            guard let verse = p.verseLayout(pixelSize: pixelSize) else { return nil }
+        case .shanshuiV5(let scene, let side):
+            let verse = p.verseLayout(pixelSize: pixelSize) ?? VerseLayout(side: side, rect: .zero)
             return PoetryPaintingRenderer.generate(seed: seed, size: pixelSize, palette: palette, scene: scene,
                 options: p.params.scene ?? SceneOptions(motifs: defaultMotifs(for: scene)), quietTop: quiet, verse: verse)
         case .shanshuiV4(let scene, _):

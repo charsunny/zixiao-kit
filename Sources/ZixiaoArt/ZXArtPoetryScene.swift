@@ -16,10 +16,23 @@ public extension ZXArt {
         case stream, waterfall, dunes, beaconSmoke, cookingSmoke, mist, moon, crescent, sunrise, sunset, stars, snow, afterRain, rain, waves, reef
     }
 
+    /// Optional, versioned presentation. Missing values preserve the first @5 painting exactly.
+    enum ScenePurpose: String, Sendable, Hashable, Codable, CaseIterable {
+        case inscription = "inscription-v1", reading = "reading-v1", recommendation = "recommendation-v1"
+    }
+
+    enum SceneComposition: String, Sendable, Hashable, Codable, CaseIterable {
+        case corner = "corner-v1", oppositeBank = "opposite-bank-v1", depth = "depth-v1"
+    }
+
     /// Persist this selection in the recipe. Rendering never reinterprets the poem or the current date.
     struct SceneOptions: Sendable, Hashable, Codable {
         public var motifs: [SceneMotif]
-        public init(motifs: [SceneMotif] = []) { self.motifs = motifs }
+        public var purpose: ScenePurpose?
+        public var composition: SceneComposition?
+        public init(motifs: [SceneMotif] = [], purpose: ScenePurpose? = nil, composition: SceneComposition? = nil) {
+            self.motifs = motifs; self.purpose = purpose; self.composition = composition
+        }
         public var canonicalMotifs: [SceneMotif] {
             let selected = Set(motifs)
             return SceneMotif.allCases.filter(selected.contains)
@@ -33,9 +46,23 @@ public extension ZXArt {
         public var matched: [String]
 
         /// Painterly scene version. The first scene draft (@4) remains reproducible.
-        public func paintingProcedural(seed: String, verseSide: String? = "right", columns: Int? = nil, chars: Int? = nil) -> Procedural {
+        public func paintingProcedural(seed: String, verseSide: String? = "right", columns: Int? = nil, chars: Int? = nil,
+                                       purpose: ScenePurpose? = nil, composition: SceneComposition? = nil) -> Procedural {
             var result = procedural(seed: seed, verseSide: verseSide, columns: columns, chars: chars)
             result.generator = "shanshui@5"
+            if let purpose {
+                var hash: UInt32 = 2_166_136_261
+                for byte in seed.utf8 { hash = (hash ^ UInt32(byte)) &* 16_777_619 }
+                let candidates: [SceneComposition]
+                switch scene {
+                case .fishing, .waterTown, .farewell, .lotusPond, .ocean, .desert: candidates = [.oppositeBank, .corner]
+                case .retreat, .temple, .historic: candidates = [.depth, .corner]
+                default: candidates = SceneComposition.allCases
+                }
+                result.params.scene?.purpose = purpose
+                result.params.scene?.composition = composition ?? candidates[Int(hash) % candidates.count]
+                result.params.quietTop = purpose == .recommendation ? 0.22 : (purpose == .reading ? 0.12 : 0.18)
+            } else if let composition { result.params.scene?.composition = composition }
             return result
         }
 

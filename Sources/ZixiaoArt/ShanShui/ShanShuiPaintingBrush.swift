@@ -101,8 +101,11 @@ extension ShanShuiEngine {
         return c
     }
 
-    func paintingMountain() -> ZXArt.SSCanv {
-        paintingLegacy(mountain(140, 420, r() * 80, hei: 420, wid: 280, tex: 240, veg: false), textured: true)
+    func paintingMountain(standalone: Bool = false) -> ZXArt.SSCanv {
+        // Page compositions place buildings themselves. The legacy mountain's internal random houses
+        // otherwise scale with the mountain and can dwarf the deliberately placed village.
+        paintingLegacy(mountain(140, 420, r() * 80, hei: standalone ? 520 : 420,
+            wid: standalone ? 260 : 280, tex: 240, veg: false, architecture: !standalone), textured: true)
     }
 
     func paintingDistant(_ index: Int) -> ZXArt.SSCanv {
