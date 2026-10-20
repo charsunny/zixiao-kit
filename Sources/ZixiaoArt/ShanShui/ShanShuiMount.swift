@@ -59,7 +59,8 @@ extension ShanShuiEngine {
     // MARK: mountain
 
     func mountain(_ xoff: Double, _ yoff: Double, _ seed: Double = 0, hei hIn: Double? = nil, wid wIn: Double? = nil,
-                  tex: Double = 200, veg: Bool = true) -> ZXArt.SSCanv {
+                  tex: Double = 200, veg: Bool = true, architecture: Bool = true,
+                  profile: PaintingMountainProfile? = nil) -> ZXArt.SSCanv {
         let hei = hIn ?? 100 + r() * 400
         let wid = wIn ?? 400 + r() * 200
         var canv: ZXArt.SSCanv = []
@@ -72,11 +73,20 @@ extension ShanShuiEngine {
             var row: [P] = []
             row.reserveCapacity(reso1)
             for i in 0..<reso1 {
-                let x = (Double(i) / Double(reso1) - 0.5) * Double.pi
-                var y = cos(x)
-                y *= n(x + 10, Double(j) * 0.15, seed)
+                let u = Double(i) / Double(profile == nil ? reso1 : reso1 - 1)
+                let x = (u - 0.5) * Double.pi
+                let y: Double
+                if let profile {
+                    // Noise breaks the brush edge; it must not determine the number of peaks.
+                    y = profile.elevation(at: u) * (0.91 + 0.18 * n(u * 5 + 10, Double(j) * 0.15, seed))
+                } else {
+                    y = cos(x) * n(x + 10, Double(j) * 0.15, seed)
+                }
                 let p = 1 - Double(j) / Double(reso0)
-                row.append(P((x / Double.pi) * w * p, -y * h * p + hoff))
+                // Keep multi-peak folds beneath their own summit. Collapsing every inner
+                // ridge toward x=0 draws diagonals across neighbouring peaks.
+                let breadth = profile == nil ? p : 0.92 + 0.08 * p
+                row.append(P((x / Double.pi) * w * breadth, -y * h * p + hoff))
             }
             ptlist.append(row)
         }
@@ -111,7 +121,7 @@ extension ShanShuiEngine {
         canv += stroke(ptlist[0].map { P($0.x + xoff, $0.y + yoff) }, wid: 3, col: .ink(0.3), noi: 1)
         canv += foot(ptlist, xof: xoff, yof: yoff)
         let sha = e.choice([0.0, 0, 0, 0, 5])
-        canv += texture(ptlist, xof: xoff, yof: yoff, tex: tex, sha: sha)
+        canv += texture(ptlist, xof: xoff, yof: yoff, tex: tex, len: profile?.textureLength ?? 0.2, sha: sha)
 
         // TOP
         vegetate({ x, y in
@@ -156,45 +166,48 @@ extension ShanShuiEngine {
             }, always, kind: .tree(.tree03))
         }
 
-        // BOTT ARCH
-        vegetate({ x, y in
-            let tt = self.e.choice([0, 0, 1, 1, 1, 2])
-            if tt == 1 {
-                let w = self.e.normRand(40, 70)
-                let sto = self.e.choice([1.0, 2, 2, 3])
-                let rot = self.r()
-                let sty = self.e.choice([1, 2, 3])
-                let house = self.arch02(x + xoff, y + yoff, seed, wid: w, rot: rot, sto: sto, sty: sty)
-                self.noteAnchor(.building(.house), house)
-                return house
-            } else if tt == 2 {
-                let pavilion = self.arch04(x + xoff, y + yoff, seed, sto: self.e.choice([1.0, 1, 1, 2, 2]))
-                self.noteAnchor(.building(.pavilion), pavilion)
-                return pavilion
-            }
-            return []
-        }, { i, j in
-            let ns = self.n(Double(i) * 0.2, Double(j) * 0.05, seed + 10)
-            return i != 0 && (j == 1 || j == ptlist[i].count - 2) && ns * ns * ns * ns < 0.008
-        }, always)
+        if architecture {
+            // BOTT ARCH
+            vegetate({ x, y in
+                let tt = self.e.choice([0, 0, 1, 1, 1, 2])
+                if tt == 1 {
+                    let w = self.e.normRand(40, 70)
+                    let sto = self.e.choice([1.0, 2, 2, 3])
+                    let rot = self.r()
+                    let sty = self.e.choice([1, 2, 3])
+                    let house = self.arch02(x + xoff, y + yoff, seed, wid: w, rot: rot, sto: sto, sty: sty)
+                    self.noteAnchor(.building(.house), house)
+                    return house
+                } else if tt == 2 {
+                    let pavilion = self.arch04(x + xoff, y + yoff, seed, sto: self.e.choice([1.0, 1, 1, 2, 2]))
+                    self.noteAnchor(.building(.pavilion), pavilion)
+                    return pavilion
+                }
+                return []
+            }, { i, j in
+                let ns = self.n(Double(i) * 0.2, Double(j) * 0.05, seed + 10)
+                return i != 0 && (j == 1 || j == ptlist[i].count - 2) && ns * ns * ns * ns < 0.008
+            }, always)
 
-        // TOP ARCH
-        vegetate({ x, y in
-            let sto = self.e.choice([5.0, 7])
-            let w = 40 + self.r() * 20
-            return self.arch03(x + xoff, y + yoff, seed, wid: w, sto: sto)
-        }, { i, j in
-            i == 1 && abs(Double(j) - Double(ptlist[i].count) / 2) < 1 && self.r() < 0.02
-        }, always, kind: .building(.pagoda))
+            // TOP ARCH
+            vegetate({ x, y in
+                let sto = self.e.choice([5.0, 7])
+                let w = 40 + self.r() * 20
+                return self.arch03(x + xoff, y + yoff, seed, wid: w, sto: sto)
+            }, { i, j in
+                i == 1 && abs(Double(j) - Double(ptlist[i].count) / 2) < 1 && self.r() < 0.02
+            }, always, kind: .building(.pagoda))
 
-        // TRANSM
-        vegetate({ x, y in
-            let t = self.transmissionTower01(x + xoff, y + yoff, seed)
-            return self.drawTowers ? t : []
-        }, { i, j in
-            let ns = self.n(Double(i) * 0.2, Double(j) * 0.05, seed + 20 * Double.pi)
-            return i % 2 == 0 && (j == 1 || j == ptlist[i].count - 2) && ns * ns * ns * ns < 0.002
-        }, always)
+            // TRANSM
+            vegetate({ x, y in
+                let t = self.transmissionTower01(x + xoff, y + yoff, seed)
+                return self.drawTowers ? t : []
+            }, { i, j in
+                let ns = self.n(Double(i) * 0.2, Double(j) * 0.05, seed + 20 * Double.pi)
+                return i % 2 == 0 && (j == 1 || j == ptlist[i].count - 2) && ns * ns * ns * ns < 0.002
+            }, always)
+
+        }
 
         // BOTT ROCK
         vegetate({ x, y in

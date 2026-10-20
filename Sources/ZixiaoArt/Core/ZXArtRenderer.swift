@@ -589,7 +589,7 @@ extension ZXArt {
         let alpha: CGContext?
         if wash != nil {
             alpha = CGContext(data: nil, width: sw, height: sh, bitsPerComponent: 8, bytesPerRow: sw,
-                              space: nil, bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue)
+                              space: nil, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.alphaOnly.rawValue))
             guard let alpha else { return }
             raster(alpha, gx: sx0, gy: sy0, width: sw, height: sh)
         } else { alpha = nil }
