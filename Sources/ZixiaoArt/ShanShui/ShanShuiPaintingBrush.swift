@@ -103,8 +103,9 @@ extension ShanShuiEngine {
 
     func paintingMountain() -> ZXArt.SSCanv {
         // Buildings are separate scene objects with their own scale and ground placement.
-        paintingLegacy(mountain(140, 420, r() * 80, hei: 520,
-            wid: 260, tex: 240, veg: false, architecture: false), textured: true)
+        let profile = PaintingMountainProfile(random: { self.r() })
+        return paintingLegacy(mountain(140, 420, r() * 80, hei: profile.height,
+            wid: profile.width, tex: 240, veg: false, architecture: false, profile: profile), textured: true)
     }
 
     func paintingDistant(_ index: Int) -> ZXArt.SSCanv {
@@ -118,5 +119,100 @@ extension ShanShuiEngine {
         var c = [poly(ridge + [P(360, 95), P(0, 95)], fil: .gray(0, 0.10 + Double(index) * 0.025), str: nil)]
         c += inkLine(ridge, width: 0.8, tone: 0.15, dry: 0.6)
         return c
+    }
+}
+
+/// Large-scale mountain structure, before surface noise and brush texture are applied.
+/// The same ridge drives the outline, foothills and texture grid, so folds follow the summit.
+struct PaintingMountainProfile {
+    enum Form: Int, CaseIterable { case monumental, leaning, rounded, folded, clustered, longRidge }
+    let form: Form
+    let ridge: [SIMD2<Double>]
+    let width: Double
+    let height: Double
+    let curvature: Double
+    let textureLength: Double
+
+    /// These are structural studies, not copies of specific paintings: a broad northern
+    /// massif, a leaning crag, rounded southern hills, folded terraces and receding ridges.
+    init(form requested: Form? = nil, random: () -> Double) {
+        let choice = min(Form.allCases.count - 1, Int(random() * Double(Form.allCases.count)))
+        form = requested ?? Form(rawValue: choice)!
+        func between(_ lo: Double, _ hi: Double) -> Double { lo + (hi - lo) * random() }
+        let control: [SIMD2<Double>]
+        let widths: ClosedRange<Double>, heights: ClosedRange<Double>, curves: ClosedRange<Double>
+        switch form {
+        case .monumental:
+            control = [.init(0, 0), .init(0.12, 0.14), .init(0.24, 0.22), .init(0.30, 0.77),
+                .init(0.40, 0.96), .init(0.47, 1), .init(0.59, 0.93), .init(0.66, 0.98),
+                .init(0.72, 0.76), .init(0.78, 0.70), .init(0.85, 0.17), .init(1, 0)]
+            widths = 310...370; heights = 370...470; curves = 0.35...0.60
+            textureLength = 0.10
+        case .leaning:
+            control = [.init(0, 0), .init(0.10, 0.12), .init(0.23, 0.28), .init(0.28, 0.57),
+                .init(0.43, 0.64), .init(0.49, 0.82), .init(0.66, 1), .init(0.76, 0.96),
+                .init(0.80, 0.72), .init(0.88, 0.25), .init(1, 0)]
+            widths = 300...350; heights = 350...460; curves = 0.30...0.60
+            textureLength = 0.13
+        case .rounded:
+            control = [.init(0, 0), .init(0.16, 0.18), .init(0.28, 0.60), .init(0.41, 0.90),
+                .init(0.54, 1), .init(0.67, 0.86), .init(0.82, 0.55), .init(0.93, 0.18), .init(1, 0)]
+            widths = 360...440; heights = 270...360; curves = 0.85...1
+            textureLength = 0.18
+        case .folded:
+            control = [.init(0, 0), .init(0.10, 0.18), .init(0.16, 0.49), .init(0.26, 0.53),
+                .init(0.30, 0.80), .init(0.42, 0.82), .init(0.49, 1), .init(0.59, 0.93),
+                .init(0.64, 0.73), .init(0.76, 0.68), .init(0.82, 0.32), .init(1, 0)]
+            widths = 330...400; heights = 330...430; curves = 0.15...0.40
+            textureLength = 0.08
+        case .clustered:
+            control = [.init(0, 0), .init(0.12, 0.35), .init(0.18, 0.65), .init(0.27, 0.73),
+                .init(0.34, 0.48), .init(0.42, 0.53), .init(0.46, 0.91), .init(0.55, 1),
+                .init(0.60, 0.85), .init(0.64, 0.60), .init(0.70, 0.62), .init(0.78, 0.84),
+                .init(0.86, 0.77), .init(0.92, 0.35), .init(1, 0)]
+            widths = 350...430; heights = 350...460; curves = 0.40...0.70
+            textureLength = 0.11
+        case .longRidge:
+            control = [.init(0, 0), .init(0.12, 0.38), .init(0.22, 0.52), .init(0.34, 0.44),
+                .init(0.45, 0.80), .init(0.54, 0.91), .init(0.64, 1), .init(0.75, 0.82),
+                .init(0.85, 0.76), .init(0.94, 0.28), .init(1, 0)]
+            widths = 430...520; heights = 240...330; curves = 0.70...1
+            textureLength = 0.15
+        }
+        // Move the entire crest and vary each shoulder without scrambling the mountain's anatomy.
+        let bias = between(-0.08, 0.08)
+        var knots = control.enumerated().map { i, p -> SIMD2<Double> in
+            guard i > 0 && i < control.count - 1 else { return p }
+            return .init(p.x + bias * sin(p.x * .pi) + between(-0.008, 0.008),
+                p.y == 1 ? 1 : min(0.99, max(0, p.y + between(-0.025, 0.025))))
+        }
+        if random() < 0.5 { knots = knots.reversed().map { .init(1 - $0.x, $0.y) } }
+        ridge = knots
+        width = between(widths.lowerBound, widths.upperBound)
+        height = between(heights.lowerBound, heights.upperBound)
+        curvature = between(curves.lowerBound, curves.upperBound)
+    }
+
+    /// Shape-preserving cubic interpolation: no extra peaks or overshoot between ridge knots.
+    func elevation(at position: Double) -> Double {
+        let x = min(1, max(0, position))
+        let i = min(ridge.count - 2, max(0, (ridge.firstIndex { $0.x > x } ?? ridge.count - 1) - 1))
+        func slope(_ k: Int) -> Double {
+            (ridge[k + 1].y - ridge[k].y) / (ridge[k + 1].x - ridge[k].x)
+        }
+        func tangent(_ k: Int) -> Double {
+            if k == 0 { return slope(0) }
+            if k == ridge.count - 1 { return slope(k - 1) }
+            let a = slope(k - 1), b = slope(k)
+            guard a * b > 0 else { return 0 }
+            let left = ridge[k].x - ridge[k - 1].x, right = ridge[k + 1].x - ridge[k].x
+            let w1 = 2 * right + left, w2 = right + 2 * left
+            return (w1 + w2) / (w1 / a + w2 / b)
+        }
+        let a = ridge[i], b = ridge[i + 1], span = b.x - a.x, t = (x - a.x) / span
+        let t2 = t * t, t3 = t2 * t
+        let smooth = (2 * t3 - 3 * t2 + 1) * a.y + (t3 - 2 * t2 + t) * span * tangent(i)
+            + (-2 * t3 + 3 * t2) * b.y + (t3 - t2) * span * tangent(i + 1)
+        return max(0, smooth * curvature + (a.y + (b.y - a.y) * t) * (1 - curvature))
     }
 }

@@ -4,6 +4,46 @@ import Testing
 @testable import ZixiaoArt
 
 struct ZXArtPaintingSceneTests {
+    @Test func mountainSilhouettesVaryWithoutInventingExtraSummits() {
+        var forms: Set<Int> = []
+        var peakPositions: [Double] = []
+        var aspects: [Double] = []
+        for index in 0..<64 {
+            let seed = ZXArt.Seed("mountain-variety-\(index)")
+            let engine = ShanShuiEngine(seed: seed)
+            let profile = PaintingMountainProfile(random: { engine.r() })
+            let repeatedEngine = ShanShuiEngine(seed: seed)
+            let repeated = PaintingMountainProfile(random: { repeatedEngine.r() })
+            #expect(profile.ridge == repeated.ridge)
+            #expect(profile.width == repeated.width && profile.height == repeated.height)
+            forms.insert(profile.form.rawValue)
+            peakPositions.append(profile.ridge.max { $0.y < $1.y }!.x)
+            aspects.append(profile.height / profile.width)
+            #expect(abs(profile.elevation(at: 0)) < 0.000_001)
+            #expect(abs(profile.elevation(at: 1)) < 0.000_001)
+            var peaks = 0
+            for i in 1..<(profile.ridge.count - 1) {
+                let a = profile.ridge[i - 1], b = profile.ridge[i], c = profile.ridge[i + 1]
+                if b.y > a.y && b.y > c.y { peaks += 1 }
+            }
+            #expect(peaks >= 1 && peaks <= 4)
+            // Every interpolated slope must stay monotone between its control points.
+            for i in 0..<(profile.ridge.count - 1) {
+                let a = profile.ridge[i], b = profile.ridge[i + 1]
+                var previous = a.y
+                for step in 1...40 {
+                    let value = profile.elevation(at: a.x + (b.x - a.x) * Double(step) / 40)
+                    #expect(value.isFinite && value >= -0.000_001 && value <= 1.000_001)
+                    #expect(b.y > a.y ? value >= previous - 0.000_001 : value <= previous + 0.000_001)
+                    previous = value
+                }
+            }
+        }
+        #expect(forms.count == PaintingMountainProfile.Form.allCases.count)
+        #expect(peakPositions.max()! - peakPositions.min()! > 0.35)
+        #expect(aspects.max()! - aspects.min()! > 0.5)
+    }
+
     @Test func omittedPresentationUsesTheCurrentPainting() throws {
         let selection = ZXArt.poetryScene(text: "明月松间照，清泉石上流", title: "山居秋暝")
         let painting = selection.paintingProcedural(seed: "same-poem")

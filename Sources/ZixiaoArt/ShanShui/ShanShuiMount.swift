@@ -59,7 +59,8 @@ extension ShanShuiEngine {
     // MARK: mountain
 
     func mountain(_ xoff: Double, _ yoff: Double, _ seed: Double = 0, hei hIn: Double? = nil, wid wIn: Double? = nil,
-                  tex: Double = 200, veg: Bool = true, architecture: Bool = true) -> ZXArt.SSCanv {
+                  tex: Double = 200, veg: Bool = true, architecture: Bool = true,
+                  profile: PaintingMountainProfile? = nil) -> ZXArt.SSCanv {
         let hei = hIn ?? 100 + r() * 400
         let wid = wIn ?? 400 + r() * 200
         var canv: ZXArt.SSCanv = []
@@ -72,11 +73,20 @@ extension ShanShuiEngine {
             var row: [P] = []
             row.reserveCapacity(reso1)
             for i in 0..<reso1 {
-                let x = (Double(i) / Double(reso1) - 0.5) * Double.pi
-                var y = cos(x)
-                y *= n(x + 10, Double(j) * 0.15, seed)
+                let u = Double(i) / Double(profile == nil ? reso1 : reso1 - 1)
+                let x = (u - 0.5) * Double.pi
+                let y: Double
+                if let profile {
+                    // Noise breaks the brush edge; it must not determine the number of peaks.
+                    y = profile.elevation(at: u) * (0.91 + 0.18 * n(u * 5 + 10, Double(j) * 0.15, seed))
+                } else {
+                    y = cos(x) * n(x + 10, Double(j) * 0.15, seed)
+                }
                 let p = 1 - Double(j) / Double(reso0)
-                row.append(P((x / Double.pi) * w * p, -y * h * p + hoff))
+                // Keep multi-peak folds beneath their own summit. Collapsing every inner
+                // ridge toward x=0 draws diagonals across neighbouring peaks.
+                let breadth = profile == nil ? p : 0.92 + 0.08 * p
+                row.append(P((x / Double.pi) * w * breadth, -y * h * p + hoff))
             }
             ptlist.append(row)
         }
@@ -111,7 +121,7 @@ extension ShanShuiEngine {
         canv += stroke(ptlist[0].map { P($0.x + xoff, $0.y + yoff) }, wid: 3, col: .ink(0.3), noi: 1)
         canv += foot(ptlist, xof: xoff, yof: yoff)
         let sha = e.choice([0.0, 0, 0, 0, 5])
-        canv += texture(ptlist, xof: xoff, yof: yoff, tex: tex, sha: sha)
+        canv += texture(ptlist, xof: xoff, yof: yoff, tex: tex, len: profile?.textureLength ?? 0.2, sha: sha)
 
         // TOP
         vegetate({ x, y in
