@@ -108,6 +108,15 @@ extension ShanShuiEngine {
             c += paintingRock(width: width, height: height, tone: 0.85).map { poly in
                 var p = poly; p.p = poly.p.map { P($0.x + x, $0.y + y) }; return p
             }
+            // 坡脚: a dark, broken stroke where the stone meets ground or water anchors it.
+            let foot = y + height - 1
+            var fx = x + width * (0.08 + r() * 0.1)
+            while fx < x + width * 0.9 {
+                let run = width * (0.15 + r() * 0.25)
+                c += inkLine([P(fx, foot + r()), P(fx + run * 0.5, foot + 0.8), P(min(x + width * 0.95, fx + run), foot + r())],
+                    width: 1.6 + r() * 1.2, tone: 0.42 + r() * 0.2, dry: 0.5)
+                fx += run + width * (0.05 + r() * 0.1)
+            }
         }
         return c
     }
