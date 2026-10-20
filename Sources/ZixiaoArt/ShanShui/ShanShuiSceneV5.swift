@@ -306,7 +306,15 @@ private final class PaintingStage {
             if first <= last, let base = surface.heights[first...last].filter(\.isFinite).max() { y = base }
         }
         guard y.isFinite else { return requested }
-        return CGRect(x: requested.minX, y: y - requested.height, width: requested.width, height: requested.height)
+        var landed = CGRect(x: requested.minX, y: y - requested.height, width: requested.width, height: requested.height)
+        // A tall tree or roof that would reach into the verse steps aside along the bank
+        // rather than being dropped from the painting.
+        if landed.intersects(verse) {
+            let left = verse.minX - landed.width - 2, right = verse.maxX + 2
+            if left >= surface.x0, left + landed.width <= endX { landed.origin.x = left }
+            else if right + landed.width <= endX { landed.origin.x = right }
+        }
+        return landed
     }
 
     private func recordBank(_ object: (canv: ZXArt.SSCanv, bounds: CGRect)) {
@@ -519,16 +527,25 @@ private final class PaintingStage {
     private func ground(for scene: ZXArt.PoetryScene) {
         guard ![.desert, .ocean].contains(scene) else { return }
         let narrow = [.fishing, .lotusPond].contains(scene)
-        let box: CGRect
+        var box: CGRect
         if composition == .oppositeBank { box = slot(0.01, 0.63, narrow ? 0.42 : 1, 0.14) }
         else { box = narrow ? slot(0.01, 0.67, 0.34, 0.25) : slot(0, 0.65, 1, 0.22) }
+        // Inscribed portrait: the verse fills the sky on one side, so the ground runs the full
+        // width of the band beneath it, the way a hanging scroll's foreground spans the paper.
+        if !verse.isNull, w <= h * 1.3, verse.maxY < h * 0.82 {
+            let pad = min(w, h) * 0.045
+            let top = verse.maxY + pad * 0.4, bottom = min(foreground.maxY, h - pad)
+            let width = (w - 2 * pad) * (narrow ? 0.5 : 1)
+            let x = verse.minX > w / 2 || narrow ? pad : w - pad - width
+            box = CGRect(x: x, y: top, width: width, height: max(20, min(bottom - top, h * 0.2)))
+        }
         if let object = fitted(engine.paintingBank(), to: box) {
             parts.append(.near(object.canv))
             recordBank(object)
         }
         // Foreground slope: a small dark corner, not a second ground plane across the page.
         if !narrow, let object = fitted(engine.paintingBank(),
-                                        to: slot(0.0, 0.34, 0.52, 0.56, front: true)) {
+                                        to: slot(0.0, 0.52, 0.40, 0.48, front: true)) {
             parts.append(.near(object.canv))
             let r = object.bounds
             elements.append(.init(motif: "nearBank", bounds: .init(x: r.minX / w, y: r.minY / h,
@@ -602,7 +619,12 @@ private final class PaintingStage {
                     in: inlet, motif: "stream")
                 placed.insert(.stream)
             }
-            include(.dragonfly, slot(0.24, 0.33, 0.18, 0.08))
+            // 早有蜻蜓立上头: the dragonfly perches on the bud's tip (bud sits ~55% across the asset).
+            if chosen.contains(.dragonfly), let lotus = elements.first(where: { $0.motif == "lotus" })?.bounds.cgRect {
+                let size = lotus.width * w * 0.16
+                add(.dragonfly, CGRect(x: (lotus.minX + lotus.width * 0.55) * w - size / 2,
+                    y: lotus.minY * h - size * 0.45, width: size, height: size * 0.5))
+            }
         case .autumnTravel:
             include(.bareTree, slot(0.0, 0.08, 0.76, 0.72))
             // The vine hangs from the old tree's crown; it never floats on its own.
@@ -633,19 +655,40 @@ private final class PaintingStage {
             include(.bamboo, slot(0.01, 0.50, 0.40, 0.32))
             include(.path, slot(0.15, 0, 0.45, 0.95, front: true))
         case .courtyard:
-            include(.courtyard, slot(0, 0.36, 1, 0.49))
-            include(.window, slot(0.07, 0.45, 0.32, 0.27))
-            include(.curtain, slot(0.09, 0.46, 0.27, 0.23))
-            include(.willow, slot(0.58, 0.02, 0.40, 0.61))
+            // Willow heaped above the wall first, so the wall overlaps its trunk; then the wall,
+            // and a curtained window set into the wall's near end.
+            include(.willow, slot(0.50, 0.04, 0.48, 0.60))
+            include(.courtyard, slot(0, 0.36, 1, 0.52))
+            if let wall = elements.first(where: { $0.motif == "courtyard" })?.bounds.cgRect {
+                let near = CGRect(x: (wall.minX + wall.width * 0.04) * w, y: (wall.minY + wall.height * 0.30) * h,
+                                  width: wall.width * w * 0.20, height: wall.height * h * 0.34)
+                include(.window, near)
+                include(.curtain, near.insetBy(dx: near.width * 0.12, dy: near.height * 0.10))
+            }
         case .historic:
             include(.cityGate, slot(0.56, 0.61, 0.37, 0.18))
             include(.terrace, slot(0.02, 0.05, 0.65, 0.56, front: true))
             include(.ruins, slot(0.67, 0.48, 0.3, 0.31, front: true))
             include(.traveler, slot(0.30, 0.65, 0.10, 0.12))
         case .desert:
-            include(.dunes, slot(0, 0.4, 1, 0.44))
-            if chosen.contains(.dunes) { add(.dunes, slot(0, 0.2, 1, 0.75, front: true), repeatable: true) }
-            include(.stream, slot(0.02, 0.70, 0.96, 0.18))
+            // 大漠孤烟直，长河落日圆: one horizon; far dunes, the long river, near dunes. The sun
+            // sits low over the river and the smoke rises from the far horizon on the other side.
+            let horizon = 0.50
+            if let far = fitted(engine.paintingDunes(far: true), to: slot(0, horizon, 1, 0.14)) {
+                parts.append(.near(far.canv))
+            }
+            if chosen.contains(.stream) {
+                layWater(waterEngine.paintingRiverRibbon(), in: slot(0, horizon + 0.12, 1, 0.08), motif: "stream")
+                placed.insert(.stream)
+            }
+            if let near = fitted(engine.paintingDunes(), to: slot(0, horizon + 0.17, 1, 0.33)) {
+                parts.append(.near(near.canv))
+                elements.append(.init(motif: Motif.dunes.rawValue, bounds: .init(x: near.bounds.minX / w,
+                    y: near.bounds.minY / h, width: near.bounds.width / w, height: near.bounds.height / h)))
+            }
+            placed.insert(.dunes)
+            if chosen.contains(.sunset) { add(.sunset, slot(0.56, horizon - 0.07, 0.11, 0.08)) }
+            if chosen.contains(.beaconSmoke) { add(.beaconSmoke, slot(0.12, horizon - 0.30, 0.06, 0.33)) }
         case .ocean:
             include(.waves, slot(0, 0.35, 1, 0.54))
             include(.reef, slot(0.68, 0.35, 0.29, 0.5, front: true))

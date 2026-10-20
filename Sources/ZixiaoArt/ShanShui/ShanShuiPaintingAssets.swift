@@ -205,17 +205,36 @@ extension ShanShuiEngine {
         return c
     }
 
+    /// A garden wall receding into depth (庭院深深): tall at the near end, low at the far end,
+    /// a dark tiled coping, and a moon gate that shows another court beyond.
     func paintingCourtyard() -> ZXArt.SSCanv {
-        let face = [P(0, 68), P(48, 68), P(48, 42), P(143, 42), P(143, 143), P(0, 143)]
-        var c = [poly(face, fil: .white, str: nil), poly(face, fil: .gray(0, 0.045), str: nil)]
-        c += inkEdges([P(0, 65), P(46, 65), P(46, 39), P(146, 39)], width: 3.7, tone: 0.78, dry: 0.38)
-        c += inkEdges([P(0, 70), P(51, 70), P(51, 45), P(146, 45)], width: 0.9, tone: 0.4)
-        let gate = inkCurve([P(82, 142), P(82, 102), P(87, 86), P(103, 82), P(118, 94), P(121, 142)])
-        c.append(poly(gate, fil: .gray(0, 0.16), str: nil))
-        c += inkEdges(gate, width: 1.5, tone: 0.62, dry: 0.32)
-        for _ in 0..<10 {
-            let x = 5 + r() * 132, y = 74 + r() * 64
-            c += inkEdges([P(x, y), P(x + 4 + r() * 5, y + 0.6)], width: 0.6, tone: 0.11, dry: 0.5)
+        let top = [P(0, 46), P(170, 82)], bottom = [P(0, 146), P(170, 116)]
+        let face = [top[0], top[1], bottom[1], bottom[0]]
+        var c = [poly(face, fil: .white, str: nil), poly(face, fil: .gray(0, 0.04), str: nil)]
+        // Coping: a dark band that thins with distance, ticked with tiles.
+        let coping = [P(-4, 38), P(174, 77), P(172, 83), P(0, 48)]
+        c.append(poly(coping, fil: .gray(0, 0.62), str: nil))
+        c += inkLine([P(-4, 38), P(174, 77)], width: 1.6, tone: 0.85, dry: 0.3)
+        for k in 0..<26 {
+            let t = (Double(k) + 0.5) / 26
+            let x = -4 + 178 * t, y = 38 + 39 * t
+            c += inkLine([P(x, y), P(x + 0.6, y + 7 - 3 * t)], width: 0.5, tone: 0.3, dry: 0.5)
+        }
+        // Moon gate: a circular opening; inside, the paler wall of the next court.
+        let cx = 78.0, cy = 108.0, rx = 22.0, ry = 25.0
+        let ring = (0...48).map { i -> P in
+            let a = Double(i) / 48 * 2 * Double.pi
+            return P(cx + cos(a) * rx, cy + sin(a) * ry)
+        }.filter { $0.y <= 133 }
+        c.append(poly(ring, fil: .gray(0, 0.10), str: nil))
+        c += inkLine(ring, width: 1.6, tone: 0.62, dry: 0.3)
+        c += inkLine([P(cx - rx + 4, 112), P(cx + rx - 3, 118)], width: 0.8, tone: 0.25, dry: 0.5)
+        c += inkLine([P(cx - rx + 6, 104), P(cx + rx - 4, 109)], width: 2.4, tone: 0.30, dry: 0.4)
+        // Plinth and a few faint wall stains.
+        c += inkLine([P(0, 146), P(170, 116)], width: 1.6, tone: 0.55, dry: 0.45)
+        for _ in 0..<8 {
+            let x = 8 + r() * 150, y = 60 + x * 0.2 + r() * 50
+            c += inkLine([P(x, y), P(x + 3 + r() * 4, y + 1)], width: 0.6, tone: 0.08, dry: 0.6)
         }
         return c
     }

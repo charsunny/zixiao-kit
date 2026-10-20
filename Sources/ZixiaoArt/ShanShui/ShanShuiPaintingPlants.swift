@@ -103,30 +103,55 @@ extension ShanShuiEngine {
         return c
     }
 
+    /// Lotus as ink-wash leaves (泼墨荷叶): broad, uneven discs seen in perspective, overlapping,
+    /// some lying on the water and some curling up with a dark rim; short stems; one pointed bud
+    /// rising above them (小荷才露尖尖角) and an open flower only when there is room.
     func paintingLotus() -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
-        for (x, y, rx, ry) in [(33.0, 94.0, 27.0, 9.0), (102, 109, 36, 11), (69, 72, 28, 8), (116, 61, 22, 7)] {
-            let seed = r() * 10
-            let edge = (0...48).map { i -> P in
-                let a = Double(i) / 48 * 2 * Double.pi, v = 0.92 + 0.10 * n(a * 2 + seed)
-                return P(x + cos(a) * rx * v, y + sin(a) * ry * v)
+        let leaves: [(x: Double, y: Double, rx: Double, ry: Double, raised: Double)] = [
+            (46, 112, 34, 10, 0), (98, 120, 40, 11, 0), (128, 100, 26, 8, 14),
+            (70, 96, 30, 9, 22), (18, 98, 20, 6, 10),
+        ]
+        for leaf in leaves {
+            let seed = r() * 10, notch = r() * 2 * Double.pi
+            let cy = leaf.y - leaf.raised
+            let edge = (0...56).map { i -> P in
+                let a = Double(i) / 56 * 2 * Double.pi
+                var v = 0.86 + 0.18 * n(a * 2.2 + seed)
+                let gap = abs(atan2(sin(a - notch), cos(a - notch)))
+                if gap < 0.22 { v *= 0.55 + gap * 2 }          // the notch where the stem joins
+                return P(leaf.x + cos(a) * leaf.rx * v, cy + sin(a) * leaf.ry * v)
             }
-            c.append(poly(edge, fil: .gray(0, 0.17 + r() * 0.16), str: nil))
-            c += inkLine(Array(edge.prefix(26)), width: 0.9, tone: 0.52, dry: 0.48)
-            for k in 0..<6 {
-                let a = Double(k) / 6 * 2 * Double.pi
-                c += inkLine([P(x, y), P(x + cos(a) * rx * 0.78, y + sin(a) * ry * 0.78)],
-                    width: 0.55, tone: 0.28, dry: 0.25)
+            let tone = 0.26 + r() * 0.2 + (leaf.raised > 0 ? 0.06 : 0)
+            c.append(poly(edge, fil: .white, str: nil))
+            c.append(poly(edge, fil: .gray(0, tone), str: nil))
+            // A darker loaded stroke along the far rim gives the leaf its curl.
+            let rim = Array(edge[30...54])
+            c += inkLine(rim, width: 1.6 + r(), tone: min(0.85, tone + 0.3), dry: 0.35)
+            // A few veins from the centre, only on the near half.
+            for k in 0..<4 {
+                let a = 0.3 + Double(k) * 0.65
+                c += inkLine([P(leaf.x, cy), P(leaf.x + cos(a) * leaf.rx * 0.7, cy + sin(a) * leaf.ry * 0.7)],
+                    width: 0.5, tone: min(0.7, tone + 0.15), dry: 0.4)
             }
-            c += inkLine(inkCurve([P(x, y + 2), P(x + 3, 118), P(x - 4, 151)]), width: 1.1, tone: 0.50)
+            if leaf.raised > 0 {
+                c += inkLine(inkCurve([P(leaf.x + 2, cy + leaf.ry * 0.6), P(leaf.x - 1, leaf.y - leaf.raised * 0.4),
+                    P(leaf.x + 1, leaf.y + 4)]), width: 1.0, tone: 0.55, dry: 0.4)
+            }
         }
-        c += inkLine([P(49, 145), P(43, 86), P(46, 38)], width: 1.3, tone: 0.55)
-        for k in -3...3 {
-            let x = 46 + Double(k) * 5
-            let petals = inkCurve([P(46, 40), P(x - 5, 26), P(x, 10 + abs(Double(k)) * 5), P(x + 5, 28), P(46, 40)])
-            c.append(poly(petals, fil: .white, str: nil))
-            c.append(poly(petals, fil: .gray(0, 0.04 + Double(abs(k)) * 0.025), str: nil))
-            c += inkLine(Array(petals.prefix(petals.count / 2)), width: 0.6, tone: 0.45)
+        // The bud: pointed, pale, on a slender stem rising above the leaves.
+        let stem = inkCurve([P(84, 104), P(86, 82), P(84, 58)])
+        c += inkLine(stem, width: 1.1, tone: 0.55, dry: 0.4)
+        let bud = inkCurve([P(84, 60), P(78, 52), P(81, 40), P(84, 32), P(88, 41), P(90, 52), P(84, 60)])
+        c.append(poly(bud, fil: .white, str: nil))
+        c.append(poly(bud, fil: .gray(0, 0.06), str: nil))
+        c += inkLine(Array(bud.prefix(bud.count / 2 + 1)), width: 0.8, tone: 0.55, dry: 0.4)
+        c += inkLine(Array(bud.suffix(bud.count / 2)), width: 0.6, tone: 0.40, dry: 0.5)
+        c += inkBlot(84, 33, radius: 1.2, squash: 0.7, tone: 0.5)
+        // Water line under the leaves.
+        for k in 0..<3 {
+            let y = 126 + Double(k) * 4, x = 10 + r() * 30
+            c += inkLine([P(x, y), P(x + 60 + r() * 50, y + 0.6)], width: 0.6, tone: 0.12, dry: 0.6)
         }
         return c
     }

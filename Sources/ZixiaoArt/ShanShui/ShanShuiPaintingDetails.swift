@@ -31,37 +31,60 @@ extension ShanShuiEngine {
         return c
     }
 
-    func paintingDunes() -> ZXArt.SSCanv {
+    /// Dunes as a level-distance (平远) band: long low ridges with a crisp crest, the lee side
+    /// shaded, nearer ridges darker. `far` draws the pale ridges beyond the river.
+    func paintingDunes(far: Bool = false) -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
-        // All slopes meet a shared fading floor. Separate rectangular fill bases look like panels.
-        for k in 0..<4 {
-            let phase = Double(k) * 1.3, height = 127 - Double(k) * 27
-            let ridge = (0...90).map { i -> P in
+        let layers = far ? [(y: 34.0, amp: 9.0, tone: 0.05), (y: 48, amp: 7, tone: 0.07)]
+                         : [(y: 30.0, amp: 16.0, tone: 0.08), (y: 62, amp: 20, tone: 0.11), (y: 96, amp: 14, tone: 0.14)]
+        for (k, layer) in layers.enumerated() {
+            let phase = r() * 6, freq = 1.1 + r() * 0.9
+            let crest = (0...90).map { i -> P in
                 let t = Double(i) / 90
-                let envelope = pow(max(0, sin(t * .pi)), 0.64)
-                return P(t * 270, 200 - envelope * (height + sin(t * .pi * 1.4 + phase) * 18))
+                let wave = pow(abs(sin(t * .pi * freq + phase)), 1.4)
+                return P(t * 300, layer.y - layer.amp * (0.35 + 0.65 * wave) - 3 * (n(t * 5 + phase, Double(k)) - 0.5))
             }
-            c.append(poly(ridge, fil: .white, str: nil))
-            c.append(poly(ridge, fil: .gray(0, 0.035 + Double(k) * 0.025), str: nil))
-            c += inkLine(Array(ridge.dropFirst(3).dropLast(3)), width: 0.9, tone: 0.22, dry: 0.62)
-            for _ in 0..<14 {
-                let x = 30 + r() * 210, y = 183 + r() * 12
-                c += inkLine([P(x, y), P(x + 4 + r() * 12, y - 0.5)], width: 0.6, tone: 0.08, dry: 0.75)
+            let floor = layer.y + 40
+            c.append(poly(crest + [P(300, floor), P(0, floor)], fil: .white, str: nil))
+            c.append(poly(crest + [P(300, floor), P(0, floor)], fil: .gray(0, layer.tone), str: nil))
+            // Lee side: a darker sliver hanging under the crest, thinning away from the peaks.
+            let lee = crest.map { p in P(p.x, p.y + 3 + 6 * abs(sin(p.x * 0.03 + phase))) }
+            c.append(poly(crest + lee.reversed(), fil: .gray(0, layer.tone * 0.9), str: nil))
+            c += inkLine(crest, width: far ? 0.5 : 0.7 + Double(k) * 0.25, tone: (far ? 0.14 : 0.22) + Double(k) * 0.08, dry: 0.5)
+            if !far {
+                // Sand ripples: a few short, parallel strokes on the nearest slopes.
+                for _ in 0..<(4 + k * 3) {
+                    let x = 20 + r() * 260, y = layer.y + 6 + r() * 14
+                    c += inkLine([P(x, y), P(x + 10 + r() * 14, y - 1 - r())], width: 0.5, tone: 0.10 + Double(k) * 0.03, dry: 0.6)
+                }
             }
         }
         return c
     }
 
+    /// Beacon smoke rises straight in still desert air (孤烟直) and only spreads at the very top;
+    /// village smoke (炊烟) wavers. Both are pale washes, never hard lines.
     func paintingSmoke(beacon: Bool) -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
-        for k in 0..<5 {
-            let line = (0...18).map { i -> P in
-                let t = Double(i) / 18
-                return P(30 + sin(t * (beacon ? 3.0 : 6) + Double(k) * 0.2) * (beacon ? 3 : 12) + Double(k - 2),
-                         130 - t * 130)
+        if beacon {
+            let drift = r() < 0.5 ? -1.0 : 1.0
+            let core = (0...30).map { i -> P in
+                let t = Double(i) / 30
+                return P(30 + drift * 10 * pow(max(0, t - 0.8) / 0.2, 2), 130 - t * 130)
             }
-            c += inkLine(line, width: Double(k) * 0.6 + 1, tone: beacon ? 0.08 : 0.06,
-                dry: 0.42, profile: .rise)
+            let left = core.enumerated().map { i, p in P(p.x - (1.2 + 3 * pow(Double(i) / 30, 3)), p.y) }
+            let right = core.enumerated().map { i, p in P(p.x + (1.2 + 3 * pow(Double(i) / 30, 3)), p.y) }
+            c.append(poly(left + right.reversed(), fil: .gray(0, 0.10), str: nil))
+            c += inkLine(core, width: 0.6, tone: 0.16, dry: 0.6)
+            c += inkBlot(core.last!.x + drift * 4, 4, radius: 7, squash: 0.35, angle: drift * 0.3, tone: 0.06)
+            return c
+        }
+        for k in 0..<4 {
+            let line = (0...24).map { i -> P in
+                let t = Double(i) / 24
+                return P(30 + sin(t * 5.5 + Double(k) * 0.4) * (3 + 10 * t) + Double(k) * 1.2, 130 - t * 130)
+            }
+            c += inkLine(line, width: 1.6 + Double(k) * 0.8, tone: 0.05, dry: 0.4, profile: .rise)
         }
         return c
     }
