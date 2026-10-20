@@ -22,8 +22,9 @@ extension ZXArt {
                     for i in shapes.indices {
                         if record.motif == .sunset || record.motif == .sunrise {
                             shapes[i].fill = ZXHex(red: 0.67, green: 0.25, blue: 0.20).opacity(palette.isDark ? 0.40 : 0.26)
-                        } else if record.motif == .moon, shapes[i].fill != nil {
-                            shapes[i].fill = palette.ink.opacity(palette.isDark ? 0.48 : 0.08)
+                        } else if record.motif == .moon, palette.isDark, let fill = shapes[i].fill {
+                            // On dark paper the moon is the light: a bright disc, a faint halo.
+                            shapes[i].fill = palette.ink.opacity(fill.alpha > 0.9 ? 0.52 : 0.05)
                         }
                     }
                 }
@@ -108,6 +109,8 @@ private final class PaintingStage {
     var boats: [ZXArt.Anchors.Boat] = []
     var currentScene: ZXArt.PoetryScene = .retreat
     var bankSurface: (x0: Double, step: Double, heights: [Double])?
+    var groundInBand = false
+    var mainSummit: ZXArt.P?
     let waterEngine: ShanShuiEngine
 
     init(seed: ZXArt.Seed, width: Double, height: Double, palette: ZXArt.Palette, verse: ZXArt.VerseLayout, quietTop: Double, options: ZXArt.SceneOptions) {
@@ -281,7 +284,7 @@ private final class PaintingStage {
                 y: (house.minY + house.height * 0.60) * h, width: house.width * w * 0.14, height: house.height * h * 0.22)
         }
         let rooted: Set<Motif> = [.oldTree, .bareTree, .layeredTree, .pine, .bamboo, .willow,
-            .blossom, .maple, .house, .hut, .pavilion, .pagoda, .templeGate, .cityGate]
+            .blossom, .maple, .house, .hut, .pavilion, .pagoda, .templeGate, .cityGate, .fence]
         guard rooted.contains(motif), let surface = bankSurface else { return requested }
         var requested = requested
         let building = [Motif.house, .hut, .pavilion, .pagoda, .templeGate, .cityGate].contains(motif)
@@ -346,7 +349,7 @@ private final class PaintingStage {
         let rooted: Set<Motif> = [.oldTree, .bareTree, .layeredTree, .pine, .bamboo, .willow,
             .blossom, .maple, .house, .hut, .pavilion, .pagoda, .templeGate, .cityGate,
             .courtyard, .terrace, .ruins]
-        guard rooted.contains(motif) else { return }
+        guard rooted.contains(motif), currentScene != .courtyard else { return }
         let buildings: Set<Motif> = [.house, .hut, .pavilion, .pagoda, .templeGate, .cityGate]
         let height = buildings.contains(motif)
             ? max(1, min(4, bounds.height * 0.10)) : min(24, max(5, bounds.height * 0.13))
@@ -397,6 +400,9 @@ private final class PaintingStage {
             let r = object.bounds
             parts.append(.init(canv: object.canv))
             parts.append(.init(canv: engine.paintingCloud(over: r), plain: true))
+            // The true summit: the highest point of the outline in the middle half of the peak.
+            let core = object.canv.flatMap(\.p).filter { $0.x > r.minX + r.width * 0.25 && $0.x < r.maxX - r.width * 0.25 }
+            mainSummit = core.min { $0.y < $1.y }
             engine.noted(.ridge(.main), object.canv)
             elements.append(.init(motif: "mainMountain", bounds: .init(x: r.minX / w, y: r.minY / h,
                 width: r.width / w, height: r.height / h)))
@@ -539,14 +545,15 @@ private final class PaintingStage {
             let top = verse.maxY + pad * 0.4, bottom = min(foreground.maxY, h - pad)
             let width = (w - 2 * pad) * (narrow ? 0.5 : 1)
             let x = verse.minX > w / 2 || narrow ? pad : w - pad - width
-            box = CGRect(x: x, y: top, width: width, height: max(20, min(bottom - top, h * 0.2)))
+            box = CGRect(x: x, y: top, width: width, height: max(20, min(bottom - top, h * 0.13)))
+            groundInBand = true
         }
         if let object = fitted(engine.paintingBank(), to: box) {
             parts.append(.near(object.canv))
             recordBank(object)
         }
         // Foreground slope: a small dark corner, not a second ground plane across the page.
-        if !narrow, let object = fitted(engine.paintingBank(),
+        if !narrow, !groundInBand, let object = fitted(engine.paintingBank(),
                                         to: slot(0.0, 0.52, 0.40, 0.48, front: true)) {
             parts.append(.near(object.canv))
             let r = object.bounds
@@ -667,30 +674,34 @@ private final class PaintingStage {
             include(.bamboo, slot(0.01, 0.50, 0.40, 0.32))
             include(.path, slot(0.15, 0, 0.45, 0.95, front: true))
         case .courtyard:
-            // The wall stands on the ground beneath the verse, running the width of the page; the
-            // willow grows up behind its near end into the open column of sky.
+            // The wall stands on the ground beneath the verse; the willow grows behind it, its trunk
+            // hidden by the wall, its crown heaped above into the open column (杨柳堆烟).
             let pad = min(w, h) * 0.045
             let top = verse.isNull ? h * 0.55 : verse.maxY + pad * 0.4
-            let wallBox = CGRect(x: pad, y: top + (h - pad - top) * 0.18, width: (w - 2 * pad) * 0.92,
-                                 height: (h - pad - top) * 0.78)
-            let leftSide = verse.isNull || verse.minX > w / 2
-            let willowW = art.width * 0.70
-            include(.willow, CGRect(x: leftSide ? art.minX : art.maxX - willowW, y: art.minY + art.height * 0.05,
-                                    width: willowW, height: wallBox.minY + wallBox.height * 0.35 - art.minY - art.height * 0.05))
-            include(.courtyard, wallBox)
-            if let wall = elements.first(where: { $0.motif == "courtyard" })?.bounds.cgRect {
-                let near = CGRect(x: (wall.minX + wall.width * 0.04) * w, y: (wall.minY + wall.height * 0.30) * h,
-                                  width: wall.width * w * 0.20, height: wall.height * h * 0.34)
+            let wallBox = CGRect(x: pad, y: top + (h - pad - top) * 0.10, width: (w - 2 * pad) * 0.94,
+                                 height: (h - pad - top) * 0.86)
+            if let wall = fitted(engine.paintingCourtyard(), to: wallBox) {
+                let leftSide = verse.isNull || verse.minX > w / 2
+                let willowW = art.width * 0.62
+                let rootY = wall.bounds.minY + wall.bounds.height * 0.32
+                include(.willow, CGRect(x: leftSide ? art.minX + art.width * 0.04 : art.maxX - willowW,
+                                        y: art.minY, width: willowW, height: rootY - art.minY))
+                parts.append(.near(wall.canv))
+                let r = wall.bounds
+                elements.append(.init(motif: Motif.courtyard.rawValue, bounds: .init(x: r.minX / w, y: r.minY / h,
+                    width: r.width / w, height: r.height / h)))
+                placed.insert(.courtyard)
+                let near = CGRect(x: r.minX + r.width * 0.06, y: r.minY + r.height * 0.34,
+                                  width: r.width * 0.18, height: r.height * 0.30)
                 include(.window, near)
                 include(.curtain, near.insetBy(dx: near.width * 0.12, dy: near.height * 0.10))
             }
         case .historic:
             // 念天地之悠悠: one high peak in cloud and a single tiny figure on its summit, facing
             // the open side of the page. No pavilion, no steps; the emptiness is the subject.
-            if chosen.contains(.traveler), let peak = elements.first(where: { $0.motif == "mainMountain" })?.bounds.cgRect {
+            if chosen.contains(.traveler), let summit = mainSummit {
                 let size = h * 0.034
-                let x = verse.isNull || verse.minX > w / 2 ? peak.midX * w + peak.width * w * 0.08 : peak.midX * w - peak.width * w * 0.08
-                add(.traveler, CGRect(x: x - size * 0.3, y: peak.minY * h + peak.height * h * 0.06 - size,
+                add(.traveler, CGRect(x: summit.x - size * 0.3, y: summit.y + size * 0.30 - size,
                                       width: size * 0.6, height: size))
             }
             placed.formUnion([.terrace, .ruins, .cityGate, .traveler])
@@ -724,7 +735,7 @@ private final class PaintingStage {
             }
             if chosen.contains(.beaconSmoke) {
                 let smokeX = verse.isNull || verse.minX > w / 2 ? art.minX + art.width * 0.15 : art.maxX - art.width * 0.15
-                add(.beaconSmoke, CGRect(x: smokeX - 6, y: horizon - h * 0.30, width: 12, height: h * 0.30))
+                add(.beaconSmoke, CGRect(x: smokeX - w * 0.04, y: horizon - h * 0.32, width: w * 0.08, height: h * 0.32))
             }
         case .ocean:
             // 海上生明月: a low sea horizon in the open column, the moon just clear of it with a

@@ -172,7 +172,11 @@ extension ShanShuiEngine {
             let shelf = 4 * (n(t * 7, 3) - 0.5)
             return P(t * 300, 56 - y - (u < 0.75 ? 3 : 3 * (1 - (u - 0.75) / 0.25)) + shelf)
         }
-        let base = ridge.map { P($0.x, 60) }
+        // The body thins to nothing at both ends, so the far bank fades out instead of being cut.
+        let base = ridge.enumerated().map { i, p in
+            let env = pow(sin(Double(i) / 100 * .pi), 0.45)
+            return P(p.x, p.y + max(0.3, (60 - p.y) * env))
+        }
         c.append(poly(ridge + base.reversed(), fil: .white, str: nil))
         c.append(poly(ridge + base.reversed(), fil: .gray(0, 0.10), str: nil))
         c += inkLine(ridge, width: 0.8, tone: 0.30, dry: 0.5)
@@ -193,8 +197,8 @@ extension ShanShuiEngine {
             }
         }
         // Broken shore line at the water.
-        var x = r() * 20
-        while x < 290 {
+        var x = 20 + r() * 20
+        while x < 260 {
             let run = 18 + r() * 40
             c += inkLine([P(x, 60), P(min(300, x + run), 60 + (r() - 0.5))], width: 0.6, tone: 0.22, dry: 0.55)
             x += run + 8 + r() * 20

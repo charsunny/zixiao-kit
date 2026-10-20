@@ -15,17 +15,27 @@ extension ShanShuiEngine {
         return c
     }
 
+    /// Paddy fields as the farmer sees them across the slope: curved bund lines (田埂) that follow
+    /// the ground and close up with distance, sparse rows of seedlings, no filled panels.
     func paintingFields() -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
-        for k in 0..<4 {
-            let y = 18 + Double(k) * 20, offset = Double(k) * 9
-            let upper = inkCurve([P(34 - offset, y), P(67, y - 5), P(103 + offset, y + 4), P(151 + offset, y + 8)])
-            let lower = inkCurve([P(151 + offset, y + 18), P(100 + offset, y + 12), P(62, y + 10), P(23 - offset, y + 18)])
-            c.append(poly(upper + lower, fil: .gray(0, 0.04 + r() * 0.045), str: nil))
-            c += inkLine(upper, width: 1.1, tone: 0.32, dry: 0.58)
-            for _ in 0..<13 {
-                let x = 28 + r() * 120, yy = y + 3 + r() * 11
-                c += inkLine([P(x, yy), P(x - 1.2, yy - 3 - r() * 3)], width: 0.65, tone: 0.2 + r() * 0.23)
+        let rows = 5
+        let phase = r() * 3
+        for k in 0..<rows {
+            let t = Double(k) / Double(rows - 1)                 // 0 far … 1 near
+            let y = 14 + 86 * pow(t, 1.3)
+            let bow = 4 + 8 * t
+            let bund = (0...24).map { i -> P in
+                let u = Double(i) / 24
+                return P(10 + 150 * u, y + bow * sin(u * .pi + phase * 0.2) - 6 * u + 2 * n(u * 4, Double(k)))
+            }
+            c += inkLine(bund, width: 0.6 + t * 0.7, tone: 0.20 + t * 0.15, dry: 0.5)
+            // Seedlings: short upright ticks between this bund and the next, thinning with distance.
+            for _ in 0..<(4 + Int(t * 10)) {
+                let i = 1 + Int(r() * 22), p = bund[i]
+                let dy = 3 + r() * (6 + 10 * t)
+                c += inkLine([P(p.x, p.y + dy), P(p.x - 0.4, p.y + dy - 1.5 - 2 * t)], width: 0.45 + 0.3 * t,
+                    tone: 0.18 + 0.12 * t, dry: 0.5)
             }
         }
         return c
@@ -51,7 +61,7 @@ extension ShanShuiEngine {
         for k in 0..<dunes {
             let depth = Double(k) / Double(max(1, dunes - 1))        // 0 far … 1 near
             let base = 40 + depth * 70, height = 18 + depth * 26
-            let x0 = -20 + r() * 60 - depth * 30, x1 = x0 + 220 + r() * 90
+            let x0 = -40 + r() * 50 - depth * 40, x1 = x0 + 280 + r() * 90
             let peakX = x0 + (x1 - x0) * (0.55 + r() * 0.2)
             // Windward slope: long and gentle; lee: short and steep.
             let windward = (0...30).map { i -> P in
@@ -63,13 +73,17 @@ extension ShanShuiEngine {
                 return P(peakX + (x1 - peakX) * t, base - height * (1 - pow(t, 0.7)))
             }
             let crest = windward + lee
-            let floor = crest.map { P($0.x, base + 14) }
+            let floor = crest.enumerated().map { i, p in
+                P(p.x, p.y + (base + 14 - p.y) * pow(sin(Double(i) / Double(crest.count - 1) * .pi), 0.35))
+            }
             c.append(poly(crest + floor.reversed(), fil: .white, str: nil))
             c.append(poly(crest + floor.reversed(), fil: .gray(0, 0.05 + depth * 0.05), str: nil))
             // Lee face in shadow: a wedge under the crest's falling side.
             let shadowTop = Array(crest.suffix(lee.count + 4))
             let shadowFoot = shadowTop.map { P($0.x - 6 - depth * 6, base + 6) }
-            c.append(poly(shadowTop + shadowFoot.reversed(), fil: .gray(0, 0.12 + depth * 0.12), str: nil))
+            c.append(poly(shadowTop + shadowFoot.reversed(), fil: .gray(0, 0.06 + depth * 0.06), str: nil))
+            let core = shadowTop.map { P($0.x - 2, $0.y + 1.5) }
+            c += inkLine(core, width: 3 + depth * 3, tone: 0.06 + depth * 0.05, dry: 0.5)
             c += inkLine(crest, width: 0.6 + depth * 0.7, tone: 0.20 + depth * 0.25, dry: 0.45)
             // Ripples on the windward slope, parallel to the crest.
             for j in 0..<(3 + Int(depth * 5)) {

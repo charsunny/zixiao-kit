@@ -20,13 +20,15 @@ extension ShanShuiEngine {
                     c += inkLine([P(px + cos(angle) * (3 + r() * 4), py + sin(angle) * (3 + r() * 4)), P(px, py)],
                         width: 0.55 + r() * 0.45, tone: 0.45 + r() * 0.35, dry: 0.30)
                 }
+            } else if flowering {
+                // Blossom: pale round flowers (淡墨点花) with a dark dot of stamens; buds darker and smaller.
+                let open = r() < 0.75
+                c += inkBlot(px, py, radius: open ? 1.9 + r() * 1.1 : 1.0 + r() * 0.5,
+                    squash: 0.8 + r() * 0.2, angle: r() * 3, tone: open ? 0.08 + r() * 0.08 : 0.30)
+                if open { c += inkBlot(px + 0.2, py + 0.1, radius: 0.45, squash: 0.9, tone: 0.70) }
             } else {
-                c += inkBlot(px, py, radius: 1.3 + r() * (flowering ? 1.4 : 2.7),
-                    squash: 0.35 + r() * 0.45, angle: -0.8 + r() * 1.5,
-                    tone: flowering ? 0.32 + r() * 0.30 : 0.42 + r() * 0.4)
-                if flowering, r() > 0.5 {
-                    c += inkBlot(px + 1.7, py - 1.6, radius: 1.9, tone: 0.18)
-                }
+                c += inkBlot(px, py, radius: 1.3 + r() * 2.7,
+                    squash: 0.35 + r() * 0.45, angle: -0.8 + r() * 1.5, tone: 0.42 + r() * 0.4)
             }
         }
         return c

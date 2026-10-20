@@ -15,6 +15,7 @@ extension ShanShuiEngine {
         case .dunes: return paintingDunes()
         case .beaconSmoke, .cookingSmoke: return paintingSmoke(beacon: motif == .beaconSmoke)
         case .reeds, .grass: return paintingReeds()
+        case .moon: return paintingMoon()
         case .vine: return paintingVine()
         case .horse: return paintingHorse()
         case .boat, .angler, .mooredBoat, .sail: return paintingBoat(motif)
@@ -169,6 +170,20 @@ extension ShanShuiEngine {
         return c
     }
 
+    /// 烘云托月: the moon is left as paper; a soft ring of pale wash around it makes it glow.
+    func paintingMoon() -> ZXArt.SSCanv {
+        var c: ZXArt.SSCanv = []
+        for (k, radius) in [52.0, 44, 37, 31].enumerated() {
+            c += sceneEllipse(40, 40, radius * 0.75, radius * 0.75, fill: C(0, 0, 0, 0.035 + Double(k) * 0.012), tone: 0)
+        }
+        c += sceneEllipse(40, 40, 21, 21, fill: .white, tone: 0)
+        c += inkLine((0...40).map { i in
+            let a = Double(i) / 40 * 2 * Double.pi * 0.92 + 0.4
+            return P(40 + cos(a) * 21, 40 + sin(a) * 21)
+        }, width: 0.5, tone: 0.18, dry: 0.6)
+        return c
+    }
+
     /// A thatched cottage (茅屋) as landscape painters draw it: a low, broad roof with deep eaves
     /// and a slightly lifted ridge, short walls mostly in shadow, one open bay. Wider than tall,
     /// so it sits into the ground instead of standing on it like a box.
@@ -208,32 +223,40 @@ extension ShanShuiEngine {
     /// A garden wall receding into depth (庭院深深): tall at the near end, low at the far end,
     /// a dark tiled coping, and a moon gate that shows another court beyond.
     func paintingCourtyard() -> ZXArt.SSCanv {
-        let top = [P(0, 46), P(170, 82)], bottom = [P(0, 146), P(170, 116)]
+        // Oblique parallel projection, as in ruled-line painting (界画): top and foot stay parallel.
+        let slope = 0.22
+        let top = [P(14, 48), P(176, 48 + 162 * slope)], bottom = [P(14, 140), P(176, 140 + 162 * slope)]
         let face = [top[0], top[1], bottom[1], bottom[0]]
         var c = [poly(face, fil: .white, str: nil), poly(face, fil: .gray(0, 0.04), str: nil)]
-        // Coping: a dark band that thins with distance, ticked with tiles.
-        let coping = [P(-4, 38), P(174, 77), P(172, 83), P(0, 48)]
+        // The near end turns a corner: a narrow return face in shadow shows the wall's thickness.
+        let end = [P(0, 42), P(14, 48), P(14, 140), P(0, 134)]
+        c.append(poly(end, fil: .white, str: nil))
+        c.append(poly(end, fil: .gray(0, 0.16), str: nil))
+        c += inkEdges([P(0, 42), P(0, 134), P(14, 140)], width: 1.0, tone: 0.5)
+        c += inkLine([P(14, 48), P(14, 140)], width: 0.8, tone: 0.45, dry: 0.4)
+        // Coping: a dark tiled band along the top, overhanging both faces.
+        let coping = [P(-4, 36), P(10, 41), P(180, 41 + 170 * slope), P(180, 48 + 170 * slope), P(10, 50), P(-4, 44)]
         c.append(poly(coping, fil: .gray(0, 0.62), str: nil))
-        c += inkLine([P(-4, 38), P(174, 77)], width: 1.6, tone: 0.85, dry: 0.3)
-        for k in 0..<26 {
-            let t = (Double(k) + 0.5) / 26
-            let x = -4 + 178 * t, y = 38 + 39 * t
-            c += inkLine([P(x, y), P(x + 0.6, y + 7 - 3 * t)], width: 0.5, tone: 0.3, dry: 0.5)
+        c += inkLine([P(-4, 36), P(10, 41), P(180, 41 + 170 * slope)], width: 1.6, tone: 0.85, dry: 0.3)
+        for k in 0..<24 {
+            let t = (Double(k) + 0.5) / 24
+            let x = 12 + 166 * t, y = 42 + 166 * t * slope
+            c += inkLine([P(x, y), P(x + 0.4, y + 6)], width: 0.5, tone: 0.3, dry: 0.5)
         }
         // Moon gate: a circular opening; inside, the paler wall of the next court.
-        let cx = 78.0, cy = 108.0, rx = 22.0, ry = 25.0
+        let cx = 86.0, cy = 108.0 + 72 * slope, rx = 22.0, ry = 25.0
         let ring = (0...48).map { i -> P in
             let a = Double(i) / 48 * 2 * Double.pi
             return P(cx + cos(a) * rx, cy + sin(a) * ry)
-        }.filter { $0.y <= 133 }
+        }.filter { $0.y <= 140 + (($0.x - 14) * slope) - 3 }
         c.append(poly(ring, fil: .gray(0, 0.10), str: nil))
         c += inkLine(ring, width: 1.6, tone: 0.62, dry: 0.3)
-        c += inkLine([P(cx - rx + 4, 112), P(cx + rx - 3, 118)], width: 0.8, tone: 0.25, dry: 0.5)
-        c += inkLine([P(cx - rx + 6, 104), P(cx + rx - 4, 109)], width: 2.4, tone: 0.30, dry: 0.4)
+        c += inkLine([P(cx - rx + 4, cy + 4), P(cx + rx - 3, cy + 4 + 6 * slope)], width: 0.8, tone: 0.25, dry: 0.5)
+        c += inkLine([P(cx - rx + 6, cy - 4), P(cx + rx - 4, cy - 4 + 6 * slope)], width: 2.4, tone: 0.30, dry: 0.4)
         // Plinth and a few faint wall stains.
-        c += inkLine([P(0, 146), P(170, 116)], width: 1.6, tone: 0.55, dry: 0.45)
+        c += inkLine([P(0, 134), P(14, 140), P(176, 140 + 162 * slope)], width: 1.6, tone: 0.55, dry: 0.45)
         for _ in 0..<8 {
-            let x = 8 + r() * 150, y = 60 + x * 0.2 + r() * 50
+            let x = 20 + r() * 150, y = 62 + x * slope + r() * 60
             c += inkLine([P(x, y), P(x + 3 + r() * 4, y + 1)], width: 0.6, tone: 0.08, dry: 0.6)
         }
         return c
