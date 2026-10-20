@@ -252,7 +252,8 @@ private final class PaintingStage {
         switch motif {
         case .pine, .oldTree, .bareTree, .layeredTree, .willow, .blossom, .maple, .bamboo:
             let instance = elements.filter { $0.motif == motif.rawValue }.count
-            let scale = 0.5 * PaintingTreeScale.multiplier(seed: seed, motif: motif, instance: instance)
+            // Near trees carry the darkest ink and lead the eye; keep them within 70–100% of the cap.
+            let scale = 0.4 + 0.6 * PaintingTreeScale.multiplier(seed: seed, motif: motif, instance: instance)
             maxWidth *= scale
             maxHeight *= scale
         default: break
@@ -356,21 +357,28 @@ private final class PaintingStage {
     }
 
     private func hills(_ main: Bool = false) {
+        // Two ranges, staggered: the far one higher, paler and to one side; the nearer one lower
+        // and offset the other way. Each covers part of the width so the sky stays open.
+        let side = engine.r() < 0.5
         for k in 0..<2 {
             let raw = engine.paintingDistant(k)
-            let box = slot(composition == .depth ? Double(k) * 0.10 : 0,
-                0.07 + Double(k) * (composition == .oppositeBank ? 0.10 : 0.17),
-                composition == .depth ? 0.88 : 1, 0.29)
+            let width = 0.58 + engine.r() * 0.16
+            let x = (k == 0) == side ? 1 - width : 0.0
+            let box = slot(x, 0.06 + Double(k) * (composition == .oppositeBank ? 0.10 : 0.15), width, 0.24)
             if let object = fitted(raw, to: box) {
-                parts.append(.init(canv: object.canv, mist: .init(depth: object.bounds.height * 3,
-                    blur: 0.7, peak: 0.92, floorY: object.bounds.maxY, floorDepth: object.bounds.height * 0.6)))
+                // Crest stays legible; the body dissolves downward into mist.
+                parts.append(.init(canv: object.canv, mist: .init(depth: object.bounds.height * 1.1,
+                    blur: 0.35, peak: 0.95, floorY: object.bounds.maxY, floorDepth: object.bounds.height * 0.7)))
                 engine.noted(.ridge(.far), object.canv)
             }
         }
         if main, let object = fitted(engine.paintingMountain(), to: slot(0.02, 0.01, 0.95, 0.75)) {
-            parts.append(.init(canv: object.canv))
-            engine.noted(.ridge(.main), object.canv)
+            // 山腰云锁: the lower third of the main peak dissolves into cloud instead of
+            // standing on the bank like a monument.
             let r = object.bounds
+            parts.append(.init(canv: object.canv, mist: .init(depth: r.height * 10, blur: 0.25, peak: 1,
+                floorY: r.maxY - r.height * 0.06, floorDepth: r.height * 0.38)))
+            engine.noted(.ridge(.main), object.canv)
             elements.append(.init(motif: "mainMountain", bounds: .init(x: r.minX / w, y: r.minY / h,
                 width: r.width / w, height: r.height / h)))
         }
@@ -509,8 +517,9 @@ private final class PaintingStage {
             parts.append(.near(object.canv))
             recordBank(object)
         }
+        // Foreground slope: a small dark corner, not a second ground plane across the page.
         if !narrow, let object = fitted(engine.paintingBank(),
-                                        to: slot(0.0, 0.12, 0.75, 0.74, front: true)) {
+                                        to: slot(0.0, 0.34, 0.52, 0.56, front: true)) {
             parts.append(.near(object.canv))
             let r = object.bounds
             elements.append(.init(motif: "nearBank", bounds: .init(x: r.minX / w, y: r.minY / h,

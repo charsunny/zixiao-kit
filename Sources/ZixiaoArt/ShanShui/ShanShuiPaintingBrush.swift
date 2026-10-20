@@ -91,9 +91,19 @@ extension ShanShuiEngine {
         }
     }
 
+    /// A low, staggered slope (坡陀): one taller rock as the host, flatter guests stepping down and
+    /// away, so the bank reads as ground receding into water rather than a pile of cushions.
     func paintingBank() -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
-        for (x, y, width, height) in [(112.0, 29.0, 140.0, 65.0), (10, 38, 120, 73), (58, 50, 110, 61), (215, 48, 95, 45)] {
+        let flip = r() < 0.5
+        let stones: [(Double, Double, Double, Double)] = [
+            (20, 20, 130, 52),      // host rock, highest
+            (120, 44, 120, 30),     // guest stepping down
+            (200, 58, 90, 20),      // low shelf into the water
+            (0, 52, 95, 26),        // foreground lip
+        ]
+        for (sx, y, width, height) in stones {
+            let x = flip ? 290 - sx - width : sx
             c += paintingRock(width: width, height: height, tone: 0.85).map { poly in
                 var p = poly; p.p = poly.p.map { P($0.x + x, $0.y + y) }; return p
             }
@@ -108,16 +118,31 @@ extension ShanShuiEngine {
             wid: profile.width, tex: 240, veg: false, architecture: false, profile: profile), textured: true)
     }
 
+    /// Distant range: a few peaks of unequal height (one leads, the others fall away), with a
+    /// readable crest and a body that the mist layer dissolves downward. Not a full-width band.
     func paintingDistant(_ index: Int) -> ZXArt.SSCanv {
         let phase = r() * 12
-        let ridge = (0...100).map { i -> P in
-            let t = Double(i) / 100
-            let envelope = pow(max(0, sin(t * .pi)), 0.6)
-            let peak = 12 + 28 * n(t * 6 + phase, Double(index) * 2) + 13 * sin(t * 15 + phase)
-            return P(t * 360, 70 - max(3, peak) * envelope)
+        let peaks = 2 + Int(r() * 2.5)
+        var tops: [(x: Double, h: Double, w: Double)] = []
+        for k in 0..<peaks {
+            let lead = k == 0
+            tops.append((x: 0.18 + 0.64 * (Double(k) + r() * 0.6) / Double(peaks),
+                         h: lead ? 52 + r() * 18 : 22 + r() * 22,
+                         w: lead ? 0.16 + r() * 0.06 : 0.10 + r() * 0.08))
         }
-        var c = [poly(ridge + [P(360, 95), P(0, 95)], fil: .gray(0, 0.10 + Double(index) * 0.025), str: nil)]
-        c += inkLine(ridge, width: 0.8, tone: 0.15, dry: 0.6)
+        let ridge = (0...120).map { i -> P in
+            let t = Double(i) / 120
+            var y = 0.0
+            for top in tops {
+                let d = abs(t - top.x) / top.w
+                y = max(y, top.h * exp(-pow(d, 1.6)))
+            }
+            let foot = pow(max(0, sin(t * .pi)), 0.35)
+            let wobble = 4 * (n(t * 9 + phase, Double(index) * 2) - 0.5)
+            return P(t * 360, 80 - max(1.5, (y + wobble) * foot))
+        }
+        var c = [poly(ridge + [P(360, 95), P(0, 95)], fil: .gray(0, 0.11 + Double(index) * 0.04), str: nil)]
+        c += inkLine(ridge, width: 0.7, tone: 0.18 + Double(index) * 0.06, dry: 0.55)
         return c
     }
 }

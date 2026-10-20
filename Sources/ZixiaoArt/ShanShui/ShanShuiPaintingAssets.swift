@@ -51,48 +51,70 @@ extension ShanShuiEngine {
         return out
     }
 
-    /// Repeated pale ink washes model a shaded face inside the actual rock / mountain contour.
+    /// Shading inside the actual rock / mountain contour, painted the way a brush builds it:
+    /// one pale wash, then texture strokes that gather on the shadow side and in the recesses,
+    /// leaving the lit top planes as paper. Moss dots in scorched ink sit on the upper edges.
+    /// Light comes from the upper left; no straight-edged wash bands.
     private func inkSurface(_ points: [P], textured: Bool) -> ZXArt.SSCanv {
         guard let x0 = points.map(\.x).min(), let x1 = points.map(\.x).max(),
               let y0 = points.map(\.y).min(), let y1 = points.map(\.y).max(),
               x1 - x0 > 25, y1 - y0 > 15 else { return [] }
-        var result = [poly(points, fil: .gray(0, textured ? 0.07 : 0.035), str: nil)]
-        for fraction in [0.28, 0.42, 0.58, 0.73] {
-            let cut = x0 + fraction * (x1 - x0)
-            var clipped: [P] = []
-            var previous = points.last!
-            for point in points {
-                let d0 = previous.x - cut, d1 = point.x - cut
-                if (d0 >= 0) != (d1 >= 0) {
-                    let t = d0 / (d0 - d1)
-                    clipped.append(P(previous.x + (point.x - previous.x) * t, previous.y + (point.y - previous.y) * t))
+        var result = [poly(points, fil: .gray(0, textured ? 0.05 : 0.03), str: nil)]
+        guard textured else { return result }
+        let w = x1 - x0, h = y1 - y0
+        func inside(_ p: P) -> Bool {
+            var result = false, previous = points.last!
+            for current in points {
+                if (current.y > p.y) != (previous.y > p.y),
+                   p.x < (previous.x - current.x) * (p.y - current.y) / (previous.y - current.y) + current.x {
+                    result.toggle()
                 }
-                if d1 >= 0 { clipped.append(point) }
-                previous = point
+                previous = current
             }
-            if clipped.count > 2 { result.append(poly(clipped, fil: .gray(0, textured ? 0.06 : 0.025), str: nil)) }
+            return result
         }
-        if textured {
-            func inside(_ p: P) -> Bool {
-                var result = false, previous = points.last!
-                for current in points {
-                    if (current.y > p.y) != (previous.y > p.y),
-                       p.x < (previous.x - current.x) * (p.y - current.y) / (previous.y - current.y) + current.x {
-                        result.toggle()
-                    }
-                    previous = current
+        /// 0 on the lit upper-left planes, 1 in the shadowed lower-right; noise breaks the gradient
+        /// into irregular patches so it reads as folded rock, not a ramp.
+        func shade(_ x: Double, _ y: Double) -> Double {
+            let u = (x - x0) / w, v = (y - y0) / h
+            let base = 0.55 * u + 0.75 * v - 0.25 + 0.5 * (n(x * 0.05, y * 0.05, 7) - 0.5)
+            return min(1, max(0, base))
+        }
+        // A second, darker wash only where the shade is deep, built from the shadowed half of the
+        // outline itself (lit side pulled in), so its edge follows the rock rather than a ruler.
+        let shadow = points.map { p -> P in
+            let pull = 1 - min(1, shade(p.x, p.y) * 1.6)
+            return P(p.x + (x1 - p.x) * pull * 0.55, p.y + (y1 - p.y) * pull * 0.45)
+        }
+        result.append(poly(shadow, fil: .gray(0, 0.06), str: nil))
+
+        // Texture strokes: density and tone follow the shade.
+        let count = min(900, max(50, Int(w * h / 45)))
+        for _ in 0..<count {
+            let x = x0 + r() * w, y = y0 + r() * h
+            let s = shade(x, y)
+            let length = min(22, h * (0.05 + r() * 0.10))
+            let lean = -1 - r() * 3
+            let end = P(x + lean, y + length)
+            let keep = r() < 0.12 + 0.88 * s
+            guard keep, inside(P(x, y)), inside(end) else { continue }
+            let moisture = 0.5 + 0.8 * n(x * 0.04, y * 0.04)
+            result += inkLine([P(x, y), P(x + lean * 0.5, y + length * 0.45), end],
+                width: 0.45 + r() * 0.9, tone: (0.08 + 0.32 * s) * moisture, dry: 0.55 + 0.25 * (1 - s))
+        }
+
+        // Moss dots (点苔) along the upper contour: small, dark, in clusters of two or three.
+        let tops = points.enumerated().filter { _, p in p.y < y0 + h * 0.4 }.map(\.offset)
+        if !tops.isEmpty {
+            let clusters = max(2, min(9, Int(w / 28)))
+            for _ in 0..<clusters {
+                let p = points[tops[Int(r() * Double(tops.count)) % tops.count]]
+                let dots = 2 + Int(r() * 2.5)
+                for k in 0..<dots {
+                    let x = p.x + (r() - 0.5) * 5, y = p.y + 1.2 + r() * 2.5 + Double(k) * 0.4
+                    result += inkBlot(x, y, radius: 0.8 + r() * 0.9, squash: 0.55 + r() * 0.3,
+                        angle: -0.4 + r() * 0.8, tone: 0.55 + r() * 0.3)
                 }
-                return result
-            }
-            let count = min(700, max(40, Int((x1 - x0) * (y1 - y0) / 65)))
-            for _ in 0..<count {
-                let x = x0 + r() * (x1 - x0), y = y0 + r() * (y1 - y0)
-                let length = min(22, (y1 - y0) * (0.05 + r() * 0.10))
-                let end = P(x - 1 - r() * 3, y + length)
-                guard inside(P(x, y)), inside(end) else { continue }
-                let moisture = 0.45 + n(x * 0.04, y * 0.04)
-                result += inkLine([P(x, y), P(x - 2, y + length * 0.45), end],
-                    width: 0.5 + r() * 0.8, tone: (0.10 + r() * 0.17) * moisture, dry: 0.65)
             }
         }
         return result
