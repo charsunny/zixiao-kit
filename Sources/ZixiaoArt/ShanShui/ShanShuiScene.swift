@@ -232,6 +232,8 @@ extension ShanShuiEngine {
         var near = false
         /// Paper-coloured cloud: drawn flat, without wash or paper tooth, so it matches the ground.
         var plain = false
+        /// Dissolve the part downward between these logical y values (cloud at a peak's foot).
+        var fade: ZXArt.LayerFade? = nil
 
         static func near(_ canv: ZXArt.SSCanv) -> Part { Part(canv: canv, near: true) }
     }

@@ -54,8 +54,8 @@ extension ZXArt {
                         wet[i].fill = wet[i].fill?.opacity(0.22)
                         wet[i].stroke = wet[i].stroke?.opacity(0.22)
                     }
-                    appendLayer(.init(wash: .init(bleed: 0.8, rim: 0.10, grain: 0.12), shapes: wet))
-                    appendLayer(.init(tooth: 0.18, shapes: shapes))
+                    appendLayer(.init(wash: .init(bleed: 0.8, rim: 0.10, grain: 0.12), fade: part.fade, shapes: wet))
+                    appendLayer(.init(tooth: 0.18, fade: part.fade, shapes: shapes))
                 }
             }
             var paper = stage.engine.backgroundPaper()
@@ -398,8 +398,8 @@ private final class PaintingStage {
             // 山腰云锁: the lower third of the main peak dissolves into cloud instead of
             // standing on the bank like a monument.
             let r = object.bounds
-            parts.append(.init(canv: object.canv))
-            parts.append(.init(canv: engine.paintingCloud(over: r), plain: true))
+            parts.append(.init(canv: object.canv, fade: .init(top: r.maxY - r.height * 0.42,
+                bottom: r.maxY - r.height * 0.04, seed: engine.inkSeed())))
             // The true summit: the highest point of the outline in the middle half of the peak.
             let core = object.canv.flatMap(\.p).filter { $0.x > r.minX + r.width * 0.25 && $0.x < r.maxX - r.width * 0.25 }
             mainSummit = core.min { $0.y < $1.y }

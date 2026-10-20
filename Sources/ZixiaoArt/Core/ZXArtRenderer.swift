@@ -214,7 +214,7 @@ extension ZXArt {
         }
         let geo = Geo(s: s, ox: ox, oy: oy, ppu: Double(pixelsPerUnit), rect: rect, view: view, vy0: vy0, vy1: vy1)
         for (li, layer) in drawing.layers.enumerated() {
-            if layer.wash != nil || layer.tooth != nil || layer.rim != nil {
+            if layer.wash != nil || layer.tooth != nil || layer.rim != nil || layer.fade != nil {
                 drawWashed(prepared, li, in: ctx, geo)
             } else if let filter = layer.filter {
                 drawFiltered(prepared, li, filter: filter, in: ctx, geo)
@@ -650,6 +650,7 @@ extension ZXArt {
                     }
                     opacity = Brush.unit(opacity) * WashNoise.tooth(layer.tooth, paper: paper, x: lx, y: ly)
                     if let ridgeRim = layer.rim { opacity *= ridgeRim.keep(x: lx, y: ly) }
+                    if let fade = layer.fade { opacity *= fade.keep(x: lx, y: ly) }
                     let index = row * outputStride + column * 4
                     let gain = color.w > 0 ? opacity / color.w : 0
                     out[index] = UInt8((Brush.unit(color.x * gain) * 255).rounded())
