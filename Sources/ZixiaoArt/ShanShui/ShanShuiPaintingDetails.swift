@@ -31,36 +31,51 @@ extension ShanShuiEngine {
         return c
     }
 
-    /// Dunes as a level-distance (平远) band: long low ridges with a crisp crest, the lee side
-    /// shaded, nearer ridges darker. `far` draws the pale ridges beyond the river.
+    /// Dunes. `far`: one pale, nearly level line of ridges at the horizon. Near: two or three
+    /// large crescent dunes whose crests run diagonally, a gentle sunlit windward slope and a
+    /// steep lee face in darker wash, overlapping in depth.
     func paintingDunes(far: Bool = false) -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
-        let layers = far ? [(y: 34.0, amp: 9.0, tone: 0.05), (y: 48, amp: 7, tone: 0.07)]
-                         : [(y: 30.0, amp: 16.0, tone: 0.08), (y: 62, amp: 20, tone: 0.11), (y: 96, amp: 14, tone: 0.14)]
-        for (k, layer) in layers.enumerated() {
-            let phase = r() * 6, freq = 1.1 + r() * 0.9
+        if far {
+            let phase = r() * 6
             let crest = (0...90).map { i -> P in
                 let t = Double(i) / 90
-                let wave = pow(abs(sin(t * .pi * freq + phase)), 1.4)
-                return P(t * 300, layer.y - layer.amp * (0.35 + 0.65 * wave) - 3 * (n(t * 5 + phase, Double(k)) - 0.5))
+                return P(t * 300, 20 - 6 * pow(abs(sin(t * .pi * 2.3 + phase)), 1.5) - 2 * n(t * 6, 1))
             }
-            // Each ridge is a long lens: it thins to nothing at both ends, so layers overlap
-            // without the hard vertical edges of a rectangle.
-            let base = crest.enumerated().map { i, p in
-                P(p.x, p.y + 4 + 36 * pow(sin(Double(i) / 90 * .pi), 0.6))
+            let base = crest.enumerated().map { i, p in P(p.x, p.y + 3 + 6 * pow(sin(Double(i) / 90 * .pi), 0.5)) }
+            c.append(poly(crest + base.reversed(), fil: .gray(0, 0.07), str: nil))
+            c += inkLine(crest, width: 0.5, tone: 0.16, dry: 0.55)
+            return c
+        }
+        let dunes = 2 + Int(r() * 2)
+        for k in 0..<dunes {
+            let depth = Double(k) / Double(max(1, dunes - 1))        // 0 far … 1 near
+            let base = 40 + depth * 70, height = 18 + depth * 26
+            let x0 = -20 + r() * 60 - depth * 30, x1 = x0 + 220 + r() * 90
+            let peakX = x0 + (x1 - x0) * (0.55 + r() * 0.2)
+            // Windward slope: long and gentle; lee: short and steep.
+            let windward = (0...30).map { i -> P in
+                let t = Double(i) / 30
+                return P(x0 + (peakX - x0) * t, base - height * pow(t, 1.6))
             }
-            c.append(poly(crest + base.reversed(), fil: .white, str: nil))
-            c.append(poly(crest + base.reversed(), fil: .gray(0, layer.tone), str: nil))
-            // Lee side: a darker sliver hanging under the crest, thinning away from the peaks.
-            let lee = crest.map { p in P(p.x, p.y + 3 + 6 * abs(sin(p.x * 0.03 + phase))) }
-            c.append(poly(crest + lee.reversed(), fil: .gray(0, layer.tone * 0.9), str: nil))
-            c += inkLine(crest, width: far ? 0.5 : 0.7 + Double(k) * 0.25, tone: (far ? 0.14 : 0.22) + Double(k) * 0.08, dry: 0.5)
-            if !far {
-                // Sand ripples: a few short, parallel strokes on the nearest slopes.
-                for _ in 0..<(4 + k * 3) {
-                    let x = 20 + r() * 260, y = layer.y + 6 + r() * 14
-                    c += inkLine([P(x, y), P(x + 10 + r() * 14, y - 1 - r())], width: 0.5, tone: 0.10 + Double(k) * 0.03, dry: 0.6)
-                }
+            let lee = (1...12).map { i -> P in
+                let t = Double(i) / 12
+                return P(peakX + (x1 - peakX) * t, base - height * (1 - pow(t, 0.7)))
+            }
+            let crest = windward + lee
+            let floor = crest.map { P($0.x, base + 14) }
+            c.append(poly(crest + floor.reversed(), fil: .white, str: nil))
+            c.append(poly(crest + floor.reversed(), fil: .gray(0, 0.05 + depth * 0.05), str: nil))
+            // Lee face in shadow: a wedge under the crest's falling side.
+            let shadowTop = Array(crest.suffix(lee.count + 4))
+            let shadowFoot = shadowTop.map { P($0.x - 6 - depth * 6, base + 6) }
+            c.append(poly(shadowTop + shadowFoot.reversed(), fil: .gray(0, 0.12 + depth * 0.12), str: nil))
+            c += inkLine(crest, width: 0.6 + depth * 0.7, tone: 0.20 + depth * 0.25, dry: 0.45)
+            // Ripples on the windward slope, parallel to the crest.
+            for j in 0..<(3 + Int(depth * 5)) {
+                let t = 0.2 + r() * 0.6, i = Int(t * 30)
+                let p = windward[i], dy = 4 + Double(j % 3) * 3
+                c += inkLine([P(p.x - 8, p.y + dy + 2), P(p.x + 6, p.y + dy)], width: 0.45, tone: 0.10 + depth * 0.06, dry: 0.6)
             }
         }
         return c
@@ -76,8 +91,8 @@ extension ShanShuiEngine {
                 let t = Double(i) / 30
                 return P(30 + drift * 10 * pow(max(0, t - 0.8) / 0.2, 2), 130 - t * 130)
             }
-            let left = core.enumerated().map { i, p in P(p.x - (1.2 + 3 * pow(Double(i) / 30, 3)), p.y) }
-            let right = core.enumerated().map { i, p in P(p.x + (1.2 + 3 * pow(Double(i) / 30, 3)), p.y) }
+            let left = core.enumerated().map { i, p in P(p.x - (2.2 + 2.5 * pow(Double(i) / 30, 3)), p.y) }
+            let right = core.enumerated().map { i, p in P(p.x + (2.2 + 2.5 * pow(Double(i) / 30, 3)), p.y) }
             c.append(poly(left + right.reversed(), fil: .gray(0, 0.10), str: nil))
             c += inkLine(core, width: 0.6, tone: 0.16, dry: 0.6)
             c += inkBlot(core.last!.x + drift * 4, 4, radius: 7, squash: 0.35, angle: drift * 0.3, tone: 0.06)

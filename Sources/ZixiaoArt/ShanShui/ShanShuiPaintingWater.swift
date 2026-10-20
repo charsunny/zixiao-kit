@@ -85,11 +85,12 @@ extension ShanShuiEngine {
 
     func paintingSurface(_ kind: PaintingWaterKind, width: Double = 320, height: Double = 140) -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
-        let rows = kind == .sea ? 12 : (kind == .pond ? 9 : 12)
+        let rows = kind == .sea ? 12 : (kind == .pond ? 6 : 8)
         for row in 0..<rows {
             let t = Double(row + 1) / Double(rows + 1)
-            let y = height * (0.04 + 0.90 * pow(t, 1.55))
-            let count = kind == .sea ? 3 : 2
+            let y = height * (0.04 + 0.90 * pow(t, 1.55)) + (r() - 0.5) * height * 0.03
+            // 远水无波: far rows are mostly bare paper; strokes gather toward the near shore.
+            let count = kind == .sea ? 3 : (r() < 0.25 + 0.75 * t ? (r() < t ? 2 : 1) : 0)
             for group in 0..<count {
                 let span = width * (0.10 + 0.24 * t) * (0.7 + r() * 0.55)
                 let x = (Double(group) + 0.12 + r() * 0.48) / Double(count) * (width - span)
@@ -99,7 +100,7 @@ extension ShanShuiEngine {
                     let lift = kind == .sea ? sin(u * .pi * 2) + 0.35 * sin(u * .pi * 4) : sin(u * .pi)
                     return P(x + span * u, y + amplitude * lift)
                 }
-                if row % 3 == 1 {
+                if kind == .sea ? row % 3 == 1 : (t > 0.6 && r() < 0.4) {
                     c += inkLine(points, width: 2.5 + t * 3, tone: 0.035 + t * 0.025, dry: 0.45)
                 }
                 c += inkLine(points, width: 0.55 + t * 0.55,

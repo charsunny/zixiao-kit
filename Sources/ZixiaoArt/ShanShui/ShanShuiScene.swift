@@ -230,6 +230,8 @@ extension ShanShuiEngine {
         var mist: Mist? = nil
         /// 近景 (水纹、船、近岸): 只给分层渲染用 (`Drawing.restricted(to:)`), 不影响出图。
         var near = false
+        /// Paper-coloured cloud: drawn flat, without wash or paper tooth, so it matches the ground.
+        var plain = false
 
         static func near(_ canv: ZXArt.SSCanv) -> Part { Part(canv: canv, near: true) }
     }
