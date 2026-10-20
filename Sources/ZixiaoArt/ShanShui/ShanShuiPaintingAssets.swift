@@ -219,19 +219,6 @@ extension ShanShuiEngine {
     }
 
     func paintingWater(stream: Bool) -> ZXArt.SSCanv {
-        var c: ZXArt.SSCanv = []
-        if stream {
-            for offset in [-4.0, 7] {
-                let line = inkCurve([P(58 + offset, 0), P(32 + offset, 31), P(72 + offset, 63), P(21 + offset, 110), P(7 + offset, 144)])
-                c += inkLine(line, width: offset < 0 ? 1.2 : 0.6, tone: 0.25, dry: 0.5)
-            }
-        } else {
-            for k in 0..<11 {
-                let x = r() * 140, y = Double(k) * 10, span = 28 + r() * 90
-                c += inkLine([P(x, y), P(x + span * 0.35, y + 1), P(x + span, y - 0.7)],
-                    width: 0.5 + r() * 0.4, tone: 0.08 + r() * 0.12, dry: 0.65)
-            }
-        }
-        return c
+        stream ? paintingChannel(width: 110, height: 210) : paintingSurface(.lake)
     }
 }

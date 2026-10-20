@@ -4,6 +4,53 @@ import Testing
 @testable import ZixiaoArt
 
 struct ZXArtPaintingSceneTests {
+    @Test func waterChannelsHaveSeparatedBanksAndBroadenTowardTheViewer() {
+        for broad in [false, true] {
+            for phase in stride(from: 0.0, to: 1.2, by: 0.08) {
+                let channel = PaintingWaterChannel(width: 300, height: 240, phase: phase, broad: broad)
+                var previousWidth = 0.0
+                for i in 0...100 {
+                    let t = Double(i) / 100
+                    let left = channel.point(t, across: -1), right = channel.point(t, across: 1)
+                    #expect(left.x >= 0 && right.x <= 300)
+                    #expect(left.x < right.x && left.y == right.y)
+                    #expect(right.x - left.x >= previousWidth - 0.000_001)
+                    previousWidth = right.x - left.x
+                }
+            }
+        }
+    }
+
+    @Test func waterScenesUseTheirOwnStructuresAndStreamCrossesTheRockBed() throws {
+        let scenes: [(ZXArt.PoetryScene, String)] = [(.fishing, "riverWater"), (.waterTown, "riverWater"),
+            (.lotusPond, "pondWater"), (.moonNight, "lakeWater"), (.ocean, "seaWater")]
+        for (scene, motif) in scenes {
+            let selection = ZXArt.SceneSelection(scene: scene, options: .init(motifs: ZXArt.defaultMotifs(for: scene)), matched: [])
+            let recipe = selection.paintingProcedural(seed: "water-structure-" + scene.rawValue)
+            let drawing = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: .init(width: 393, height: 852)))
+            #expect(drawing.sceneElements.contains { $0.motif == motif })
+            #expect(drawing.anchors?.water != nil)
+            #expect(drawing.pointCount < 600_000 && drawing.shapeCount < 12_000)
+        }
+        let mountain = ZXArt.SceneSelection(scene: .retreat, options: .init(motifs: ZXArt.defaultMotifs(for: .retreat)), matched: [])
+        for purpose in ZXArt.ScenePurpose.allCases {
+            for composition in ZXArt.SceneComposition.allCases {
+                let recipe = mountain.paintingProcedural(seed: "stream-joins-banks", purpose: purpose, composition: composition)
+                let d = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: .init(width: 669, height: 951)))
+                let stream = try #require(d.sceneElements.first { $0.motif == "stream" }).bounds.cgRect
+                let far = try #require(d.sceneElements.first { $0.motif == "groundBank" }).bounds.cgRect
+                let near = try #require(d.sceneElements.first { $0.motif == "nearBank" }).bounds.cgRect
+                #expect(stream.minY <= far.minY + 0.006)
+                #expect(stream.maxY >= near.maxY - 0.006)
+                #expect(d.anchors?.water != nil)
+                for object in d.sceneElements where ["hut", "pine", "bamboo"].contains(object.motif) {
+                    let r = object.bounds.cgRect
+                    #expect(stream.maxX <= r.minX + 0.002 || stream.minX >= r.maxX - 0.002)
+                }
+            }
+        }
+    }
+
     @Test func mountainSilhouettesVaryWithoutInventingExtraSummits() {
         var forms: Set<Int> = []
         var peakPositions: [Double] = []

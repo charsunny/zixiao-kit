@@ -81,11 +81,6 @@ extension ShanShuiEngine {
     }
 
     func paintingLongRiver() -> ZXArt.SSCanv {
-        var c: ZXArt.SSCanv = []
-        for offset in [0.0, 3.8] {
-            c += inkLine(inkCurve([P(0, 12 + offset), P(82, 9 + offset), P(166, 16 + offset), P(270, 14 + offset)]),
-                width: 0.7, tone: 0.21, dry: 0.5)
-        }
-        return c
+        paintingRiverRibbon()
     }
 }
