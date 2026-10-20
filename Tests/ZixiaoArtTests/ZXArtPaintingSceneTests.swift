@@ -22,7 +22,7 @@ struct ZXArtPaintingSceneTests {
     }
 
     @Test func waterScenesUseTheirOwnStructuresAndStreamCrossesTheRockBed() throws {
-        let scenes: [(ZXArt.PoetryScene, String)] = [(.fishing, "riverWater"), (.waterTown, "riverWater"),
+        let scenes: [(ZXArt.PoetryScene, String)] = [(.fishing, "riverWater"), (.waterTown, "riverWater"), (.farewell, "riverWater"),
             (.lotusPond, "pondWater"), (.moonNight, "lakeWater"), (.ocean, "seaWater")]
         for (scene, motif) in scenes {
             let selection = ZXArt.SceneSelection(scene: scene, options: .init(motifs: ZXArt.defaultMotifs(for: scene)), matched: [])
@@ -31,8 +31,18 @@ struct ZXArtPaintingSceneTests {
             #expect(drawing.sceneElements.contains { $0.motif == motif })
             #expect(drawing.anchors?.water != nil)
             #expect(drawing.pointCount < 600_000 && drawing.shapeCount < 12_000)
+            if [.moonNight, .waterTown, .farewell].contains(scene) {
+                let bank = try #require(drawing.sceneElements.first { $0.motif == "nearBank" }).bounds.cgRect
+                let boat = try #require(drawing.sceneElements.first { ["boat", "mooredBoat"].contains($0.motif) }).bounds.cgRect
+                #expect(boat.minX > bank.maxX)
+            }
         }
         let mountain = ZXArt.SceneSelection(scene: .retreat, options: .init(motifs: ZXArt.defaultMotifs(for: .retreat)), matched: [])
+        let pond = ZXArt.poetryScene(text: "泉眼无声惜细流，树阴照水爱晴柔。小荷才露尖尖角。", title: "小池")
+        let pondDrawing = try #require(ZXArt.drawing(procedural: pond.paintingProcedural(seed: "pond-inlet"),
+            palette: .paperInk, pixelSize: .init(width: 393, height: 852)))
+        let inlet = try #require(pondDrawing.sceneElements.first { $0.motif == "stream" }).bounds.cgRect
+        #expect(inlet.width > inlet.height * 2)
         for purpose in ZXArt.ScenePurpose.allCases {
             for composition in ZXArt.SceneComposition.allCases {
                 let recipe = mountain.paintingProcedural(seed: "stream-joins-banks", purpose: purpose, composition: composition)

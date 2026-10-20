@@ -537,14 +537,14 @@ private final class PaintingStage {
             layWater(waterEngine.paintingChannel(width: channel.width, height: channel.height, river: true),
                 in: channel, motif: "riverChannel")
             include(.bridge, slot(0.08, 0.14, 0.52, 0.33, front: true))
-            include(.mooredBoat, slot(0.64, 0.51, 0.25, 0.14, front: true))
+            include(.mooredBoat, slot(0.78, 0.55, 0.20, 0.17, front: true))
         case .farewell:
             include(.willow, slot(0.01, 0.13, 0.70, 0.64))
             include(.pavilion, slot(0.66, 0.60, 0.29, 0.16))
             include(.traveler, slot(0.56, 0.72, 0.07, 0.09))
             if chosen.contains(.traveler) { add(.traveler, slot(0.67, 0.73, 0.06, 0.08), repeatable: true) }
             include(.path, slot(0.05, 0, 0.28, 0.8, front: true))
-            include(.mooredBoat, slot(0.60, 0.55, 0.30, 0.17, front: true))
+            include(.mooredBoat, slot(0.77, 0.55, 0.22, 0.17, front: true))
         case .village:
             add(.layeredTree, slot(0.01, 0.20, 0.46, 0.53))
             include(.house, slot(0.39, 0.56, 0.44, 0.18))
@@ -565,6 +565,15 @@ private final class PaintingStage {
         case .lotusPond:
             include(.lotus, slot(0.0, 0.33, 0.94, 0.52))
             include(.willow, slot(0.61, 0.03, 0.37, 0.59))
+            if chosen.contains(.stream), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
+                // A spring entering a pond opens into shallow ripples at the bank, not a
+                // freestanding mountain stream in the middle of the pool.
+                let inlet = CGRect(x: bank.maxX * w - art.width * 0.03, y: bank.maxY * h,
+                    width: art.width * 0.42, height: art.width * 0.08)
+                layWater(waterEngine.paintingSurface(.pond, width: inlet.width, height: inlet.height),
+                    in: inlet, motif: "stream")
+                placed.insert(.stream)
+            }
             include(.dragonfly, slot(0.24, 0.33, 0.18, 0.08))
         case .autumnTravel:
             include(.bareTree, slot(0.0, 0.08, 0.76, 0.72))
@@ -584,7 +593,7 @@ private final class PaintingStage {
         case .moonNight:
             add(.house, slot(0.23, 0.55, 0.65, 0.26))
             include(.window, slot(0.43, 0.67, 0.14, 0.14))
-            include(.boat, slot(0.08, 0.65, 0.5, 0.14, front: true))
+            include(.boat, slot(0.78, 0.55, 0.20, 0.18, front: true))
         case .temple:
             include(.templeGate, slot(0.52, 0.61, 0.44, 0.20))
             include(.pagoda, slot(0.06, 0.48, 0.14, 0.25))

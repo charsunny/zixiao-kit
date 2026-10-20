@@ -135,8 +135,8 @@ extension ShanShuiEngine {
             let t = Double(i) / 40
             return P(width * t, height * (0.40 + 0.14 * sin(t * .pi * 2 + 0.3)))
         }
-        let far = middle.enumerated().map { i, p in P(p.x, p.y - 11 + Double(i) * 0.14) }
-        let near = middle.enumerated().map { i, p in P(p.x, p.y + 18 - Double(i) * 0.25) }
+        let far = middle.enumerated().map { i, p in P(p.x, p.y - 11 * pow(1 - Double(i) / 40, 0.7)) }
+        let near = middle.enumerated().map { i, p in P(p.x, p.y + 18 * pow(1 - Double(i) / 40, 0.7)) }
         var c = [poly(far + near.reversed(), fil: .white, str: nil)]
         for bank in [far, near] {
             c += inkLine(bank, width: 3, tone: 0.06, dry: 0.4)
