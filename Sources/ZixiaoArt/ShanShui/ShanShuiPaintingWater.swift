@@ -120,8 +120,9 @@ extension ShanShuiEngine {
 
     func paintingReflection(width: Double, height: Double) -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
-        for i in 0..<13 {
-            let t = Double(i) / 12, span = width * (0.22 + 0.65 * t) * (0.6 + r() * 0.4)
+        let count = max(3, min(13, Int(height / 3)))
+        for i in 0..<count {
+            let t = Double(i) / Double(count - 1), span = width * (0.22 + 0.65 * t) * (0.6 + r() * 0.4)
             let x = width / 2 - span / 2 + (r() - 0.5) * width * 0.12, y = height * t
             c += inkLine([P(x, y), P(x + span * 0.45, y + 0.5), P(x + span, y - 0.3)],
                 width: 1.3 + r() * 1.7, tone: 0.10 * (1 - t * 0.65), dry: 0.5)

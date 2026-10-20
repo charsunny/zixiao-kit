@@ -23,7 +23,7 @@ struct ZXArtPaintingSceneTests {
 
     @Test func waterScenesUseTheirOwnStructuresAndStreamCrossesTheRockBed() throws {
         let scenes: [(ZXArt.PoetryScene, String)] = [(.fishing, "riverWater"), (.waterTown, "riverWater"), (.farewell, "riverWater"),
-            (.lotusPond, "pondWater"), (.moonNight, "lakeWater"), (.ocean, "seaWater")]
+            (.lotusPond, "pondWater"), (.moonNight, "lakeWater"), (.ocean, "waves")]
         for (scene, motif) in scenes {
             let selection = ZXArt.SceneSelection(scene: scene, options: .init(motifs: ZXArt.defaultMotifs(for: scene)), matched: [])
             let recipe = selection.paintingProcedural(seed: "water-structure-" + scene.rawValue)
@@ -35,6 +35,9 @@ struct ZXArtPaintingSceneTests {
                 let bank = try #require(drawing.sceneElements.first { $0.motif == "nearBank" }).bounds.cgRect
                 let boat = try #require(drawing.sceneElements.first { ["boat", "mooredBoat"].contains($0.motif) }).bounds.cgRect
                 #expect(boat.minX > bank.maxX)
+                if let reflection = drawing.sceneElements.first(where: { $0.motif == "waterReflection" })?.bounds.cgRect {
+                    #expect(!reflection.intersects(bank))
+                }
             }
         }
         let mountain = ZXArt.SceneSelection(scene: .retreat, options: .init(motifs: ZXArt.defaultMotifs(for: .retreat)), matched: [])

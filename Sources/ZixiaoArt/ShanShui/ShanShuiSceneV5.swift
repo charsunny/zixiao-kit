@@ -398,7 +398,7 @@ private final class PaintingStage {
             let clipped = clipWater(raw, to: box)
             guard !clipped.isEmpty else { continue }
             parts.append(.near(clipped)); engine.noted(.water, clipped)
-            elements.append(.init(motif: kind.rawValue + "Water", bounds: .init(x: box.minX / w,
+            elements.append(.init(motif: kind == .sea ? Motif.waves.rawValue : kind.rawValue + "Water", bounds: .init(x: box.minX / w,
                 y: box.minY / h, width: box.width / w, height: box.height / h)))
         }
         placed.insert(.waves)
@@ -482,10 +482,20 @@ private final class PaintingStage {
         }
         guard [.moonNight, .ocean].contains(currentScene),
               let light = elements.first(where: { ["moon", "crescent", "sunrise", "sunset"].contains($0.motif) })?.bounds.cgRect else { return }
-        let box = CGRect(x: light.midX * w - foreground.width * 0.07, y: foreground.minY + foreground.height * 0.26,
-            width: foreground.width * 0.14, height: foreground.height * 0.60)
+        let x = light.midX * w - foreground.width * 0.07, width = foreground.width * 0.14
+        var top = foreground.minY + foreground.height * 0.26
+        if let bank = elements.first(where: { $0.motif == "nearBank" })?.bounds.cgRect,
+           x < bank.maxX * w, x + width > bank.minX * w {
+            top = max(top, bank.maxY * h + 1)
+        }
+        let height = min(foreground.height * 0.60, foreground.maxY - top)
+        guard height >= 6 else { return }
+        let box = CGRect(x: x, y: top, width: width, height: height)
         if let reflection = fitted(waterEngine.paintingReflection(width: box.width, height: box.height), to: box) {
             parts.append(.near(reflection.canv))
+            let r = reflection.bounds
+            elements.append(.init(motif: "waterReflection", bounds: .init(x: r.minX / w, y: r.minY / h,
+                width: r.width / w, height: r.height / h)))
         }
     }
 
