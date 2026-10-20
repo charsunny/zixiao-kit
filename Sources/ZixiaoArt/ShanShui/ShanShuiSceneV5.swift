@@ -264,9 +264,9 @@ private final class PaintingStage {
                 maxHeight = min(maxHeight, main.bounds.cgRect.height * h * 0.28)
             }
         case .bamboo:
-            maxHeight = min(maxHeight, art.height * 0.25)
+            maxHeight = min(maxHeight, art.height * 0.34)
             if let main = elements.first(where: { $0.motif == "mainMountain" }) {
-                maxHeight = min(maxHeight, main.bounds.cgRect.height * h * 0.16)
+                maxHeight = min(maxHeight, main.bounds.cgRect.height * h * 0.26)
             }
         default: break
         }

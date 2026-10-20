@@ -83,22 +83,37 @@ extension ShanShuiEngine {
         return c
     }
 
+    /// A bamboo grove: stalks of unequal height leaning slightly apart, pale far stalks behind
+    /// dark near ones, nodes as short dark strokes, and leaves in clustered 个 / 介 groups at the
+    /// tips and joints, heavier toward the top.
     func paintingBamboo() -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
-        for k in 0..<4 {
-            let x = 18 + Double(k) * 18, height = 104 + r() * 54, lean = Double(k - 2) * 7
-            c += inkLine([P(x, 170), P(x + lean * 0.4, 170 - height * 0.55), P(x + lean, 170 - height)],
-                width: 2.4 + r(), tone: 0.56 + r() * 0.25, dry: 0.28, profile: .even)
-            for j in 1...5 {
-                let y = 170 - height * Double(j) / 6, xx = x + lean * Double(j) / 6
-                c += inkLine([P(xx - 2, y), P(xx + 3, y - 0.6)], width: 1.1, tone: 0.8)
-                if (j + k) % 2 == 0 {
-                    for leaf in 0..<7 {
-                        let side = leaf < 3 ? -1.0 : 1.0
-                        let dx = side * (12 + r() * 13), dy = Double(leaf - 3) * 6 - 4
-                        c += inkLine([P(xx, y), P(xx + dx * 0.48, y + dy * 0.4), P(xx + dx, y + dy)],
-                            width: 3.2 + r() * 2.4, tone: 0.50 + r() * 0.35, dry: 0.1, profile: .lens)
-                    }
+        let stalks = 6 + Int(r() * 3)
+        for k in 0..<stalks {
+            let far = k < stalks / 3
+            let x = 20 + Double(k) * (90 / Double(stalks)) + (r() - 0.5) * 8
+            let height = (far ? 120 : 135) + r() * 40, lean = (r() - 0.5) * 16
+            let tone = far ? 0.28 + r() * 0.1 : 0.55 + r() * 0.25
+            c += inkLine([P(x, 175), P(x + lean * 0.4, 175 - height * 0.55), P(x + lean, 175 - height)],
+                width: (far ? 1.6 : 2.4) + r() * 0.8, tone: tone, dry: 0.25, profile: .even)
+            let nodes = 6
+            for j in 1..<nodes {
+                let y = 175 - height * Double(j) / Double(nodes), xx = x + lean * Double(j) / Double(nodes)
+                c += inkLine([P(xx - 2, y), P(xx + 2.5, y - 0.5)], width: 1.0, tone: min(0.9, tone + 0.2))
+            }
+            // Leaf clusters: three to five blades fanning from one point, 个 or 介.
+            let clusters = far ? 2 : 3 + Int(r() * 2)
+            for q in 0..<clusters {
+                let t = 0.55 + 0.45 * (Double(q) + r() * 0.6) / Double(clusters)
+                let base = P(x + lean * t, 175 - height * t)
+                let side = r() < 0.5 ? -1.0 : 1.0
+                let blades = 3 + Int(r() * 2.5)
+                for b in 0..<blades {
+                    let angle = side * (0.35 + Double(b) * 0.42) + (r() - 0.5) * 0.2
+                    let length = 13 + r() * 9
+                    let tip = P(base.x + sin(angle) * length, base.y + cos(angle) * length * 0.55 - 2)
+                    c += inkLine([base, P((base.x + tip.x) / 2, (base.y + tip.y) / 2 + 1), tip],
+                        width: 3.0 + r() * 1.6, tone: far ? 0.30 : 0.62 + r() * 0.25, dry: 0.1, profile: .lens)
                 }
             }
         }
