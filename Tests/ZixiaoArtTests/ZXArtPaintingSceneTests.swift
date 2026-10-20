@@ -80,11 +80,14 @@ struct ZXArtPaintingSceneTests {
                 if let mountain = drawing.sceneElements.first(where: { $0.motif == "mainMountain" })?.bounds.cgRect {
                     for element in drawing.sceneElements {
                         let rect = element.bounds.cgRect
-                        if ["pine", "oldTree", "bareTree", "layeredTree", "willow"].contains(element.motif) {
-                            #expect(rect.height <= mountain.height * 0.8)
+                        if ["pine", "oldTree", "bareTree", "layeredTree", "willow", "blossom", "maple"].contains(element.motif) {
+                            #expect(rect.height <= mountain.height * 0.175)
+                        }
+                        if element.motif == "bamboo" {
+                            #expect(rect.height <= mountain.height * 0.10)
                         }
                         if ["house", "hut", "pavilion", "templeGate", "cityGate", "pagoda"].contains(element.motif) {
-                            #expect(rect.height <= mountain.height * 0.35)
+                            #expect(rect.height <= mountain.height * (element.motif == "pagoda" ? 0.18 : 0.10))
                             #expect(rect.maxY >= mountain.maxY - mountain.height * 0.25)
                         }
                     }
@@ -92,10 +95,9 @@ struct ZXArtPaintingSceneTests {
                 if let bank = drawing.sceneElements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
                     for element in drawing.sceneElements where ["house", "hut", "pavilion", "pagoda", "templeGate", "cityGate"].contains(element.motif) {
                         let r = element.bounds.cgRect
-                        if r.midX >= bank.minX && r.midX <= bank.maxX {
-                            #expect(r.maxY >= bank.minY - 0.001)
-                            #expect(r.maxY <= bank.maxY + 0.001)
-                        }
+                        #expect(r.midX >= bank.minX - 0.001 && r.midX <= bank.maxX + 0.001)
+                        #expect(r.maxY >= bank.minY - 0.001)
+                        #expect(r.maxY <= bank.maxY + 0.001)
                     }
                 }
                 for element in drawing.sceneElements {
@@ -132,6 +134,23 @@ struct ZXArtPaintingSceneTests {
             if case .building = piece.kind { return true }
             return false
         } == false)
+    }
+
+    @Test func treeSizeVariesWithinTheApprovedRangeAndStaysStable() throws {
+        let values = (0..<64).map { index in
+            PaintingTreeScale.multiplier(seed: "tree-\(index)", motif: .pine, instance: 0)
+        }
+        #expect(values.allSatisfy { (0.5...1).contains($0) })
+        #expect(try #require(values.min()) < 0.6)
+        #expect(try #require(values.max()) > 0.9)
+        let selection = ZXArt.poetryScene(text: "明月松间照，清泉石上流", title: "山居秋暝")
+        let recipe = selection.paintingProcedural(seed: "stable-tree", purpose: .reading)
+        let size = CGSize(width: 393, height: 852)
+        let first = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: size))
+        let repeated = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: size))
+        let night = try #require(ZXArt.drawing(procedural: recipe, palette: .night, pixelSize: size))
+        #expect(first.sceneElements == repeated.sceneElements)
+        #expect(first.sceneElements == night.sceneElements)
     }
 
 }

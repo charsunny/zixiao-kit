@@ -75,6 +75,17 @@ extension ZXArt {
     }
 }
 
+/// Independent entropy keeps size variation stable without changing mountain or brush generation.
+enum PaintingTreeScale {
+    static func multiplier(seed: String, motif: ZXArt.SceneMotif, instance: Int) -> Double {
+        var hash: UInt32 = 2_166_136_261
+        for byte in "tree-size-v1:\(seed):\(motif.rawValue):\(instance)".utf8 {
+            hash = (hash ^ UInt32(byte)) &* 16_777_619
+        }
+        return 0.5 + 0.5 * Double(hash) / Double(UInt32.max)
+    }
+}
+
 /// A small composition vocabulary. Objects are fitted as whole objects, never cut into unreadable fragments.
 private final class PaintingStage {
     typealias Motif = ZXArt.SceneMotif
@@ -86,6 +97,7 @@ private final class PaintingStage {
     let foreground: CGRect
     let purpose: ZXArt.ScenePurpose?
     let composition: ZXArt.SceneComposition?
+    let seed: String
     var parts: [ShanShuiEngine.Part] = []
     var elements: [ZXArt.SceneElement] = []
     var placed = Set<Motif>()
@@ -96,6 +108,7 @@ private final class PaintingStage {
 
     init(seed: ZXArt.Seed, width: Double, height: Double, palette: ZXArt.Palette, verse: ZXArt.VerseLayout, quietTop: Double, options: ZXArt.SceneOptions) {
         self.w = width; self.h = height; self.palette = palette
+        self.seed = seed.string
         purpose = options.purpose; composition = options.composition
         self.verse = options.purpose == .reading ? .null : verse.rect(in: CGSize(width: width, height: height)).insetBy(dx: -8, dy: -8)
         engine = ShanShuiEngine(seed: .init("poetry-painting-v1:" + seed.string))
@@ -170,8 +183,17 @@ private final class PaintingStage {
     private func add(_ motif: Motif, _ box: CGRect, repeatable: Bool = false) -> Bool {
         guard repeatable || !placed.contains(motif) else { return false }
         let raw = motif == .stream && currentScene == .desert ? engine.paintingLongRiver() : engine.paintingAsset(motif)
-        let placement = groundedSlot(motif, scaledSlot(motif, box))
-        guard let object = fitted(raw, to: placement) else { return false }
+        let scaled = scaledSlot(motif, box)
+        let placement = motif == .window ? groundedSlot(motif, scaled) : scaled
+        guard var object = fitted(raw, to: placement) else { return false }
+        if purpose != nil, motif != .window {
+            // Ground the fitted object: its actual canopy / roof size can be much smaller than the slot.
+            let landed = groundedSlot(motif, object.bounds)
+            if landed != object.bounds {
+                guard let moved = fitted(raw, to: landed) else { return false }
+                object = moved
+            }
+        }
         // Each object gets its own layer, retaining stable ordering and inspection metadata.
         let actual = object.bounds
         support(motif, bounds: actual)
@@ -216,26 +238,40 @@ private final class PaintingStage {
             let village = currentScene == .village
             maxWidth = min(maxWidth, art.width * (close ? 0.50 : (village ? 0.33 : 0.26)))
             maxHeight = min(maxHeight, art.height * (close ? 0.18 : (village ? 0.14 : 0.11)))
+            if let surface = bankSurface {
+                let width = surface.step * Double(surface.heights.count - 1)
+                maxWidth = min(maxWidth, width * (close ? 0.7 : 0.46))
+            }
             if let main = elements.first(where: { $0.motif == "mainMountain" }) {
-                maxHeight = min(maxHeight, main.bounds.cgRect.height * h * 0.28)
+                maxHeight = min(maxHeight, main.bounds.cgRect.height * h * 0.075)
             }
         case .pagoda:
             maxWidth = min(maxWidth, art.width * 0.14)
             maxHeight = min(maxHeight, art.height * 0.25)
             if let main = elements.first(where: { $0.motif == "mainMountain" }) {
-                maxHeight = min(maxHeight, main.bounds.cgRect.height * h * 0.30)
+                maxHeight = min(maxHeight, main.bounds.cgRect.height * h * 0.15)
             }
         case .pine, .oldTree, .bareTree, .layeredTree, .willow, .blossom, .maple:
             let mountainScene = [ZXArt.PoetryScene.retreat, .temple, .historic].contains(currentScene)
             maxHeight = min(maxHeight, min(art.height * (mountainScene ? 0.46 : 0.62), art.width * (mountainScene ? 0.85 : 0.65)))
             if let main = elements.first(where: { $0.motif == "mainMountain" }) {
-                maxHeight = min(maxHeight, main.bounds.cgRect.height * h * 0.68)
+                maxHeight = min(maxHeight, main.bounds.cgRect.height * h * 0.28)
             }
         case .bamboo:
             maxHeight = min(maxHeight, art.height * 0.25)
             if let main = elements.first(where: { $0.motif == "mainMountain" }) {
-                maxHeight = min(maxHeight, main.bounds.cgRect.height * h * 0.42)
+                maxHeight = min(maxHeight, main.bounds.cgRect.height * h * 0.16)
             }
+        default: break
+        }
+        // Vary between half and all of the approved small tree, preserving its root and proportions.
+        // Both limits scale together, including trees constrained by width rather than height.
+        switch motif {
+        case .pine, .oldTree, .bareTree, .layeredTree, .willow, .blossom, .maple, .bamboo:
+            let instance = elements.filter { $0.motif == motif.rawValue }.count
+            let scale = 0.5 * PaintingTreeScale.multiplier(seed: seed, motif: motif, instance: instance)
+            maxWidth *= scale
+            maxHeight *= scale
         default: break
         }
         return CGRect(x: requested.midX - maxWidth / 2, y: requested.maxY - maxHeight,
@@ -253,6 +289,20 @@ private final class PaintingStage {
         let rooted: Set<Motif> = [.oldTree, .bareTree, .layeredTree, .pine, .bamboo, .willow,
             .blossom, .maple, .house, .hut, .pavilion, .pagoda, .templeGate, .cityGate]
         guard rooted.contains(motif), let surface = bankSurface else { return requested }
+        var requested = requested
+        let building = [Motif.house, .hut, .pavilion, .pagoda, .templeGate, .cityGate].contains(motif)
+        let endX = surface.x0 + surface.step * Double(surface.heights.count - 1)
+        let radius = min((endX - surface.x0) * 0.45, building ? requested.width * 0.36 : min(8, requested.width * 0.1))
+        let low = max(surface.x0 + radius, art.minX + requested.width / 2)
+        let high = min(endX - radius, art.maxX - requested.width / 2)
+        let fraction = min(max((requested.midX - art.minX) / art.width, 0), 1)
+        var desired = surface.x0 + radius + fraction * max(0, endX - surface.x0 - 2 * radius)
+        if motif == .house, let previous = elements.last(where: { $0.motif == "house" })?.bounds.cgRect,
+           desired > previous.midX * w {
+            desired = max(desired, previous.maxX * w + requested.width * 0.18)
+        }
+        let center = low <= high ? min(max(desired, low), high) : min(max(desired, surface.x0 + radius), endX - radius)
+        requested.origin.x = center - requested.width / 2
         let position = (requested.midX - surface.x0) / surface.step
         guard position >= 0, position <= Double(surface.heights.count - 1) else { return requested }
         let lo = Int(position), hi = min(lo + 1, surface.heights.count - 1)
