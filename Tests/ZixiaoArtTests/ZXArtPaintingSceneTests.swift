@@ -32,9 +32,12 @@ struct ZXArtPaintingSceneTests {
             #expect(drawing.anchors?.water != nil)
             #expect(drawing.pointCount < 600_000 && drawing.shapeCount < 12_000)
             if [.moonNight, .waterTown, .farewell].contains(scene) {
-                let bank = try #require(drawing.sceneElements.first { $0.motif == "nearBank" }).bounds.cgRect
                 let boat = try #require(drawing.sceneElements.first { ["boat", "mooredBoat"].contains($0.motif) }).bounds.cgRect
-                #expect(boat.minX > bank.maxX)
+                // With a full-width ground band the near slope dissolves into water; the boat rides
+                // the water at its lower edge, never on the bank top.
+                let near = drawing.sceneElements.first { $0.motif == "nearBank" }?.bounds.cgRect
+                let bank = try #require(near ?? drawing.sceneElements.first { $0.motif == "groundBank" }?.bounds.cgRect)
+                if near != nil { #expect(boat.minX > bank.maxX) } else { #expect(boat.maxY >= bank.minY + bank.height * 0.4) }
                 if let reflection = drawing.sceneElements.first(where: { $0.motif == "waterReflection" })?.bounds.cgRect {
                     #expect(!reflection.intersects(bank))
                 }

@@ -112,6 +112,8 @@ private final class PaintingStage {
     var currentScene: ZXArt.PoetryScene = .retreat
     var bankSurface: (x0: Double, step: Double, heights: [Double])?
     var groundInBand = false
+    /// Top of the full-width ground band beneath the verse, when the page has one.
+    let bandTop: Double?
     var mainSummit: ZXArt.P?
     let waterEngine: ShanShuiEngine
 
@@ -128,6 +130,11 @@ private final class PaintingStage {
         let top = max(pad, quietTop * height)
         let footer = options.purpose == .recommendation ? height * 0.87 : height - pad
         self.footer = footer
+        // Inscribed portrait: the verse sits in the sky on one side; the ground beneath it can run
+        // the full width. Nil when the verse is a full-height column (wide formats) or absent.
+        if !self.verse.isNull, width <= height * 1.3, self.verse.maxY < height * 0.82 {
+            bandTop = self.verse.maxY + pad * 0.4
+        } else { bandTop = nil }
         let left: Double, available: Double
         if options.purpose == .reading {
             left = pad; available = width - 2 * pad
@@ -158,6 +165,17 @@ private final class PaintingStage {
             foreground = CGRect(x: art.minX, y: art.minY + art.height * 0.72,
                 width: art.width, height: art.height * 0.28)
         }
+    }
+
+    /// The lower ground of the page: full width beneath the verse when there is room, otherwise
+    /// the lower part of the painting column (wide pages, where the verse is a full-height column).
+    private func lowerBand(columnFrom fraction: Double = 0.55) -> CGRect {
+        let pad = min(w, h) * 0.045
+        if let top = bandTop, footer - top > 20 {
+            return CGRect(x: pad, y: top, width: w - 2 * pad, height: footer - top)
+        }
+        let top = art.minY + art.height * fraction
+        return CGRect(x: art.minX, y: top, width: art.width, height: max(20, min(footer, art.maxY) - top))
     }
 
     private func slot(_ x: Double, _ y: Double, _ width: Double, _ height: Double, front: Bool = false) -> CGRect {
@@ -408,7 +426,14 @@ private final class PaintingStage {
                 engine.noted(.ridge(.far), object.canv)
             }
         }
-        if main, let object = fitted(engine.paintingMountain(), to: slot(0.02, 0.01, 0.95, 0.75)) {
+        var peakBox = slot(0.02, 0.01, 0.95, 0.75)
+        if let top = bandTop {
+            // The peak stands behind the near ground: its foot meets the bank's upper edge in cloud,
+            // never below or in front of it on tall pages.
+            let foot = top + h * 0.05
+            peakBox = CGRect(x: peakBox.minX, y: peakBox.minY, width: peakBox.width, height: max(40, foot - peakBox.minY))
+        }
+        if main, let object = fitted(engine.paintingMountain(), to: peakBox) {
             // 山腰云锁: the lower third of the main peak dissolves into cloud instead of
             // standing on the bank like a monument.
             let r = object.bounds
@@ -554,9 +579,9 @@ private final class PaintingStage {
         else { box = narrow ? slot(0.01, 0.67, 0.34, 0.25) : slot(0, 0.65, 1, 0.22) }
         // Inscribed portrait: the verse fills the sky on one side, so the ground runs the full
         // width of the band beneath it, the way a hanging scroll's foreground spans the paper.
-        if !verse.isNull, w <= h * 1.3, verse.maxY < h * 0.82 {
+        if let top = bandTop {
             let pad = min(w, h) * 0.045
-            let top = verse.maxY + pad * 0.4, bottom = min(foreground.maxY, h - pad)
+            let bottom = min(foreground.maxY, h - pad)
             let width = (w - 2 * pad) * (narrow ? 0.5 : 1)
             let x = verse.minX > w / 2 || narrow ? pad : w - pad - width
             box = CGRect(x: x, y: top, width: width, height: max(20, min(bottom - top, h * 0.13)))
@@ -709,10 +734,9 @@ private final class PaintingStage {
         case .courtyard:
             // The wall stands on the ground beneath the verse; the willow grows behind it, its trunk
             // hidden by the wall, its crown heaped above into the open column (杨柳堆烟).
-            let pad = min(w, h) * 0.045
-            let top = verse.isNull ? h * 0.55 : verse.maxY + pad * 0.4
-            let wallBox = CGRect(x: pad, y: top + (footer - top) * 0.10, width: (w - 2 * pad) * 0.94,
-                                 height: max(20, (footer - top) * 0.86))
+            let band = lowerBand(columnFrom: 0.45)
+            let wallBox = CGRect(x: band.minX, y: band.minY + band.height * 0.10, width: band.width * 0.94,
+                                 height: band.height * 0.86)
             if let wall = fitted(engine.paintingCourtyard(), to: wallBox) {
                 // Root the willow just behind the wall's near end, so the wall hides its trunk.
                 let willowW = art.width * 0.62
@@ -749,9 +773,9 @@ private final class PaintingStage {
             }
             placed.formUnion([.terrace, .ruins, .cityGate, .traveler])
             // 天地: one faint, far range across the full width below the verse marks the earth.
-            let pad = min(w, h) * 0.045
-            let top = verse.isNull ? h * 0.72 : verse.maxY + pad
-            if let plain = fitted(engine.paintingDistant(0), to: CGRect(x: pad, y: top, width: w - 2 * pad, height: h * 0.09)) {
+            let band = lowerBand(columnFrom: 0.80)
+            if let plain = fitted(engine.paintingDistant(0), to: CGRect(x: band.minX, y: band.minY,
+                                                                        width: band.width, height: min(band.height, h * 0.09))) {
                 parts.append(.init(canv: plain.canv, mist: .init(depth: plain.bounds.height * 1.2, blur: 0.35, peak: 0.7,
                     floorY: plain.bounds.maxY, floorDepth: plain.bounds.height * 0.7)))
             }
@@ -759,9 +783,8 @@ private final class PaintingStage {
             // 大漠孤烟直，长河落日圆: a low horizon under the verse and a vast sky. Far dunes, the
             // long river and the near dunes run the full width; the sun sits on the horizon and
             // the smoke rises from it on the other side.
-            let pad = min(w, h) * 0.045
-            let horizon = verse.isNull ? h * 0.62 : max(verse.maxY + pad * 0.6, h * 0.55)
-            let full = CGRect(x: pad, y: horizon, width: w - 2 * pad, height: max(20, footer - horizon))
+            let full = lowerBand(columnFrom: 0.45)
+            let horizon = full.minY
             if let far = fitted(engine.paintingDunes(far: true), to: CGRect(x: full.minX, y: horizon,
                 width: full.width, height: full.height * 0.10)) {
                 parts.append(.near(far.canv))
@@ -787,7 +810,8 @@ private final class PaintingStage {
             }
             if chosen.contains(.beaconSmoke) {
                 let smokeX = verse.isNull || verse.minX > w / 2 ? art.minX + art.width * 0.15 : art.maxX - art.width * 0.15
-                add(.beaconSmoke, CGRect(x: smokeX - w * 0.04, y: horizon - h * 0.32, width: w * 0.08, height: h * 0.32))
+                let smokeTop = max(art.minY, horizon - h * 0.32)
+                add(.beaconSmoke, CGRect(x: smokeX - w * 0.04, y: smokeTop, width: w * 0.08, height: horizon - smokeTop))
             }
         case .ocean:
             // 海上生明月: a low sea horizon in the open column, the moon just clear of it with a
@@ -803,13 +827,12 @@ private final class PaintingStage {
                 let x = art.minX + art.width * 0.42
                 add(light, CGRect(x: x - size / 2, y: horizon - size * 0.92, width: size, height: size))
                 let path = CGRect(x: x - art.width * 0.07, y: horizon + 2, width: art.width * 0.14,
-                                  height: (verse.isNull ? h * 0.7 : verse.maxY) - horizon - 4)
+                                  height: max(6, lowerBand(columnFrom: 0.62).minY - horizon - 4))
                 if let reflection = fitted(waterEngine.paintingReflection(width: path.width, height: path.height), to: path) {
                     parts.append(.near(reflection.canv))
                 }
             }
-            let top = verse.isNull ? h * 0.62 : verse.maxY + pad * 0.3
-            let near = CGRect(x: pad, y: top, width: w - 2 * pad, height: max(20, footer - top))
+            let near = lowerBand(columnFrom: 0.62)
             let raw = waterEngine.paintingSurface(.sea, width: near.width, height: near.height).map { p -> ZXArt.SSPoly in
                 var q = p; q.p = p.p.map { .init($0.x + near.minX, $0.y + near.minY) }; return q
             }
