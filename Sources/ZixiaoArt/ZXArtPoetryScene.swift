@@ -59,7 +59,8 @@ public extension ZXArt {
                 for byte in seed.utf8 { hash = (hash ^ UInt32(byte)) &* 16_777_619 }
                 let candidates: [SceneComposition]
                 switch scene {
-                case .fishing, .waterTown, .farewell, .lotusPond, .ocean, .desert: candidates = [.oppositeBank, .corner]
+                case .fishing, .waterTown, .farewell, .lotusPond, .ocean, .desert:
+                    candidates = [.oppositeBank, .corner, .depth, .oppositeBank]
                 case .retreat, .temple, .historic: candidates = [.depth, .corner]
                 default: candidates = SceneComposition.allCases
                 }

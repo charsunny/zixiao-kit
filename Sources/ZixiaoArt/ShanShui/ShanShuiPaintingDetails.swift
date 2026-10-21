@@ -182,3 +182,20 @@ extension ShanShuiEngine {
         paintingRiverRibbon()
     }
 }
+
+// A battered earthen beacon, composed with smoke at its summit by the scene.
+extension ShanShuiEngine {
+    func paintingBeacon() -> ZXArt.SSCanv {
+        let top = [P(18, 8), P(45, 8), P(51, 13), P(13, 13)]
+        let front = [P(13, 13), P(51, 13), P(59, 44), P(5, 44)]
+        var c = [poly(front, fil: .white, str: nil), poly(top, fil: .white, str: nil)]
+        c += inkLine(top + [top[0]], width: 1.3, tone: 0.70, dry: 0.45)
+        c += inkLine([P(13, 13), P(5, 44), P(59, 44), P(51, 13)], width: 1.5, tone: 0.62, dry: 0.5)
+        for y in [21.0, 29, 37] {
+            c += inkLine([P(16, y), P(40 + r() * 8, y + 1)], width: 2.2, tone: 0.22, dry: 0.8)
+        }
+        c += inkLine([P(46, 15), P(52, 41)], width: 4, tone: 0.38, dry: 0.7)
+        c += inkLine([P(0, 45), P(30, 46), P(65, 45)], width: 0.9, tone: 0.35, dry: 0.6)
+        return c
+    }
+}

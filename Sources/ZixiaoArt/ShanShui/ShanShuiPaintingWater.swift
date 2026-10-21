@@ -11,10 +11,12 @@ struct PaintingWaterChannel {
     let height: Double
     let phase: Double
     let broad: Bool
+    var bend: Double? = nil
+    var opening: Double = 1
 
     func point(_ t: Double, across: Double) -> ZXArt.P {
-        let half = width * (broad ? 0.035 + 0.39 * pow(t, 0.85) : 0.02 + 0.10 * pow(t, 0.9))
-        let sway = width * (broad ? 0.11 : 0.23) * sin(t * .pi * 2 + phase)
+        let half = width * opening * (broad ? 0.035 + 0.39 * pow(t, 0.85) : 0.02 + 0.10 * pow(t, 0.9))
+        let sway = width * (bend ?? (broad ? 0.11 : 0.23)) * sin(t * .pi * 2 + phase)
         let center = min(width - half - width * 0.025, max(half + width * 0.025, width * 0.5 + sway))
         return .init(center + half * across, height * t)
     }
