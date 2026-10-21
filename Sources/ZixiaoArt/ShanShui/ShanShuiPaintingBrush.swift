@@ -97,10 +97,22 @@ extension ShanShuiEngine {
 
     /// Faceted rock masses, broken hemp-fibre texture and clustered moss dots.
     func paintingRock(width: Double = 125, height: Double = 70, tone: Double = 1) -> ZXArt.SSCanv {
-        paintingLegacy(rock(width / 2, height, r() * 40, hei: height, wid: width, tex: 70, sha: 3), textured: true).map { p in
+        let form = Int(r() * 65536) % 3
+        var canvas: ZXArt.SSCanv = []
+        if form == 2 {
+            canvas += paintingStone(x0: width * 0.38, x1: width, top: 0, floor: height * 0.93,
+                style: .cliff, rank: 0)
+            canvas += paintingStone(x0: 0, x1: width * 0.68, top: height * 0.43, floor: height,
+                style: .cliff, rank: 2)
+        } else {
+            let top = form == 0 ? height * 0.30 : 0
+            canvas += paintingStone(x0: 0, x1: width, top: top, floor: height,
+                style: .cliff, rank: 1)
+        }
+        return canvas.map { p in
             var q = p
-            if var c = q.fil, c != .white { c.a *= tone; q.fil = c }
-            if var c = q.str { c.a *= tone; q.str = c }
+            if var color = q.fil, color != .white { color.a *= tone; q.fil = color }
+            if var color = q.str { color.a *= tone; q.str = color }
             return q
         }
     }
@@ -261,9 +273,9 @@ struct PaintingMountainProfile {
             widths = 360...440; heights = 270...360; curves = 0.85...1
             textureLength = 0.18
         case .folded:
-            control = [.init(0, 0), .init(0.10, 0.18), .init(0.16, 0.49), .init(0.26, 0.53),
-                .init(0.30, 0.80), .init(0.42, 0.82), .init(0.49, 1), .init(0.59, 0.93),
-                .init(0.64, 0.73), .init(0.76, 0.68), .init(0.82, 0.32), .init(1, 0)]
+            control = [.init(0, 0), .init(0.10, 0.18), .init(0.18, 0.61), .init(0.26, 0.65),
+                .init(0.33, 0.47), .init(0.42, 0.82), .init(0.49, 1), .init(0.59, 0.93),
+                .init(0.66, 0.53), .init(0.77, 0.68), .init(0.84, 0.48), .init(1, 0)]
             widths = 330...400; heights = 330...430; curves = 0.15...0.40
             textureLength = 0.08
         case .clustered:
@@ -285,7 +297,7 @@ struct PaintingMountainProfile {
         var knots = control.enumerated().map { i, p -> SIMD2<Double> in
             guard i > 0 && i < control.count - 1 else { return p }
             return .init(p.x + bias * sin(p.x * .pi) + between(-0.008, 0.008),
-                p.y == 1 ? 1 : min(0.99, max(0, p.y + between(-0.025, 0.025))))
+                p.y == 1 ? 1 : min(0.99, max(0, p.y + between(-0.075, 0.075))))
         }
         if random() < 0.5 { knots = knots.reversed().map { .init(1 - $0.x, $0.y) } }
         ridge = knots
