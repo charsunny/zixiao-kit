@@ -5,6 +5,7 @@ extension ShanShuiEngine {
     func paintingBoat(_ kind: ZXArt.SceneMotif, mooring: Bool = true) -> ZXArt.SSCanv {
         let form = Int(r() * 65_536) % 3
         let w = [116.0, 146, 172][form], depth = [9.0, 13, 11][form]
+        let covered = kind == .mooredBoat ? r() < 0.65 : form != 0
         let rail = inkCurve([P(0, 85), P(w * 0.23, 93), P(w * 0.70, 94), P(w, 82)])
         let bottom = inkCurve([P(w, 82), P(w * 0.82, 96 + depth * 0.45),
                               P(w * 0.30, 95 + depth), P(w * 0.08, 96), P(0, 85)])
@@ -18,7 +19,7 @@ extension ShanShuiEngine {
         for t in [0.19, 0.77] {
             c += inkLine([P(w * t, 94), P(w * t + 9, 96)], width: 1, tone: 0.57, dry: 0.35)
         }
-        let canopy = kind == .boat || kind == .mooredBoat ? form != 0 : kind == .angler && form == 2
+        let canopy = kind == .boat || kind == .mooredBoat ? covered : kind == .angler && form == 2
         if canopy {
             let x = kind == .angler ? w * 0.14 : w * 0.35
             let length = form == 1 ? w * 0.35 : w * 0.29, height = form == 1 ? 23.0 : 18.0
