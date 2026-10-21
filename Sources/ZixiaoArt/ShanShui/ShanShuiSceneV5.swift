@@ -769,7 +769,7 @@ private final class PaintingStage {
             // instead of ending in a hard edge like an island floating on the paper.
             let b = object.bounds
             parts.append(groundInBand
-                ? .init(canv: object.canv, near: true, fade: .init(top: b.minY + b.height * 0.40,
+                ? .init(canv: object.canv, near: true, fade: .init(top: b.minY + b.height * 0.60,
                         bottom: b.maxY + b.height * 0.08, seed: engine.inkSeed()))
                 : .near(object.canv))
         }

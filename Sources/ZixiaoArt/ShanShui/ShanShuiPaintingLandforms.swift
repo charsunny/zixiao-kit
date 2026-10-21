@@ -23,8 +23,8 @@ extension ShanShuiEngine {
                     P(x + span, height * (0.78 + r() * 0.20))]
             case .cliff:
                 let top = height * (0.05 + r() * 0.36)
-                controls += [P(peak, top), P(x + span * 0.63, top + height * (0.04 + r() * 0.10)),
-                    P(x + span * 0.75, top + height * (0.02 + r() * 0.10)),
+                controls += [P(peak, top), P(x + span * 0.62, top + height * (0.18 + r() * 0.14)),
+                    P(x + span * 0.75, top + height * (0.08 + r() * 0.10)),
                     P(x + span * 0.86, height * (0.48 + r() * 0.17)),
                     P(x + span, height * (0.63 + r() * 0.17))]
             case .headland:
@@ -47,42 +47,103 @@ extension ShanShuiEngine {
             P(width * (0.08 + r() * 0.12), height + r() * 5), crest[0]])
         let outline = crest + bottom
         var c = [poly(outline, fil: .white, str: nil)]
-        // inkSurface supplies only the dilute base. Fibres below own the texture, avoiding two
-        // full layers of hatching; darker washes sit beneath selected shoulders, not over the bank.
-        c += inkSurface(outline, textured: false, shadowWash: false)
-        for k in 0..<sections {
-            let i = min(crest.count - 2, Int((Double(k) + 0.55) / Double(sections) * Double(crest.count - 1)))
-            let p = crest[i], extent = min(width - p.x, width * (0.10 + r() * 0.12))
-            let depth = max(2, height - p.y) * (0.35 + r() * 0.35)
-            let wash = inkCurve([p, P(p.x + extent * 0.4, p.y + depth * 0.25),
-                P(p.x + extent, min(height, p.y + depth)), P(p.x + extent * 0.15, p.y + depth * 0.7)])
-            c.append(poly(wash, fil: .gray(0, style == .cliff ? 0.06 : 0.025), str: nil))
-        }
         func top(at x: Double) -> Double {
             for (a, b) in zip(crest, crest.dropFirst()) where a.x <= x && x <= b.x {
                 return a.y + (b.y - a.y) * (x - a.x) / max(0.001, b.x - a.x)
             }
             return height
         }
-        // 披麻: sparse fibres follow the slope in one direction, without a hooked tail.
-        let count = style == .shoal ? 18 : (style == .cliff ? 24 : 20)
-        for k in 0..<count {
-            let px = width * (0.10 + r() * 0.80), py = top(at: px) + 2 + r() * 3
-            let available = max(0, height - py)
-            let reach = available * (0.28 + pow(r(), 1.4) * 0.66)
-            guard reach > 3 else { continue }
-            let lean = style == .cliff ? 0.05 + r() * 0.12 : 0.30 + r() * 0.40
-            let direction = top(at: px + 2) > top(at: px - 2) ? 1.0 : -1.0
-            let edge = direction > 0 ? width - px - 2 : px - 2
-            let dx = direction * min(edge, reach * lean)
-            let line = (0...18).map { i -> P in
-                let t = Double(i) / 18
-                return P(px + dx * (0.7 * t + 0.3 * t * t), py + reach * t)
+        func floor(at x: Double) -> Double {
+            for (a, b) in zip(bottom, bottom.dropFirst()) where min(a.x, b.x) <= x && x <= max(a.x, b.x) {
+                if abs(b.x - a.x) > 0.001 { return a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x) }
             }
-            guard line.allSatisfy({ $0.y >= top(at: $0.x) }) else { continue }
-            let shade = min(1, 0.30 + 0.45 * px / width + 0.25 * reach / max(1, available))
-            c += inkLine(line, width: style == .cliff ? 0.7 + r() * 2.0 : 0.4 + r() * 0.6,
-                tone: k % 6 == 0 ? 0.48 : (0.16 + r() * 0.25) * shade, dry: 0.65)
+            return height + 5
+        }
+        func surface(_ x: Double, _ depth: Double) -> P {
+            let x = min(width, max(0, x)), y = top(at: x)
+            return P(x, y + max(0, floor(at: x) - y) * depth)
+        }
+        // Reserve the lit top; a connected dilute face makes the bank read as earth, not a few
+        // floating strokes. The darker wash sits lower and on the back of each unequal shoulder.
+        let faceTop = (0...100).map { i -> P in
+            let x = width * Double(i) / 100
+            return surface(x, 0.09 + 0.035 * sin(Double(i) * 0.23))
+        }
+        let faceFoot = (0...100).map { surface(width * Double($0) / 100, 0.98) }
+        c.append(poly(faceTop + faceFoot.reversed(), fil: .gray(0, 0.085), str: nil))
+        let lower = (0...100).map { i -> P in
+            let x = width * Double(i) / 100
+            return surface(x, 0.30 + 0.08 * n(x * 0.025, 3))
+        }
+        c.append(poly(lower + faceFoot.reversed(), fil: .gray(0, 0.045), str: nil))
+        var sectionX = 0.0
+        for spanWeight in lengths {
+            let span = width * spanWeight / total
+            let left = sectionX + span * (0.25 + r() * 0.12)
+            let right = sectionX + span * (0.88 + r() * 0.10)
+            for pass in 0..<2 {
+                let upper = (0...24).map { i -> P in
+                    let t = Double(i) / 24, x = left + (right - left) * t
+                    let belly = sin(t * .pi)
+                    return surface(x, 0.82 - belly * (pass == 0 ? 0.66 : 0.42))
+                }
+                let lower = (0...24).map { i -> P in
+                    let t = Double(i) / 24
+                    return surface(left + (right - left) * t, 0.82 + sin(t * .pi) * 0.12)
+                }
+                c.append(poly(upper + lower.reversed(), fil: .gray(0, style == .cliff ? 0.075 : 0.055), str: nil))
+            }
+            sectionX += span
+        }
+        if style == .cliff {
+            // 斧劈: unequal oblique planes, loaded on one edge and split into dry side strokes.
+            // Each patch has width as well as length; no row of parallel hanging vertical lines.
+            for _ in 0..<(7 + Int(r() * 4)) {
+                let x = width * (0.14 + r() * 0.72)
+                let start = surface(x, 0.13 + r() * 0.13)
+                let reach = max(0, floor(at: x) - start.y) * (0.28 + r() * 0.43)
+                let dx = -reach * (0.45 + r() * 0.65)
+                let breadth = 5 + r() * 11
+                guard reach > 6, x + dx > 2 else { continue }
+                let plane = [start, P(x + breadth, start.y + reach * 0.10),
+                    P(x + dx + breadth * 0.45, start.y + reach * 0.92), P(x + dx, start.y + reach)]
+                guard plane.allSatisfy({ $0.x < width && $0.y >= top(at: $0.x) && $0.y <= floor(at: $0.x) }) else { continue }
+                c.append(poly(plane, fil: .gray(0, 0.10 + r() * 0.10), str: nil))
+                for hair in 0..<3 {
+                    let offset = Double(hair) * breadth * 0.24
+                    let fraction = 0.60 + r() * 0.38
+                    let line = (0...12).map { i -> P in
+                        let t = Double(i) / 12 * fraction
+                        return P(x + offset + dx * (0.85 * t + 0.15 * t * t), start.y + reach * t)
+                    }
+                    c += inkLine(line, width: hair == 0 ? 2.5 + r() * 3.5 : 0.65 + r(),
+                        tone: hair == 0 ? 0.42 + r() * 0.15 : 0.22 + r() * 0.13, dry: 0.72)
+                }
+            }
+        } else {
+            // 披麻: groups collect on the shaded shoulders, with open lit passages between them.
+            // Analytic single-direction curves preserve the accepted no-hook stroke endings.
+            for group in 0..<7 {
+                let center = width * (0.08 + (Double(group) + r() * 0.7) / 7 * 0.84)
+                let strands = 3 + Int(r() * 3)
+                for k in 0..<strands {
+                    let px = min(width - 3, max(3, center + (r() - 0.5) * width * 0.07))
+                    let start = surface(px, 0.10 + r() * 0.20)
+                    let available = floor(at: px) - start.y
+                    let reach = available * (0.24 + r() * 0.58)
+                    guard reach > 3 else { continue }
+                    let direction = top(at: px + 2) > top(at: px - 2) ? 1.0 : -1.0
+                    let edge = direction > 0 ? width - px - 2 : px - 2
+                    let dx = direction * min(edge, reach * (0.35 + r() * 0.55))
+                    let line = (0...18).map { i -> P in
+                        let t = Double(i) / 18
+                        return P(px + dx * (0.65 * t + 0.35 * t * t), start.y + reach * t)
+                    }
+                    guard line.allSatisfy({ $0.y >= top(at: $0.x) && $0.y <= floor(at: $0.x) }) else { continue }
+                    c += inkLine(line, width: k == 0 ? 1.2 + r() * 0.8 : 0.5 + r() * 0.6,
+                        tone: k == 0 ? 0.46 + r() * 0.13 : 0.20 + r() * 0.20, dry: 0.62)
+                }
+            }
         }
         var start = 1
         while start < crest.count - 3 {
@@ -100,11 +161,18 @@ extension ShanShuiEngine {
                     radius: 0.7 + r() * 1.4, squash: 0.44, tone: 0.55 + r() * 0.30)
             }
         }
-        // Broken water-facing edges, leaving passages between the shoals.
-        for _ in 0..<(2 + Int(r() * 3)) {
-            let x = width * (0.04 + r() * 0.78), span = width * (0.06 + r() * 0.13)
-            c += inkLine([P(x, height + 3), P(x + span * 0.5, height + 4), P(x + span, height + 3)],
-                width: 1.1, tone: 0.40, dry: 0.65)
+        // 坡脚压墨: a linked but broken dark foot remains above the last dissolving fringe.
+        // Its bends follow the ground plane; it is neither a straight waterline nor another ridge.
+        var footX = width * 0.025
+        while footX < width * 0.96 {
+            let span = min(width * (0.08 + r() * 0.13), width * 0.98 - footX)
+            let line = (0...12).map { i -> P in
+                let t = Double(i) / 12, x = footX + span * t
+                let y = height * 0.80 + 2.5 * n(x * 0.035, 9)
+                return P(x, min(floor(at: x) - 1, max(top(at: x) + 1, y)))
+            }
+            c += inkLine(line, width: 1.9 + r() * 1.2, tone: 0.70 + r() * 0.14, dry: 0.48)
+            footX += span + width * (0.015 + r() * 0.025)
         }
         if flip { c = c.map { poly in var p = poly; p.p = poly.p.map { P(width - $0.x, $0.y) }; return p } }
         return c
