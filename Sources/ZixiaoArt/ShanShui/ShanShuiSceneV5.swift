@@ -278,7 +278,16 @@ private final class PaintingStage {
             let rootX = object.bounds.minX + (root.x - minX) * scale
             let rootY = object.bounds.minY + (root.y - minY) * scale
             let end = surface.x0 + surface.step * Double(surface.heights.count - 1)
-            let landedX = supportedBankX(min(end - 1, max(surface.x0 + 1, rootX)))
+            var desiredRoot = rootX
+            if currentScene == .autumnTravel, motif == .oldTree, h > w {
+                // Leave a dwelling-sized opening beside the trunk in the narrow picture
+                // column. Keep the tree's scale, and root it again on the actual bank.
+                let left = verse.midX > w / 2
+                let room = left ? object.bounds.minX - art.minX : art.maxX - object.bounds.maxX
+                let shift = min(max(0, room - 3), object.bounds.width * 0.8)
+                desiredRoot += left ? -shift : shift
+            }
+            let landedX = supportedBankX(min(end - 1, max(surface.x0 + 1, desiredRoot)))
             if let foot = bankFoot(landedX - 0.5, landedX + 0.5) {
                 let landed = object.bounds.offsetBy(dx: landedX - rootX, dy: foot - rootY)
                 guard let moved = fitted(raw, to: landed) else { return false }
@@ -1401,9 +1410,12 @@ private final class PaintingStage {
                     }
                     alternatives.sort { abs($0 - desired) < abs($1 - desired) }
                 }
+                let originalFoot = bankFoot(desired - width * 0.36, desired + width * 0.36)
                 for x in [desired] + alternatives {
                     guard root.map({ abs(x - $0.x) >= clearance }) ?? true else { continue }
                     guard let foot = bankFoot(x - width * 0.36, x + width * 0.36) else { continue }
+                    // Do not descend onto the nearer road merely to clear the tree.
+                    if let originalFoot, foot > originalFoot + height * 0.25 { continue }
                     pinned = true
                     let landed = add(.house, CGRect(x: x - width / 2, y: foot - height, width: width, height: height), source: raw)
                     pinned = false
