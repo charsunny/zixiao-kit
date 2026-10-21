@@ -110,16 +110,18 @@ extension ShanShuiEngine {
     func paintingSmoke(beacon: Bool) -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
         if beacon {
-            let drift = r() < 0.5 ? -1.0 : 1.0
-            let core = (0...30).map { i -> P in
-                let t = Double(i) / 30
-                return P(30 + drift * 4 * pow(max(0, t - 0.85) / 0.15, 2), 130 - t * 130)
+            // A column that rises dead straight and thins away: stacked segments, paler and a
+            // little wider with height, so it ends in air rather than in a hard cap.
+            let segments = 8
+            for k in 0..<segments {
+                let t0 = Double(k) / Double(segments), t1 = Double(k + 1) / Double(segments)
+                let y0 = 130 - t0 * 130, y1 = 130 - t1 * 130
+                let w0 = 1.6 + 2.6 * t0, w1 = 1.6 + 2.6 * t1
+                let sway = 1.2 * sin(t1 * 2.4)
+                c.append(poly([P(30 - w0, y0), P(30 + sway - w1, y1), P(30 + sway + w1, y1), P(30 + w0, y0)],
+                    fil: .gray(0, 0.11 * (1 - t0 * 0.85)), str: nil))
             }
-            let left = core.enumerated().map { i, p in P(p.x - (2.2 + 2.5 * pow(Double(i) / 30, 3)), p.y) }
-            let right = core.enumerated().map { i, p in P(p.x + (2.2 + 2.5 * pow(Double(i) / 30, 3)), p.y) }
-            c.append(poly(left + right.reversed(), fil: .gray(0, 0.10), str: nil))
-            c += inkLine(core, width: 0.6, tone: 0.16, dry: 0.6)
-            c += inkBlot(core.last!.x + drift * 3, 3, radius: 5, squash: 0.4, angle: drift * 0.2, tone: 0.05)
+            c += inkLine([P(30, 130), P(30, 70), P(30.4, 40)], width: 0.5, tone: 0.12, dry: 0.7)
             return c
         }
         for k in 0..<4 {
