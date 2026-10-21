@@ -84,6 +84,31 @@ final class ZXArtSceneReviewTests: XCTestCase {
         try write(image, to: URL(fileURLWithPath: dir).appendingPathComponent("trees.png"))
     }
 
+    /// 岸谱: 汀渚、陡岸、边角石矶各四个种子，保留模型的高宽差异。
+    func testBankReviewSheet() throws {
+        guard let dir = ProcessInfo.processInfo.environment["ZXART_REVIEW_DIR"] else {
+            throw XCTSkip("设 ZXART_REVIEW_DIR 才出审图样张")
+        }
+        var shapes: [ZXArt.Shape] = []
+        for (row, style) in [ShanShuiEngine.BankStyle.shoal, .cliff, .headland].enumerated() {
+            for column in 0..<4 {
+                let engine = ShanShuiEngine(seed: .init("bank-outline-\(column)"))
+                let canv = engine.paintingSlope(style).map { poly -> ZXArt.SSPoly in
+                    var p = poly
+                    p.p = poly.p.map { ZXArt.P($0.x * 0.78 + Double(column) * 290 + 10,
+                        $0.y * 0.78 + Double(row) * 145 + 15) }
+                    p.wid *= 0.78
+                    return p
+                }
+                ZXArt.appendShapes(canv, palette: .paperInk, into: &shapes)
+            }
+        }
+        let drawing = ZXArt.Drawing(width: 1160, height: 435, background: ZXArt.Palette.paperInk.paper,
+            layers: [.init(shapes: shapes)])
+        let image = try XCTUnwrap(ZXArt.render(drawing, pixelWidth: 1160, pixelHeight: 435))
+        try write(image, to: URL(fileURLWithPath: dir).appendingPathComponent("banks.png"))
+    }
+
     /// 在画上用淡线框出诗句框。
     private func framedWithVerse(_ image: CGImage, procedural: ZXArt.Procedural, size: CGSize,
                                  palette: ZXArt.Palette) throws -> CGImage {

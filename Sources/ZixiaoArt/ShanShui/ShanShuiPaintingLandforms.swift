@@ -2,45 +2,108 @@
 import Foundation
 
 extension ShanShuiEngine {
-    /// A bank is one continuous slope, not four copies of a stone asset.
+    /// Seeded shores: separate low shoals, angular bluffs, or descending rock shelves.
     func paintingSlope(_ style: BankStyle) -> ZXArt.SSCanv {
-        let flip = style == .shoal && r() < 0.5
-        let height = style == .shoal ? 34.0 : (style == .cliff ? 100 : 72)
-        let crest = inkCurve([P(0, height * 0.86), P(24, height * 0.55), P(60, height * 0.38),
-            P(91, height * 0.10), P(119, height * 0.18), P(149, height * 0.42),
-            P(184, height * 0.57), P(220, height * 0.70), P(268, height * 0.91), P(300, height)])
-        let bottom = inkCurve([P(300, height), P(243, height + 5), P(181, height + 9),
-            P(119, height + 13), P(52, height + 7), P(0, height * 0.86)])
-        var c = [poly(crest + bottom, fil: .white, str: nil),
-                 poly(crest + bottom, fil: .gray(0, 0.045), str: nil)]
-        c += inkSurface(crest + bottom, textured: true, shadowWash: false)
-        // 折带 / 披麻: long broken fibres bend with the low bank; cliff planes use broad side strokes.
-        for k in 0..<34 {
-            let i = 2 + Int(r() * Double(crest.count - 5)), p = crest[i]
-            let reach = max(2, height + 3 - p.y) * (0.25 + r() * 0.65)
-            let dx = (style == .cliff ? -0.25 : -0.75) * reach
-            let line = inkCurve([P(p.x, p.y + 2), P(p.x + dx * 0.25, p.y + reach * 0.42),
-                P(p.x + dx, p.y + reach * 0.8), P(p.x + dx + 8, p.y + reach)])
-            c += inkLine(line, width: style == .cliff ? 1.0 + r() * 2.2 : 0.4 + r() * 0.6,
-                tone: k % 7 == 0 ? 0.48 : 0.15 + r() * 0.18, dry: 0.65)
+        let width = 270 + r() * 70
+        let height = style == .shoal ? 24 + r() * 20 : (style == .cliff ? 75 + r() * 35 : 52 + r() * 32)
+        let flip = r() < 0.5
+        let sections = style == .headland ? 3 : 2 + Int(r() * 2)
+        let lengths = (0..<sections).map { _ in 0.7 + r() * 0.8 }
+        let total = lengths.reduce(0, +)
+        var controls = [P(0, height * (style == .headland ? 0.35 : 0.88))]
+        var x = 0.0
+        for k in 0..<sections {
+            let span = width * lengths[k] / total
+            let peak = x + span * (0.24 + r() * 0.32)
+            switch style {
+            case .shoal:
+                let top = height * (0.08 + r() * 0.48)
+                controls += [P(x + span * 0.12, height * (0.65 + r() * 0.2)),
+                    P(peak, top), P(x + span * 0.82, top + height * (0.15 + r() * 0.18)),
+                    P(x + span, height * (0.78 + r() * 0.20))]
+            case .cliff:
+                let top = height * (0.05 + r() * 0.36)
+                controls += [P(peak, top), P(x + span * 0.72, top + height * (0.02 + r() * 0.08)),
+                    P(x + span * 0.82, height * (0.62 + r() * 0.17)),
+                    P(x + span, height * (0.77 + r() * 0.17))]
+            case .headland:
+                let top = height * (0.04 + Double(k) * 0.24 + r() * 0.09)
+                controls += [P(peak, top), P(x + span * 0.74, top + height * (0.04 + r() * 0.07)),
+                    P(x + span, top + height * (0.20 + r() * 0.08))]
+            }
+            x += span
         }
-        for start in stride(from: 1, to: crest.count - 5, by: 7) {
-            c += inkLine(Array(crest[start...min(start + 5, crest.count - 1)]),
-                width: style == .shoal ? 1.2 : 2.0, tone: 0.62, dry: 0.42)
+        let crest: [P]
+        if style == .shoal { crest = inkCurve(controls) }
+        else {
+            // Straight, unequal ledges preserve the angular faces instead of rounding every rock.
+            crest = zip(controls, controls.dropFirst()).flatMap { a, b in
+                (0..<6).map { i in let t = Double(i) / 6; return P(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t) }
+            } + [controls.last!]
         }
-        // Uneven moss groups on the shoulders, with open passages between them.
-        for cluster in [0.18, 0.34, 0.63] {
-            let i = Int(cluster * Double(crest.count - 1)), p = crest[i]
-            for _ in 0..<(3 + Int(r() * 5)) {
-                c += inkBlot(p.x + (r() - 0.5) * 19, p.y + r() * 5,
-                    radius: 0.8 + r() * 1.7, squash: 0.44, tone: 0.65 + r() * 0.25)
+        let bottom = inkCurve([crest.last!, P(width * (0.77 + r() * 0.10), height + 4 + r() * 8),
+            P(width * (0.37 + r() * 0.18), height + 6 + r() * 10),
+            P(width * (0.08 + r() * 0.12), height + r() * 5), crest[0]])
+        let outline = crest + bottom
+        var c = [poly(outline, fil: .white, str: nil)]
+        // inkSurface supplies only the dilute base. Fibres below own the texture, avoiding two
+        // full layers of hatching; darker washes sit beneath selected shoulders, not over the bank.
+        c += inkSurface(outline, textured: false, shadowWash: false)
+        for k in 0..<sections {
+            let i = min(crest.count - 2, Int((Double(k) + 0.55) / Double(sections) * Double(crest.count - 1)))
+            let p = crest[i], extent = min(width - p.x, width * (0.10 + r() * 0.12))
+            let depth = max(2, height - p.y) * (0.35 + r() * 0.35)
+            let wash = inkCurve([p, P(p.x + extent * 0.4, p.y + depth * 0.25),
+                P(p.x + extent, min(height, p.y + depth)), P(p.x + extent * 0.15, p.y + depth * 0.7)])
+            c.append(poly(wash, fil: .gray(0, style == .cliff ? 0.06 : 0.025), str: nil))
+        }
+        func top(at x: Double) -> Double {
+            for (a, b) in zip(crest, crest.dropFirst()) where a.x <= x && x <= b.x {
+                return a.y + (b.y - a.y) * (x - a.x) / max(0.001, b.x - a.x)
+            }
+            return height
+        }
+        // 披麻: sparse fibres follow the slope in one direction, without a hooked tail.
+        let count = style == .shoal ? 13 : 18
+        for k in 0..<count {
+            let px = width * (0.10 + r() * 0.80), py = top(at: px) + 2 + r() * 3
+            let available = max(0, height - py)
+            let reach = available * (0.18 + pow(r(), 1.4) * 0.72)
+            guard reach > 3 else { continue }
+            let lean = style == .cliff ? 0.10 + r() * 0.18 : 0.30 + r() * 0.40
+            let dx = -min(px - 2, reach * lean)
+            let line = (0...18).map { i -> P in
+                let t = Double(i) / 18
+                return P(px + dx * (0.7 * t + 0.3 * t * t), py + reach * t)
+            }
+            guard line.allSatisfy({ $0.y >= top(at: $0.x) }) else { continue }
+            let shade = min(1, 0.30 + 0.45 * px / width + 0.25 * reach / max(1, available))
+            c += inkLine(line, width: style == .cliff ? 0.7 + r() * 2.0 : 0.4 + r() * 0.6,
+                tone: k % 6 == 0 ? 0.38 : (0.07 + r() * 0.17) * shade, dry: 0.65)
+        }
+        var start = 1
+        while start < crest.count - 3 {
+            let run = 3 + Int(r() * 7)
+            c += inkLine(Array(crest[start...min(start + run, crest.count - 1)]),
+                width: style == .shoal ? 0.8 + r() * 0.5 : 1.2 + r() * 0.9,
+                tone: 0.40 + r() * 0.23, dry: 0.52)
+            start += run + (style == .shoal ? 5 : 2) + Int(r() * 6)
+        }
+        for _ in 0..<(2 + Int(r() * 3)) {
+            let p = crest[2 + Int(r() * Double(crest.count - 4))]
+            for _ in 0..<(2 + Int(r() * 4)) {
+                let mx = min(width - 1, max(1, p.x + (r() - 0.5) * 13))
+                c += inkBlot(mx, top(at: mx) + 1 + r() * 3,
+                    radius: 0.7 + r() * 1.4, squash: 0.44, tone: 0.55 + r() * 0.30)
             }
         }
-        for (x, span) in [(8.0, 36.0), (77, 62), (185, 47), (258, 25)] {
-            c += inkLine(inkCurve([P(x, height + 5), P(x + span * 0.5, height + 7), P(x + span, height + 5)]),
-                width: 1.7, tone: 0.56, dry: 0.62)
+        // Broken water-facing edges, leaving passages between the shoals.
+        for _ in 0..<(2 + Int(r() * 3)) {
+            let x = width * (0.04 + r() * 0.78), span = width * (0.06 + r() * 0.13)
+            c += inkLine([P(x, height + 3), P(x + span * 0.5, height + 4), P(x + span, height + 3)],
+                width: 1.1, tone: 0.40, dry: 0.65)
         }
-        if flip { c = c.map { poly in var p = poly; p.p = poly.p.map { P(300 - $0.x, $0.y) }; return p } }
+        if flip { c = c.map { poly in var p = poly; p.p = poly.p.map { P(width - $0.x, $0.y) }; return p } }
         return c
     }
 

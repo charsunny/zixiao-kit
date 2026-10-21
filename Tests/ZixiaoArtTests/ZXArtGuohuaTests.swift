@@ -67,6 +67,62 @@ struct ZXArtGuohuaTests {
         }
     }
 
+    @Test func bankOutlinesVaryBeyondScalingAndMirroring() throws {
+        for style in [ShanShuiEngine.BankStyle.shoal, .cliff, .headland] {
+            var signatures = Set<[Int]>()
+            for index in 0..<8 {
+                func outline() throws -> [ZXArt.P] {
+                    let engine = ShanShuiEngine(seed: .init("bank-outline-\(index)"))
+                    return try #require(engine.paintingSlope(style).first).p
+                }
+                let points = try outline()
+                let repeated = try outline()
+                #expect(points.map(\.x) == repeated.map(\.x) && points.map(\.y) == repeated.map(\.y))
+                let minX = points.map(\.x).min()!, maxX = points.map(\.x).max()!
+                let minY = points.map(\.y).min()!, maxY = points.map(\.y).max()!
+                // Quantized normalized shape: merely changing height/width cannot pass.
+                signatures.insert(points.flatMap { [Int(($0.x - minX) / (maxX - minX) * 100),
+                    Int(($0.y - minY) / (maxY - minY) * 100)] })
+            }
+            #expect(signatures.count >= 6)
+        }
+    }
+
+    @Test func celestialDiscsStayOutsidePaintedMountainBodies() throws {
+        for scene in [ZXArt.PoetryScene.temple, .retreat] {
+            for composition in [ZXArt.SceneComposition.corner, .depth, .oppositeBank] {
+                for size in [CGSize(width: 750, height: 1000), CGSize(width: 1200, height: 675)] {
+                    for seed in ["review-temple", "review-retreat", "sky-clearance-2"] {
+                        let motif: ZXArt.SceneMotif = scene == .temple ? .sunrise : .moon
+                        let selection = ZXArt.SceneSelection(scene: scene,
+                            options: .init(motifs: ZXArt.defaultMotifs(for: scene) + [motif]), matched: [])
+                        let recipe = selection.paintingProcedural(seed: seed, composition: composition)
+                        let drawing = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: size))
+                        let body = try #require(drawing.sceneElements.first { $0.motif == motif.rawValue }).bounds.cgRect
+                        let celestial = CGRect(x: body.minX * drawing.width, y: body.minY * drawing.height,
+                            width: body.width * drawing.width, height: body.height * drawing.height)
+                        // Inspect the actual filled outlines, including the guest peak, independently
+                        // of the placement helper. Sample the whole disc's bounding rectangle.
+                        let outlines = drawing.layers.filter { $0.fade != nil && $0.tooth != nil }
+                            .compactMap { $0.shapes.first }
+                        #expect(!outlines.isEmpty)
+                        for shape in outlines {
+                            let path = CGMutablePath()
+                            path.addLines(between: shape.points.map { CGPoint(x: Double($0.x), y: Double($0.y)) })
+                            path.closeSubpath()
+                            var overlaps = false
+                            for y in 0...24 { for x in 0...24 {
+                                if path.contains(CGPoint(x: celestial.minX + celestial.width * Double(x) / 24,
+                                    y: celestial.minY + celestial.height * Double(y) / 24)) { overlaps = true }
+                            } }
+                            #expect(!overlaps, "\(scene) \(composition) \(size) \(seed)")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     @Test func inkDepthPreservesPaperAndOrdersInkStrength() throws {
         let engine = ShanShuiEngine(seed: .init("guohua-ink"))
         let source = engine.paintingHouse()

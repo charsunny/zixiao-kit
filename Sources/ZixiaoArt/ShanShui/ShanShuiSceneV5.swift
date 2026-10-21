@@ -109,6 +109,7 @@ private final class PaintingStage {
     var placed = Set<Motif>()
     var celestialLayers: [(layer: Int, motif: Motif)] = []
     var boats: [ZXArt.Anchors.Boat] = []
+    var mountainRidges: [[ZXArt.P]] = []
     enum Structure { case high, deep, level, corner }
     var structure: Structure = .level
     var currentScene: ZXArt.PoetryScene = .retreat
@@ -229,6 +230,10 @@ private final class PaintingStage {
         if currentScene != .historic, motif == .traveler || motif == .horse {
             let cleared = clearFigureGround(object.bounds)
             if cleared != object.bounds, let moved = fitted(raw, to: cleared) { object = moved }
+        }
+        if [.moon, .crescent, .sunrise, .sunset].contains(motif), !mountainRidges.isEmpty {
+            guard let sky = openSky(for: object.bounds), let moved = fitted(raw, to: sky) else { return false }
+            object = moved
         }
         let accents: Set<Motif> = [.pine, .oldTree, .bareTree, .layeredTree, .willow, .bamboo,
             .blossom, .maple, .house, .hut, .pavilion, .templeGate, .pagoda, .boat, .angler,
@@ -507,6 +512,7 @@ private final class PaintingStage {
                 y: peakBox.minY + peakBox.height * 0.28, width: peakBox.width * 0.51, height: peakBox.height * 0.62)
             if let guest = fitted(engine.paintingMountain(form: .folded), to: guestBox) {
                 let r = guest.bounds
+                if let outline = guest.canv.first { mountainRidges.append(Array(outline.p.dropLast(2))) }
                 parts.append(.init(canv: engine.paintingInk(guest.canv, depth: .middle),
                     fade: .init(top: r.minY + r.height * 0.55, bottom: r.maxY, seed: engine.inkSeed())))
             }
@@ -516,6 +522,7 @@ private final class PaintingStage {
             // 山腰云锁: the lower third of the main peak dissolves into cloud instead of
             // standing on the bank like a monument.
             let r = object.bounds
+            if let outline = object.canv.first { mountainRidges.append(Array(outline.p.dropLast(2))) }
             parts.append(.init(canv: object.canv, fade: .init(top: r.maxY - r.height * 0.42,
                 bottom: r.maxY - r.height * 0.04, seed: engine.inkSeed())))
             // The true summit: the highest point of the outline in the middle half of the peak.
@@ -616,6 +623,46 @@ private final class PaintingStage {
                              width: right.x - left.x, height: max(4, box.height * 0.20))
         layWater(waterEngine.paintingSurface(.pond, width: ripples.width, height: ripples.height),
                  in: ripples, motif: "bridgeReflection")
+    }
+
+    /// Search actual sky above the main and guest ridges, not their rectangular bounding boxes.
+    /// A disc drawn in front of an opaque mountain must never overlap its shoulder.
+    private func openSky(for requested: CGRect) -> CGRect? {
+        func clearsRidges(_ rect: CGRect) -> Bool {
+            let clearance = rect.insetBy(dx: -3, dy: -3)
+            for ridge in mountainRidges {
+                for (a, b) in zip(ridge, ridge.dropFirst()) {
+                    let left = max(clearance.minX, min(a.x, b.x))
+                    let right = min(clearance.maxX, max(a.x, b.x))
+                    guard left <= right else { continue }
+                    let dx = b.x - a.x
+                    let y0 = abs(dx) < 0.001 ? min(a.y, b.y) : a.y + (b.y - a.y) * (left - a.x) / dx
+                    let y1 = abs(dx) < 0.001 ? min(a.y, b.y) : a.y + (b.y - a.y) * (right - a.x) / dx
+                    if clearance.maxY >= min(y0, y1) { return false }
+                }
+            }
+            return true
+        }
+        if clearsRidges(requested) { return requested }
+        let pad = min(w, h) * 0.045
+        for scale in [1.0, 0.8, 0.6] {
+            let width = requested.width * scale, height = requested.height * scale
+            let sky = CGRect(x: art.minX, y: pad, width: art.width,
+                height: max(height, min(footer, art.minY + art.height * 0.55) - pad))
+            var candidates: [CGRect] = []
+            for row in 0...16 { for column in 0...16 {
+                let x = sky.minX + max(0, sky.width - width) * Double(column) / 16
+                let y = sky.minY + max(0, sky.height - height) * Double(row) / 16
+                let rect = CGRect(x: x, y: y, width: width, height: height)
+                if !rect.intersects(verse), clearsRidges(rect) { candidates.append(rect) }
+            } }
+            // Keep the original compositional relationship whenever nearby blank paper is available.
+            if let nearest = candidates.min(by: {
+                hypot($0.midX - requested.midX, $0.midY - requested.midY)
+                    < hypot($1.midX - requested.midX, $1.midY - requested.midY)
+            }) { return nearest }
+        }
+        return nil
     }
 
     private func celestialSlot(_ motif: Motif) -> CGRect {
