@@ -8,11 +8,15 @@ extension ShanShuiEngine {
         let width = 280 + r() * 55
         let height = style == .shoal ? 30 + r() * 17 : (style == .cliff ? 72 + r() * 26 : 48 + r() * 28)
         let count = 2 + Int(r() * 2), flip = r() < 0.5
+        let weights = (0..<count).map { _ in 0.65 + r() * 0.85 }
+        let sum = weights.reduce(0, +)
+        var accumulated = 0.0
         var blocks: [(crest: [P], foot: [P])] = []
         for i in 0..<count {
-            let fraction = Double(i) / Double(count)
-            let left = i == 0 ? 0 : width * (fraction - 0.07)
-            let right = i == count - 1 ? width : width * (fraction + 1 / Double(count) + 0.07)
+            let fraction = accumulated / sum
+            accumulated += weights[i]
+            let left = i == 0 ? 0 : width * (fraction - 0.08)
+            let right = i == count - 1 ? width : width * (accumulated / sum + 0.07)
             let span = right - left
             let top = height * (style == .headland ? 0.08 + fraction * 0.48 : 0.08 + r() * 0.28)
             let floor = height * (0.80 + Double(i) * 0.07)
@@ -23,10 +27,11 @@ extension ShanShuiEngine {
                     P(left + span * 0.32, top), P(left + span * 0.70, top + height * 0.035),
                     P(left + span * 0.86, top + height * 0.13), P(right, floor - height * 0.08)]
             } else {
-                let controls = [P(left, floor - height * 0.09), P(left + span * 0.19, top + height * 0.18),
-                    P(left + span * (0.39 + r() * 0.12), top), P(left + span * 0.77, top + height * 0.13),
-                    P(right, floor - height * 0.08)]
-                crest = style == .shoal ? inkCurve(controls) : controls
+                let controls = [P(left, floor - height * 0.12), P(left + span * 0.15, top + height * 0.21),
+                    P(left + span * 0.29, top + height * 0.08), P(left + span * (0.43 + r() * 0.08), top + height * 0.11),
+                    P(left + span * 0.62, top), P(left + span * 0.81, top + height * 0.07),
+                    P(left + span * 0.91, top + height * 0.35), P(right, floor - height * 0.08)]
+                crest = style == .shoal ? inkCurve(controls, steps: 4) : controls
             }
             let foot = inkCurve([crest.last!, P(left + span * 0.73, floor + height * 0.05),
                 P(left + span * 0.30, floor + height * 0.02), crest[0]])
@@ -58,24 +63,36 @@ extension ShanShuiEngine {
             }
             c.append(poly(shadeTop + [P(right - span * 0.03, floor - 1), P(left + span * 0.48, floor - 1)],
                           fil: .gray(0, 0.035), str: nil))
-            c += inkLine(crest, width: style == .cliff ? 1.4 : 1.05, tone: 0.53, dry: 0.50)
-            c += inkLine(Array(foot.dropFirst().dropLast()), width: 1.35, tone: 0.62, dry: 0.55)
-            for bundle in 0..<(style == .cliff ? 5 : 6) {
-                let u = 0.46 + Double(bundle) * 0.065 + r() * 0.035
+            if style == .shoal {
+                c += inkLine(crest, width: 1.15, tone: 0.58, dry: 0.65)
+            } else {
+                c += inkEdges(crest, width: 1.3, tone: 0.60, dry: 0.63)
+            }
+            for start in stride(from: 1, to: foot.count - 5, by: 8) {
+                c += inkLine(Array(foot[start...start + 4]), width: 1.6, tone: 0.65, dry: 0.60)
+            }
+            // Brush bundles start at different depths, densest beside the descending right face.
+            for bundle in 0..<(style == .cliff ? 11 : 14) {
+                let u = 0.30 + r() * 0.57
                 let x = left + span * u
                 let y = top(crest, x), depth = floor - y
-                let startY = y + depth * (0.18 + r() * 0.16)
-                let reach = depth * (0.22 + r() * 0.28)
-                let lean = style == .cliff ? -reach * 0.22 : reach * 0.45
+                let startY = y + depth * (bundle % 3 == 0 ? 0.06 : 0.20 + r() * 0.38)
+                let reach = min(30, depth * (0.22 + r() * 0.38))
+                let lean = style == .cliff ? -reach * (0.14 + r() * 0.28) : reach * (0.18 + r() * 0.48)
                 for hair in 0..<(3 + Int(r() * 3)) {
                     let dx = Double(hair) * (0.8 + r() * 0.5)
                     let endY = min(floor - 3, startY + reach * (0.7 + r() * 0.3))
-                    let line = [P(x + dx, startY), P(x + dx + lean * 0.45, (startY + endY) / 2),
-                                P(x + dx + lean, endY)]
+                    let line = inkCurve([P(x + dx, startY), P(x + dx + lean * 0.18, startY + (endY - startY) * 0.33),
+                                P(x + dx + lean * 0.72, startY + (endY - startY) * 0.72), P(x + dx + lean, endY)])
                     guard line.allSatisfy({ $0.x < right - 2 && $0.y > top(crest, $0.x) }) else { continue }
-                    c += inkLine(line, width: style == .cliff && hair == 0 ? 2.8 : 0.65,
-                        tone: hair == 0 ? 0.38 : 0.22, dry: 0.70, profile: .cone)
+                    c += inkLine(line, width: hair == 0 ? (style == .cliff ? 4.2 : 1.5) : 0.7,
+                        tone: hair == 0 ? 0.43 : 0.28, dry: 0.70, profile: .cone)
                 }
+            }
+            if style == .cliff {
+                let x = left + span * 0.81, y = top(crest, x)
+                c += inkEdges([P(x, y), P(x - span * 0.035, y + (floor - y) * 0.48),
+                               P(x + span * 0.025, floor - 3)], width: 1.3, tone: 0.48, dry: 0.67)
             }
             // 折带 on the low shelf: short angular turns, attached to the shaded contour.
             if style == .headland {

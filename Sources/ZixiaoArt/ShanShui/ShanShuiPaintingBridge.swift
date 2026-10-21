@@ -7,6 +7,7 @@ struct PaintingBridge {
     let width: Double
     let rise: Double
     let railing: Bool
+    let pedestrian: Bool
 
     var deck: [ZXArt.P] {
         (0...36).map { i in

@@ -174,22 +174,25 @@ extension ShanShuiEngine {
 
     func paintingRiverRibbon() -> ZXArt.SSCanv {
         let width = 340.0, height = 65.0
+        let phase = r() * 5, bend = 0.08 + r() * 0.14, opening = 18 + r() * 16
         let middle = (0...40).map { i -> P in
             let t = Double(i) / 40
-            return P(width * t, height * (0.40 + 0.14 * sin(t * .pi * 2 + 0.3)))
+            return P(width * t, height * (0.48 + bend * sin(t * .pi * 1.5 + phase)))
         }
-        let far = middle.enumerated().map { i, p in P(p.x, p.y - 11 * pow(1 - Double(i) / 40, 0.7)) }
-        let near = middle.enumerated().map { i, p in P(p.x, p.y + 18 * pow(1 - Double(i) / 40, 0.7)) }
+        let far = middle.enumerated().map { i, p in P(p.x, p.y - opening * 0.42 * pow(1 - Double(i) / 40, 0.7)) }
+        let near = middle.enumerated().map { i, p in P(p.x, p.y + opening * 0.58 * pow(1 - Double(i) / 40, 0.7)) }
         var c = [poly(far + near.reversed(), fil: .white, str: nil)]
-        for bank in [far, near] {
-            c += inkLine(bank, width: 3, tone: 0.06, dry: 0.4)
-            c += inkLine(bank, width: 0.8, tone: 0.32, dry: 0.55)
-        }
-        for start in stride(from: 2, to: 34, by: 5) {
-            for offset in [-3.0, 4] {
-                c += inkLine(Array(middle[start...start + 4]).map { P($0.x, $0.y + offset) },
-                    width: 0.65, tone: 0.22, dry: 0.6)
+        for (bank, side) in [(far, -1.0), (near, 1.0)] {
+            let outer = bank.map { P($0.x, $0.y + side * 2) }
+            c.append(poly(bank + outer.reversed(), fil: .gray(0, 0.055), str: nil))
+            for start in stride(from: 0, to: 36, by: 7) {
+                c += inkLine(Array(bank[start...start + 4]), width: 0.8, tone: 0.32, dry: 0.6)
             }
+        }
+        for start in stride(from: 2, to: 32, by: 5) {
+            let p = middle[start], length = 12 + r() * 20
+            c += inkLine([P(p.x, p.y - 1), P(p.x + length * 0.5, p.y), P(p.x + length, p.y - 0.3)],
+                         width: 0.65, tone: 0.27, dry: 0.6)
         }
         return c
     }

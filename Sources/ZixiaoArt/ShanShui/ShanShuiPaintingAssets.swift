@@ -380,12 +380,21 @@ extension ShanShuiEngine {
                 c += inkLine([P(p.x, p.y - 12), P(p.x, p.y + 1)], width: 1.5, tone: 0.67, dry: 0.4)
             }
         }
+        if bridge.pedestrian {
+            let foot = bridge.deck[21]
+            c += paintingPerson(pose: 0).map { poly in
+                var p = poly
+                p.p = p.p.map { P(foot.x + ($0.x - 44) * 0.5, foot.y + ($0.y - 44) * 0.5) }
+                p.wid *= 0.5
+                return p
+            }
+        }
         return c
     }
 
     func paintingBridgePlan() -> PaintingBridge {
-        PaintingBridge(kind: PaintingBridge.Kind.allCases[Int(r() * 3)], width: 140 + r() * 32,
-                       rise: 24 + r() * 13, railing: r() < 0.5)
+        PaintingBridge(kind: PaintingBridge.Kind.allCases[Int(r() * 65_536) % 3], width: 140 + r() * 32,
+                       rise: 24 + r() * 13, railing: r() < 0.5, pedestrian: r() < 0.3)
     }
 
     func paintingBridgeReflection(_ bridge: PaintingBridge) -> ZXArt.SSCanv {
