@@ -972,7 +972,7 @@ private final class PaintingStage {
                 width: near.width / w, height: near.height / h)))
             placed.insert(.waves)
             if chosen.contains(.reef) {
-                let reefBox = CGRect(x: verse.isNull || verse.minX > w / 2 ? w - pad - near.width * 0.30 : pad,
+                let reefBox = CGRect(x: verse.isNull || verse.minX > w / 2 ? near.maxX - near.width * 0.30 : near.minX,
                                      y: near.minY + near.height * 0.45, width: near.width * 0.30, height: near.height * 0.55)
                 if let rock = fitted(engine.paintingRock(width: 120, height: 55, tone: 1.3), to: reefBox) {
                     parts.append(.near(rock.canv)); placed.insert(.reef)

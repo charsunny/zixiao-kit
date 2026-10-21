@@ -145,13 +145,14 @@ extension ShanShuiEngine {
         var c: ZXArt.SSCanv = []
         for group in 0..<9 {
             let t = Double(group) / 8
-            let x = width * (0.08 + r() * 0.56)
+            let position = 0.08 + r() * 0.56
             let y = height * (0.10 + 0.76 * pow(t, 1.4))
             let span = width * (0.18 + 0.25 * t) * (0.7 + r() * 0.4)
+            let x = min(width - span - 1, width * position)
             let rise = height * (0.012 + 0.065 * t)
             let turn = 0.32 + r() * 0.35
             for echo in 0..<(2 + Int(t * 3)) {
-                let offset = Double(echo) * (1.2 + t * 1.6)
+                let offset = Double(echo) * min(1.2 + t * 1.6, height * 0.018)
                 let path = (0...28).map { i -> P in
                     let u = Double(i) / 28
                     let crest = exp(-pow((u - turn) / 0.19, 2))

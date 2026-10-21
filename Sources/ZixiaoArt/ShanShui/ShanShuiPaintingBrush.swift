@@ -105,8 +105,7 @@ extension ShanShuiEngine {
         }
     }
 
-    /// A low, staggered slope (坡陀): one taller rock as the host, flatter guests stepping down and
-    /// away, so the bank reads as ground receding into water rather than a pile of cushions.
+    /// Connected terrain: low hemp-fibre shoals, angular cliffs, or a descending corner headland.
     enum BankStyle { case shoal, cliff, headland }
 
     func paintingBank(style: BankStyle = .headland) -> ZXArt.SSCanv {
