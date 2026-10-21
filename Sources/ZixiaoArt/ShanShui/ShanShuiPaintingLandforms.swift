@@ -2,107 +2,192 @@
 import Foundation
 
 extension ShanShuiEngine {
-    /// A bank consists of overlapping stones, each drawn with long folded contours.
-    /// The only opaque shapes are the stones themselves; there is no full-width paper plinth.
+    /// A bank (坡石) as landscape painters build it: one main stone, lower companions in front
+    /// and sometimes a back stone peeking over. Each stone shows its faces (石分三面): a lit top
+    /// left as paper, a fold line where the top turns down, and a shaded front face below it that
+    /// carries the texture and the wash. Shoals are long and low with 折带 strokes; earth banks
+    /// hang 披麻 strands from the fold; cliffs are flat-topped, square-shouldered and split by
+    /// side-brush axe cuts (斧劈).
     func paintingSlope(_ style: BankStyle) -> ZXArt.SSCanv {
-        let width = 280 + r() * 45
-        let height = style == .shoal ? 53 + r() * 17 : (style == .cliff ? 88 + r() * 22 : 69 + r() * 24)
-        let count = 2 + Int(r() * 3), flip = r() < 0.5
+        let width = 280 + r() * 50
+        let height = style == .shoal ? 36 + r() * 14 : (style == .cliff ? 92 + r() * 26 : 64 + r() * 24)
+        let flip = r() < 0.5
+        struct Stone { var x0, x1, top, floor: Double; var rank: Int }
+        var stones: [Stone] = []
+        let mainWidth = width * (style == .shoal ? 0.58 + r() * 0.16 : 0.46 + r() * 0.16)
+        let mainX = width * (0.02 + r() * 0.08)
+        let main = Stone(x0: mainX, x1: mainX + mainWidth, top: height * (0.10 + r() * 0.06), floor: height, rank: 1)
+        if style != .shoal || r() < 0.4 {
+            // The back stone rises behind the main one, offset to the gentle side.
+            let w = mainWidth * (0.45 + r() * 0.25)
+            let x = mainX + mainWidth * (0.30 + r() * 0.40)
+            stones.append(Stone(x0: x, x1: min(width, x + w), top: 0,
+                floor: height * (0.55 + r() * 0.15), rank: 0))
+        }
+        stones.append(main)
+        var x = main.x1 - mainWidth * (0.22 + r() * 0.16)
+        for k in 0..<(1 + Int(r() * 2.4)) {
+            let w = width * (0.20 + r() * 0.14) * (k == 0 ? 1 : 0.7)
+            guard x + w <= width + 1 else { break }
+            let top = height * (0.36 + r() * 0.22 + Double(k) * 0.12)
+            stones.append(Stone(x0: x, x1: min(width, x + w), top: top, floor: height * (0.97 + r() * 0.03), rank: 2))
+            x += w * (0.55 + r() * 0.30)
+        }
+
         var c: ZXArt.SSCanv = []
-        for index in 0..<count {
-            let progress = Double(index) / Double(count - 1)
-            let span = width / (1 + Double(count - 1) * 0.62)
-            let left = progress * (width - span), right = left + span
-            let top = height * (0.03 + progress * 0.30 + r() * 0.06)
-            let floor = height * (0.70 + progress * 0.27)
-            let depth = floor - top
-            let shoulder = left + span * (0.73 + r() * 0.09)
-            let crest = inkCurve([P(left, floor - depth * 0.12),
-                P(left + span * 0.20, top + depth * 0.10),
-                P(left + span * 0.48, top), P(shoulder, top + depth * 0.06),
-                P(right, floor - depth * 0.10)], steps: 10)
-            func ridge(_ x: Double) -> Double {
-                for (a, b) in zip(crest, crest.dropFirst()) where x >= a.x && x <= b.x {
-                    return a.y + (b.y - a.y) * (x - a.x) / max(0.001, b.x - a.x)
-                }
-                return floor
-            }
-            let foot = inkCurve([crest.last!, P(left + span * 0.70, floor + 1),
-                P(left + span * 0.28, floor - depth * 0.02), crest[0]])
-            c.append(poly(crest + foot, fil: .white, str: nil))
-            let tone = 0.57 + progress * 0.17
-            // Two long runs share the crest. Pressure loads the turn and lifts on the cap.
-            c += slopeStroke(Array(crest[0...25]), width: 1.9, tone: tone,
-                pressures: [0.3, 0.9, 0.5, 0.36, 0.65])
-            c += slopeStroke(Array(crest[23...40]), width: 2.3, tone: tone + 0.04,
-                pressures: [0.3, 0.45, 1.25, 0.8, 0.12])
-            let foldX = left + span * (0.56 + r() * 0.12)
-            let foldY = ridge(foldX) + depth * 0.08
-            c += slopeStroke(inkCurve([P(foldX - span * 0.17, foldY), P(foldX, foldY - 1),
-                P(foldX + span * 0.055, foldY + depth * 0.28)]), width: 1.45, tone: tone,
-                pressures: [0.3, 0.5, 1, 0.6, 0.1])
-            if style == .cliff {
-                // Broad side-brush axe cuts: short diagonal planes, never vertical hair rows.
-                for cut in 0..<(3 + Int(r() * 2)) {
-                    let x = left + span * (0.37 + Double(cut) * 0.105 + r() * 0.035)
-                    let y = ridge(x) + depth * (0.16 + r() * 0.07)
-                    let reach = depth * (0.25 + r() * 0.15)
-                    let lean = reach * (0.70 + r() * 0.45)
-                    c += slopeStroke(inkCurve([P(x, y), P(x + lean * 0.45, y + reach * 0.45),
-                        P(x + lean, y + reach)]), width: 7 + r() * 5, tone: 0.38 + r() * 0.10,
-                        pressures: [1.1, 0.85, 0.5, 0.22, 0.03], dry: 0.72)
-                }
-            } else {
-                for bundle in 0..<3 {
-                    let x = left + span * (0.30 + Double(bundle) * 0.19 + r() * 0.04)
-                    for hair in 0..<(3 + Int(r() * 4)) {
-                        let sx = x + Double(hair) * 2.4
-                        let sy = ridge(sx) + depth * (0.08 + Double(hair) * 0.025)
-                        let reach = depth * (0.15 + r() * 0.25)
-                        let run = reach * (style == .shoal ? 1.6 : 1.25)
-                        let line = [P(sx, sy), P(sx + run * 0.7, sy + reach * 0.12),
-                            P(sx + run + reach * 0.65, sy + reach)]
-                        guard line.last!.x < right - 3 else { continue }
-                        c += slopeStroke(line, width: 0.8 + r() * 0.6, tone: 0.30 + r() * 0.20,
-                            pressures: [0.5, 0.8, 0.9, 0.45, 0.08], dry: 0.65)
-                    }
-                }
-            }
-            // One continuous, feathered wash under the crest; sine-tapered ends and
-            // fading adjacent strips avoid both rectangular patches and nested ghost shapes.
-            for band in 0..<24 {
-                func edge(_ t: Double) -> [P] {
-                    (0...32).map { j in
-                        let u = Double(j) / 32
-                        let x = left + span * (0.16 + u * 0.80)
-                        let y = ridge(x) + depth * 0.04
-                        let reach = max(0, floor - y) * pow(sin(u * .pi), 0.6)
-                        return P(x, y + reach * t)
-                    }
-                }
-                let t = Double(band) / 24
-                c.append(poly(edge(t) + edge(Double(band + 1) / 24).reversed(),
-                    fil: .gray(0, (0.055 + progress * 0.025) * pow(1 - t, 2)), str: nil))
-            }
-            // The foot remains open: two or three horizontal water-mouth strokes.
-            for k in 0..<(2 + Int(r() * 2)) {
-                let x = left + span * (0.12 + Double(k) * 0.28)
-                let y = floor + Double(k % 2) * 2.4
-                c += slopeStroke([P(x, y), P(x + span * 0.13, y - 0.7), P(x + span * 0.26, y)],
-                    width: 1.2, tone: 0.40, pressures: [0.1, 0.6, 0.5, 0.3, 0.05])
-            }
-            for u in [0.23 + r() * 0.10, 0.72 + r() * 0.06] {
-                for k in 0..<(3 + Int(r() * 5)) {
-                    let x = left + span * u + Double(k) * 3.3
-                    let y = ridge(x) + r() * 1.2
-                    c += slopeStroke([P(x, y), P(x + 2.5 + r() * 1.6, y - 0.5)],
-                        width: 1.7 + r() * 0.6, tone: 0.85 + r() * 0.09,
-                        pressures: [0.5, 1, 1, 0.8, 0.15], dry: 0.25)
-                }
-            }
+        for stone in stones {
+            c += paintingStone(x0: stone.x0, x1: stone.x1, top: stone.top, floor: stone.floor,
+                style: style, rank: stone.rank)
         }
         if flip { c = c.map { var p = $0; p.p = p.p.map { P(width - $0.x, $0.y) }; return p } }
         return c
+    }
+
+    private func paintingStone(x0: Double, x1: Double, top: Double, floor: Double,
+                               style: BankStyle, rank: Int) -> ZXArt.SSCanv {
+        let w = x1 - x0, h = floor - top
+        let cliff = style == .cliff, shoal = style == .shoal
+        // One side rises gently (the back of the slope), the other turns down steeply toward the
+        // water. Cliffs turn both shoulders sharply; the top stays nearly level.
+        let gentleLeft = r() < 0.5
+        let rise = cliff ? 0.07 + r() * 0.06 : 0.16 + r() * 0.14
+        let fall = cliff ? 0.05 + r() * 0.05 : 0.08 + r() * 0.08
+        let left = gentleLeft ? rise : fall, right = gentleLeft ? fall : rise
+        var keys = [P(x0, floor - h * 0.04),
+                    P(x0 + w * left * 0.45, top + h * (cliff ? 0.30 : 0.42) + h * r() * 0.12),
+                    P(x0 + w * left, top + h * r() * 0.06)]
+        let bumps = cliff ? 1 + Int(r() * 2) : 1 + Int(r() * 3)
+        for k in 1...bumps {
+            let u = left + (1 - left - right) * Double(k) / Double(bumps + 1)
+            keys.append(P(x0 + w * (u + (r() - 0.5) * 0.06), top + h * r() * (cliff ? 0.05 : shoal ? 0.10 : 0.16)))
+        }
+        keys += [P(x1 - w * right, top + h * (0.03 + r() * 0.10)),
+                 P(x1 - w * right * 0.35, top + h * (cliff ? 0.30 : 0.45) + h * r() * 0.15),
+                 P(x1, floor - h * 0.02)]
+        // Cliffs keep their corners; earth and shoals are rounded by the brush.
+        let crest = cliff ? densify(keys, step: 3) : inkCurve(keys, steps: 8)
+        func ridge(_ x: Double) -> Double {
+            for (a, b) in zip(crest, crest.dropFirst()) where x >= min(a.x, b.x) && x <= max(a.x, b.x) {
+                return abs(b.x - a.x) < 0.001 ? min(a.y, b.y) : a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x)
+            }
+            return floor
+        }
+        let base = inkCurve([crest.last!, P(x0 + w * 0.70, floor + 1.5), P(x0 + w * 0.30, floor + 0.5), crest[0]], steps: 8)
+        var c = [poly(crest + base, fil: .white, str: nil)]
+
+        // The fold where the lit top turns into the face, roughly parallel to the crest.
+        let drop = h * (shoal ? 0.38 + r() * 0.12 : cliff ? 0.16 + r() * 0.08 : 0.22 + r() * 0.10)
+        let foldFrom = x0 + w * (left * (0.55 + r() * 0.3))
+        let foldTo = x0 + w * (0.58 + r() * 0.30)
+        let fold = (0...20).map { i -> P in
+            let x = foldFrom + (foldTo - foldFrom) * Double(i) / 20
+            let wobble = (n(x * 0.05, Double(rank) + 7) - 0.5) * h * 0.08
+            return P(x, min(floor - 2, ridge(x) + drop + wobble))
+        } + [P(foldTo + w * 0.04, min(floor - 1, ridge(foldTo) + drop + h * (cliff ? 0.30 : 0.18)))]
+        func faceTop(_ x: Double) -> Double {
+            guard x >= foldFrom, x <= foldTo else { return min(floor, ridge(x) + drop * 1.1) }
+            let i = min(19, Int((x - foldFrom) / max(0.001, foldTo - foldFrom) * 20))
+            return fold[i].y
+        }
+
+        // Wash on the face: strongest just under the fold, fading toward the foot.
+        let washTone = (cliff ? 0.10 : 0.075) + Double(rank) * 0.012
+        for band in 0..<14 {
+            func edge(_ t: Double) -> [P] {
+                (0...28).map { j in
+                    let u = Double(j) / 28, x = x0 + w * (0.04 + u * 0.92)
+                    let y = faceTop(x)
+                    let taper = pow(sin(u * .pi), 0.5)
+                    return P(x, y + max(0, floor - y) * t * taper)
+                }
+            }
+            let t = Double(band) / 14
+            c.append(poly(edge(t) + edge(Double(band + 1) / 14).reversed(),
+                fil: .gray(0, washTone * pow(1 - t, 1.6)), str: nil))
+        }
+
+        // Texture hangs from the fold. The shaded side (the steep one) carries more strokes.
+        let shadeLeft = !gentleLeft
+        let groups = cliff ? 3 + Int(r() * 3) : 2 + Int(r() * 3)
+        for g in 0..<groups {
+            var u = (Double(g) + 0.3 + r() * 0.5) / Double(groups)
+            u = shadeLeft ? pow(u, 1.4) : 1 - pow(1 - u, 1.4)
+            let gx = x0 + w * (0.08 + u * 0.84)
+            if cliff {
+                // 斧劈: a loaded side-brush wedge, heavy at the fold and dragged down and aside.
+                let sy = faceTop(gx) + 1
+                let reach = (floor - sy) * (0.40 + r() * 0.35)
+                guard reach > 4 else { continue }
+                let lean = reach * (0.25 + r() * 0.35) * (gx < x0 + w / 2 ? -1 : 1)
+                c += slopeStroke(inkCurve([P(gx, sy), P(gx + lean * 0.4, sy + reach * 0.5), P(gx + lean, sy + reach)]),
+                    width: 6 + r() * 6, tone: 0.40 + r() * 0.14, pressures: [1.2, 0.9, 0.55, 0.25, 0.03], dry: 0.70)
+                c += slopeStroke([P(gx + 3, sy + reach * 0.1), P(gx + 3 + lean * 0.9, sy + reach * 0.95)],
+                    width: 1.1, tone: 0.55, pressures: [0.8, 1, 0.7, 0.4, 0.05], dry: 0.5)
+            } else if shoal {
+                // 折带: short strokes laid along the face, turning down at their ends.
+                for k in 0..<(2 + Int(r() * 2)) {
+                    let sy = faceTop(gx) + 2 + Double(k) * h * 0.13
+                    guard sy < floor - 2 else { break }
+                    let run = w * (0.08 + r() * 0.08)
+                    c += slopeStroke([P(gx, sy), P(gx + run, sy + 0.5), P(gx + run + 2, min(floor - 1, sy + h * 0.10))],
+                        width: 0.9 + r() * 0.5, tone: 0.34 + r() * 0.14, pressures: [0.4, 0.9, 0.8, 0.5, 0.08], dry: 0.62)
+                }
+            } else {
+                // 披麻: a bundle of strands hanging from the fold, leaning with the slope.
+                let lean = (gx < x0 + w / 2 ? -1.0 : 1.0) * (0.10 + r() * 0.20)
+                for k in 0..<(3 + Int(r() * 4)) {
+                    let sx = gx + Double(k) * (2.2 + r() * 1.2)
+                    let sy = faceTop(sx) + r() * 2
+                    let reach = (floor - sy) * (0.25 + r() * 0.45)
+                    guard reach > 3 else { continue }
+                    c += slopeStroke(inkCurve([P(sx, sy), P(sx + reach * lean * 0.3, sy + reach * 0.5),
+                        P(sx + reach * lean, sy + reach)]), width: 0.7 + r() * 0.6, tone: 0.30 + r() * 0.16,
+                        pressures: [0.6, 1, 0.8, 0.45, 0.05], dry: 0.62)
+                }
+            }
+        }
+
+        // Contour last: two or three long runs, loaded at the turns, lifted along the top.
+        let tone = 0.60 + Double(rank) * 0.08
+        let n1 = crest.count / 3 + Int(r() * Double(crest.count / 6))
+        let n2 = crest.count * 2 / 3 + Int(r() * Double(crest.count / 6))
+        let runs = [Array(crest[0...min(crest.count - 1, n1 + 1)]),
+                    Array(crest[n1...min(crest.count - 1, n2 + 1)]),
+                    Array(crest[n2...])]
+        for (i, run) in runs.enumerated() where run.count > 1 {
+            c += slopeStroke(run, width: (cliff ? 2.3 : 1.9) * (rank == 0 ? 0.8 : 1), tone: tone,
+                pressures: i == 1 ? [0.5, 0.35, 0.45, 0.6, 0.3] : [0.35, 1.0, 0.75, 0.5, 0.15], dry: 0.40)
+        }
+        c += slopeStroke(fold, width: 1.3, tone: tone - 0.10, pressures: [0.15, 0.7, 0.5, 0.8, 0.1], dry: 0.5)
+
+        // 点苔: dark horizontal dabs in clusters on the crest and its turns.
+        for _ in 0..<(rank == 0 ? 1 : 1 + Int(r() * 2)) {
+            let cx = x0 + w * (0.12 + r() * 0.76)
+            for k in 0..<(3 + Int(r() * 4)) {
+                let mx = cx + Double(k) * (2.6 + r() * 1.4) - 6
+                guard mx > x0 + 2, mx < x1 - 2 else { continue }
+                let my = ridge(mx) + r() * 1.5
+                c += slopeStroke([P(mx, my), P(mx + 2.2 + r() * 1.4, my - 0.4)], width: 1.6 + r() * 0.6,
+                    tone: 0.86 + r() * 0.08, pressures: [0.5, 1, 1, 0.8, 0.15], dry: 0.22)
+            }
+        }
+        // The foot of front stones opens into water or ground with a few level strokes.
+        if rank > 0 {
+            for k in 0..<(1 + Int(r() * 2)) {
+                let sx = x0 + w * (0.10 + Double(k) * 0.40 + r() * 0.15)
+                let sy = floor + 1 + Double(k) * 1.8
+                c += slopeStroke([P(sx, sy), P(sx + w * 0.12, sy - 0.6), P(sx + w * 0.24, sy)],
+                    width: 1.1, tone: 0.38, pressures: [0.1, 0.6, 0.5, 0.3, 0.05])
+            }
+        }
+        return c
+    }
+
+    private func densify(_ points: [P], step: Double) -> [P] {
+        zip(points, points.dropFirst()).flatMap { a, b -> [P] in
+            let count = max(1, Int(hypot(b.x - a.x, b.y - a.y) / step))
+            return (0..<count).map { a + (b - a) * (Double($0) / Double(count)) }
+        } + [points.last!]
     }
 
     func paintingRootMoss(_ root: P) -> ZXArt.SSCanv {
