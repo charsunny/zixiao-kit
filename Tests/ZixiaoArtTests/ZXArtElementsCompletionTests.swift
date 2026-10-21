@@ -5,14 +5,15 @@ import Testing
 
 struct ZXArtElementsCompletionTests {
     @Test func autumnScaleReadsAsMountainTreeHorsePerson() throws {
-        let selection = ZXArt.poetryScene(text: "枯藤老树昏鸦，小桥流水人家，古道西风瘦马。夕阳西下。", title: "秋思")
+        let selection = ZXArt.poetryScene(text: "枯藤老树昏鸦，小桥流水人家，古道西风瘦马。夕阳西下，断肠人在天涯。", title: "天净沙·秋思")
         // Include the inspected protagonist-sized tree: a failed house placement used to
         // silently fall back to a much smaller dwelling despite the six scale seeds passing.
         let seeds = (0..<6).map { "scale-autumn-\($0)" } + ["review-autumn"]
         for (index, seed) in seeds.enumerated() {
             for size in [CGSize(width: 750, height: 1000), CGSize(width: 1200, height: 675)] {
-                let drawing = try #require(ZXArt.drawing(procedural: selection.paintingProcedural(seed: seed),
-                    palette: .paperInk, pixelSize: size))
+                let recipe = selection.paintingProcedural(seed: seed,
+                    columns: seed == "review-autumn" ? 2 : nil, chars: seed == "review-autumn" ? 7 : nil)
+                let drawing = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: size))
                 func box(_ name: String) throws -> CGRect {
                     try #require(drawing.sceneElements.first { $0.motif == name }, "\(index) \(size): \(name)").bounds.cgRect
                 }
