@@ -126,6 +126,20 @@ struct ZXArtGuohuaTests {
         }
     }
 
+    @Test func uninscribedWaterTownKeepsTheBridgeBesideTheHouse() throws {
+        for seed in 0..<4 {
+            let selection = ZXArt.SceneSelection(scene: .waterTown,
+                options: .init(motifs: [.bridge, .stream, .house, .willow, .swallow]), matched: [])
+            let recipe = selection.paintingProcedural(seed: "group-waterTown-\(seed)", verseSide: nil, composition: .corner)
+            let drawing = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk,
+                pixelSize: CGSize(width: 1000, height: 750)))
+            let bridge = try #require(drawing.sceneElements.first { $0.motif == "bridge" }).bounds.cgRect
+            let house = try #require(drawing.sceneElements.first { $0.motif == "house" }).bounds.cgRect
+            let bank = try #require(drawing.sceneElements.first { $0.motif == "groundBank" }).bounds.cgRect
+            #expect(bridge.maxY - house.maxY < bank.height * 0.6)
+        }
+    }
+
     @Test func buildingsHaveGroundBelowThemIncludingHistoricAccents() throws {
         let buildings: Set<String> = ["house", "hut", "pavilion", "pagoda", "templeGate", "terrace", "ruins", "cityGate"]
         for scene in [ZXArt.PoetryScene.retreat, .temple, .historic, .village, .farewell, .waterTown, .winterForest, .moonNight] {

@@ -771,7 +771,10 @@ private final class PaintingStage {
         guard let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect else { return }
         let b = CGRect(x: bank.minX * w, y: bank.minY * h, width: bank.width * w, height: bank.height * h)
         let width = b.width * 0.40
-        let startY = max(b.minY - b.height * 0.35, verse.isNull ? art.minY : verse.maxY + 4)
+        // Only a portrait inscription sits above the bank. In wide layouts the verse
+        // is beside it; using verse.maxY there reversed the stream's vertical extent.
+        let waterTop = bandTop == nil ? art.minY : verse.maxY + 4
+        let startY = max(b.minY - b.height * 0.35, waterTop)
         let box = CGRect(x: b.minX + b.width * (river ? 0.36 : 0.025), y: startY,
                          width: width, height: min(b.maxY - startY + b.height * 0.12, footer - startY - 2))
         let phase = waterEngine.r() * 1.6 - 0.8
@@ -788,8 +791,6 @@ private final class PaintingStage {
             if motif != "bridge" { engine.noted(.water, canvas) }
             elements.append(.init(motif: motif, bounds: .init(x: x0 / w, y: y0 / h, width: (x1 - x0) / w, height: (y1 - y0) / h)))
         }
-        place(waterEngine.paintingChannel(channel), x: box.minX, y: box.minY, motif: river ? "riverChannel" : "stream")
-        placed.insert(.stream)
         let bridge = engine.paintingBridgePlan()
         // Move a crossing upstream if its reflected arch would enter the page's caption band.
         let reflectionDepth = bridge.kind == .arch ? max(24, bridge.rise + 2) : 24
@@ -802,8 +803,19 @@ private final class PaintingStage {
         }
         let left = channel.point(crossingT, across: -1), right = channel.point(crossingT, across: 1)
         let scale = spanScale(crossingT)
+        var waterY = box.minY
+        if river {
+            let houseX = b.minX + b.width * 0.83
+            if let houseFoot = bankFoot(houseX - b.width * 0.069, houseX + b.width * 0.069) {
+                let deckY = bridge.kind == .arch ? 54.0 : 42.0
+                let aligned = houseFoot + (60 - deckY) * scale - left.y
+                waterY = max(waterTop, min(waterY, aligned))
+            }
+        }
+        place(waterEngine.paintingChannel(channel), x: box.minX, y: waterY, motif: river ? "riverChannel" : "stream")
+        placed.insert(.stream)
         let x = box.minX + (left.x + right.x) / 2 - bridge.width * scale / 2
-        let y = box.minY + left.y - 60 * scale
+        let y = waterY + left.y - 60 * scale
         place(engine.paintingBridge(bridge), x: x, y: y, scale: scale, motif: "bridge")
         placed.insert(.bridge)
         place(engine.paintingBridgeReflection(bridge), x: x, y: y, scale: scale, motif: "bridgeReflection")
