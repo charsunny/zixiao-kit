@@ -165,14 +165,17 @@ extension ShanShuiEngine {
         // Its bends follow the ground plane; it is neither a straight waterline nor another ridge.
         var footX = width * 0.025
         while footX < width * 0.96 {
-            let span = min(width * (0.08 + r() * 0.13), width * 0.98 - footX)
+            let span = min(width * (0.055 + r() * 0.09), width * 0.98 - footX)
+            let depth = 0.67 + r() * 0.16
+            let bend = (r() - 0.5) * 0.16
             let line = (0...12).map { i -> P in
                 let t = Double(i) / 12, x = footX + span * t
-                let y = height * 0.80 + 2.5 * n(x * 0.035, 9)
-                return P(x, min(floor(at: x) - 1, max(top(at: x) + 1, y)))
+                // Follow the local face instead of clamping a horizontal line against its crest.
+                // Each loaded stroke turns with a different shoulder and lifts before the next.
+                return surface(x, depth + bend * sin(t * .pi) + 0.035 * sin(x * 0.19))
             }
-            c += inkLine(line, width: 1.9 + r() * 1.2, tone: 0.70 + r() * 0.14, dry: 0.48)
-            footX += span + width * (0.015 + r() * 0.025)
+            c += inkLine(line, width: 1.1 + r() * 1.7, tone: 0.70 + r() * 0.14, dry: 0.62)
+            footX += span + width * (0.012 + r() * 0.027)
         }
         if flip { c = c.map { poly in var p = poly; p.p = poly.p.map { P(width - $0.x, $0.y) }; return p } }
         return c
