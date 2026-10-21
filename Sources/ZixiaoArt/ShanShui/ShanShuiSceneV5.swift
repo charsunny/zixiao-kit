@@ -112,6 +112,8 @@ private final class PaintingStage {
     var currentScene: ZXArt.PoetryScene = .retreat
     var bankSurface: (x0: Double, step: Double, heights: [Double])?
     var groundInBand = false
+    /// Set while placing an object at an explicit, already-grounded position and size.
+    var pinned = false
     /// Top of the full-width ground band beneath the verse, when the page has one.
     let bandTop: Double?
     var mainSummit: ZXArt.P?
@@ -210,10 +212,10 @@ private final class PaintingStage {
                 ? CGRect(x: b.minX + b.width * 0.30, y: b.minY + b.height * 0.25, width: b.width * 0.22, height: b.height * 0.70)
                 : CGRect(x: b.minX + b.width * 0.48, y: b.minY + b.height * 0.18, width: b.width * 0.46, height: b.height * 0.55)
         }
-        let scaled = scaledSlot(motif, box)
+        let scaled = pinned ? box : scaledSlot(motif, box)
         let placement = motif == .window ? groundedSlot(motif, scaled) : scaled
         guard var object = fitted(raw, to: placement) else { return false }
-        if motif != .window {
+        if motif != .window, !pinned {
             // Ground the fitted object: its actual canopy / roof size can be much smaller than the slot.
             let landed = groundedSlot(motif, object.bounds)
             if landed != object.bounds {
@@ -308,12 +310,33 @@ private final class PaintingStage {
             width: maxWidth, height: maxHeight)
     }
 
+    /// Lowest bank point under a span (the larger y), so a broad base reaches the ground.
+    private func bankFoot(_ x0: Double, _ x1: Double) -> Double? {
+        guard let s = bankSurface else { return nil }
+        let first = max(0, Int(floor((x0 - s.x0) / s.step))), last = min(s.heights.count - 1, Int(ceil((x1 - s.x0) / s.step)))
+        guard first <= last else { return nil }
+        return s.heights[first...last].filter(\.isFinite).max()
+    }
+
+    /// Place a building at the main mountain's foot, `along` its width, sized against the
+    /// mountain (丈山尺树寸马分人), standing on the bank directly beneath.
+    private func placeAtFoot(_ motif: Motif, along: Double, height: Double, aspect: Double) {
+        guard let m = elements.first(where: { $0.motif == "mainMountain" })?.bounds.cgRect else { return }
+        let peak = CGRect(x: m.minX * w, y: m.minY * h, width: m.width * w, height: m.height * h)
+        let bh = peak.height * height, bw = bh * aspect
+        let cx = peak.minX + peak.width * along
+        guard let foot = bankFoot(cx - bw * 0.4, cx + bw * 0.4) else { return }
+        pinned = true
+        add(motif, CGRect(x: cx - bw / 2, y: foot - bh, width: bw, height: bh))
+        pinned = false
+    }
+
     /// Buildings and trees meet the actual bank silhouette, not independent percentage baselines.
     private func groundedSlot(_ motif: Motif, _ requested: CGRect) -> CGRect {
         if motif == .window, currentScene == .moonNight,
            let house = elements.first(where: { $0.motif == "house" })?.bounds.cgRect {
-            return CGRect(x: (house.minX + house.width * 0.32) * w,
-                y: (house.minY + house.height * 0.60) * h, width: house.width * w * 0.14, height: house.height * h * 0.22)
+            return CGRect(x: (house.minX + house.width * 0.17) * w,
+                y: (house.minY + house.height * 0.64) * h, width: house.width * w * 0.17, height: house.height * h * 0.22)
         }
         let rooted: Set<Motif> = [.oldTree, .bareTree, .layeredTree, .pine, .bamboo, .willow,
             .blossom, .maple, .house, .hut, .pavilion, .pagoda, .templeGate, .cityGate, .fence]
@@ -383,10 +406,13 @@ private final class PaintingStage {
             .courtyard, .terrace, .ruins]
         guard rooted.contains(motif), currentScene != .courtyard else { return }
         let buildings: Set<Motif> = [.house, .hut, .pavilion, .pagoda, .templeGate, .cityGate]
-        let height = buildings.contains(motif)
-            ? max(1, min(4, bounds.height * 0.10)) : min(24, max(5, bounds.height * 0.13))
-        let box = CGRect(x: max(art.minX, bounds.minX - 3), y: bounds.maxY - height * 0.15,
-            width: min(art.width, bounds.width + 8), height: height)
+        // A building stands on a low rock platform as wide as itself, so a sloping bank never
+        // leaves one corner hanging in the air.
+        let isBuilding = buildings.contains(motif)
+        let height = isBuilding ? max(2, bounds.height * 0.18) : min(24, max(5, bounds.height * 0.13))
+        let spread = isBuilding ? bounds.width * 0.12 : 4
+        let box = CGRect(x: bounds.minX - spread, y: bounds.maxY - height * 0.35,
+            width: bounds.width + 2 * spread, height: height)
         if let rock = fitted(engine.paintingRock(width: 125, height: 24, tone: 0.7), to: box) {
             parts.append(.near(rock.canv))
         }
@@ -632,7 +658,7 @@ private final class PaintingStage {
         case .retreat:
             include(.pine, slot(0.01, 0.20, 0.77, 0.64))
             include(.bamboo, slot(0.70, 0.55, 0.28, 0.29))
-            include(.hut, slot(0.50, 0.72, 0.35, 0.12))
+            if chosen.contains(.hut) { placeAtFoot(.hut, along: 0.72, height: 0.10, aspect: 1.7) }
             include(.stream, mountainStreamSlot())
         case .fishing:
             if chosen.contains(.angler) { add(.angler, slot(0.39, 0.58, 0.55, 0.14)) }
@@ -727,8 +753,9 @@ private final class PaintingStage {
             include(.window, slot(0.43, 0.67, 0.14, 0.14))
             include(.boat, slot(0.78, 0.55, 0.20, 0.18, front: true))
         case .temple:
-            include(.templeGate, slot(0.52, 0.61, 0.44, 0.20))
-            include(.pagoda, slot(0.06, 0.48, 0.14, 0.25))
+            // The temple nestles at the mountain's foot: a gate in the fold, a pagoda beside it.
+            if chosen.contains(.pagoda) { placeAtFoot(.pagoda, along: 0.32, height: 0.24, aspect: 0.42) }
+            if chosen.contains(.templeGate) { placeAtFoot(.templeGate, along: 0.62, height: 0.12, aspect: 1.8) }
             include(.bamboo, slot(0.01, 0.50, 0.40, 0.32))
             include(.path, slot(0.15, 0, 0.45, 0.95, front: true))
         case .courtyard:

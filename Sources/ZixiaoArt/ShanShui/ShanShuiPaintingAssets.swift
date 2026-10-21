@@ -8,7 +8,7 @@ extension ShanShuiEngine {
         case .bamboo: return paintingBamboo()
         case .lotus: return paintingLotus()
         case .bridge: return paintingBridge()
-        case .house: return paintingHouse()
+        case .house, .hut: return paintingHouse()
         case .courtyard: return paintingCourtyard()
         case .window: return paintingWindow()
         case .fields: return paintingFields()
@@ -19,6 +19,7 @@ extension ShanShuiEngine {
         case .vine: return paintingVine()
         case .horse: return paintingHorse()
         case .terrace: return paintingTerrace()
+        case .fence: return paintingFence()
         case .boat, .angler, .mooredBoat, .sail: return paintingBoat(motif)
         case .traveler: return paintingPerson()
         case .egret: return paintingEgret()
@@ -201,44 +202,67 @@ extension ShanShuiEngine {
         return c
     }
 
-    /// A thatched cottage (茅屋) as landscape painters draw it: a low, broad roof with deep eaves
-    /// and a slightly lifted ridge, short walls mostly in shadow, one open bay. Wider than tall,
-    /// so it sits into the ground instead of standing on it like a box.
+    /// A thatched cottage (茅屋) as landscape painters draw it, frontal and level: a broad roof
+    /// with deep eaves and a ridge whose ends lift slightly, short walls in shadow under the eaves,
+    /// an open bay on the right (the left bay is left for a window), on a low stone plinth.
+    /// Everything is symmetric about the vertical; nothing in the drawing leans.
     func paintingHouse() -> ZXArt.SSCanv {
-        let lift = 2 + r() * 2
-        let ridge = inkCurve([P(34, 30 + lift), P(60, 26), P(100, 25), P(128, 28 + lift)])
-        let eave = inkCurve([P(4, 62), P(50, 58), P(112, 57), P(158, 60)])
-        let roof = [P(34, 30 + lift)] + ridge.dropFirst() + [P(158, 60)] + eave.reversed().dropFirst()
-        let wall = [P(18, 60), P(146, 59), P(146, 92), P(18, 94)]
+        let ridge = [P(30, 22), P(42, 26), P(122, 26), P(134, 22)]
+        let eave = [P(0, 55), P(10, 58), P(154, 58), P(164, 55)]
+        let roof = [P(42, 26), P(122, 26), P(154, 58), P(10, 58)]
+        let wall = [P(18, 58), P(146, 58), P(146, 92), P(18, 92)]
         var c = [poly(wall, fil: .white, str: nil), poly(wall, fil: .gray(0, 0.07), str: nil)]
-        // The open bay and the shadow under the eaves carry the darkest ink of the building.
-        let bay = [P(64, 62), P(98, 61), P(98, 92), P(64, 93)]
+        // Shadow under the eaves and the open bay carry the darkest ink of the building.
+        c.append(poly([P(18, 58), P(146, 58), P(146, 65), P(18, 65)], fil: .gray(0, 0.22), str: nil))
+        let bay = [P(98, 64), P(124, 64), P(124, 92), P(98, 92)]
         c.append(poly(bay, fil: .gray(0, 0.55), str: nil))
-        c.append(poly([P(18, 60), P(146, 59), P(146, 66), P(18, 67)], fil: .gray(0, 0.22), str: nil))
         c.append(poly(roof, fil: .white, str: nil))
         c.append(poly(roof, fil: .gray(0, 0.20), str: nil))
-        // Thatch: strokes fall from the ridge to the eave, denser and darker toward the eave.
+        // Thatch: strokes fall from the ridge to the eave, fanning out toward the ends.
         for k in 0..<22 {
-            let t = (Double(k) + r() * 0.6) / 22
-            let top = P(34 + 94 * t, 27 + lift * (1 - sin(t * .pi)) - 1)
-            let bottom = P(6 + 150 * t + (r() - 0.5) * 3, 59 - (r() * 2))
-            c += inkLine([top, P((top.x + bottom.x) / 2, (top.y + bottom.y) / 2 + 2), bottom],
-                width: 0.5 + r() * 0.5, tone: 0.20 + r() * 0.25, dry: 0.6)
+            let t = (Double(k) + 0.3 + r() * 0.4) / 22
+            let top = P(42 + 80 * t, 27), bottom = P(10 + 144 * t, 57 - r() * 1.5)
+            c += inkLine([top, P((top.x + bottom.x) / 2, (top.y + bottom.y) / 2 + 1), bottom],
+                width: 0.5 + r() * 0.5, tone: 0.20 + r() * 0.22, dry: 0.6)
         }
-        c += inkLine(ridge, width: 2.4, tone: 0.80, dry: 0.35)
-        c += inkLine(eave, width: 2.0, tone: 0.85, dry: 0.30)
-        c += inkEdges([P(34, 30 + lift), P(4, 62)], width: 1.4, tone: 0.65, dry: 0.45)
-        c += inkEdges([P(128, 28 + lift), P(158, 60)], width: 1.4, tone: 0.65, dry: 0.45)
-        // Posts and a plinth; the side walls are left mostly to the paper.
-        for x in [22.0, 64, 98, 142] {
-            c += inkLine([P(x, 63), P(x + 0.5, 93)], width: 1.3, tone: 0.62, dry: 0.3)
+        c += inkLine(inkCurve(ridge, steps: 4), width: 2.4, tone: 0.82, dry: 0.35)
+        c += inkLine(inkCurve(eave, steps: 4), width: 2.0, tone: 0.85, dry: 0.30)
+        c += inkEdges([P(42, 26), P(10, 58)], width: 1.3, tone: 0.62, dry: 0.45)
+        c += inkEdges([P(122, 26), P(154, 58)], width: 1.3, tone: 0.62, dry: 0.45)
+        for x in [18.0, 58, 98, 124, 146] {
+            c += inkEdges([P(x, 62), P(x, 92)], width: 1.3, tone: 0.62, dry: 0.3)
         }
-        c += inkLine([P(12, 95), P(80, 94), P(152, 93)], width: 1.6, tone: 0.55, dry: 0.5)
+        // Plinth (台基): a little wider than the walls, level, with a dark foot.
+        let plinth = [P(10, 92), P(154, 92), P(158, 99), P(6, 99)]
+        c.append(poly(plinth, fil: .white, str: nil))
+        c.append(poly(plinth, fil: .gray(0, 0.14), str: nil))
+        c += inkEdges([P(10, 92), P(154, 92)], width: 1.0, tone: 0.55, dry: 0.4)
+        c += inkLine([P(4, 99.5), P(82, 100), P(160, 99.5)], width: 1.8, tone: 0.65, dry: 0.45)
         return c
     }
 
-    /// A garden wall receding into depth (庭院深深): tall at the near end, low at the far end,
-    /// a dark tiled coping, and a moon gate that shows another court beyond.
+    /// A rustic fence: upright posts of slightly uneven height, two level rails sagging a little
+    /// between posts. Nothing leans.
+    func paintingFence() -> ZXArt.SSCanv {
+        var c: ZXArt.SSCanv = []
+        let posts = 12
+        for k in 0..<posts {
+            let x = 4 + Double(k) * 9
+            let top = 2 + r() * 4
+            c += inkEdges([P(x, top), P(x, 30)], width: 1.1 + r() * 0.4, tone: 0.50 + r() * 0.15, dry: 0.4)
+        }
+        for y in [11.0, 21] {
+            var rail: [P] = []
+            for k in 0..<posts {
+                let x = 4 + Double(k) * 9
+                rail.append(P(x, y))
+                if k < posts - 1 { rail.append(P(x + 4.5, y + 0.6)) }
+            }
+            c += inkLine(rail, width: 1.0, tone: 0.48, dry: 0.45)
+        }
+        return c
+    }
+
     func paintingCourtyard() -> ZXArt.SSCanv {
         // Oblique parallel projection, as in ruled-line painting (界画): top and foot stay parallel.
         let slope = 0.22

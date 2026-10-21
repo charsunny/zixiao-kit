@@ -59,6 +59,31 @@ final class ZXArtSceneReviewTests: XCTestCase {
                   to: out.appendingPathComponent("overview-portrait-light.png"))
     }
 
+    /// 树谱: 六种树 × 四个种子, 看同种之间的形态变化。
+    func testTreeReviewSheet() throws {
+        guard let dir = ProcessInfo.processInfo.environment["ZXART_REVIEW_DIR"] else {
+            throw XCTSkip("设 ZXART_REVIEW_DIR 才出审图样张")
+        }
+        let kinds: [ZXArt.SceneMotif] = [.pine, .blossom, .layeredTree, .maple, .bareTree, .willow]
+        let cell = 200.0
+        var shapes: [ZXArt.Shape] = []
+        for (row, kind) in kinds.enumerated() {
+            for col in 0..<4 {
+                let engine = ShanShuiEngine(seed: .init("tree-review-\(kind.rawValue)-\(col)"))
+                let canv = engine.paintingTree(kind).map { poly -> ZXArt.SSPoly in
+                    var q = poly
+                    q.p = poly.p.map { ZXArt.P($0.x * 0.95 + Double(col) * cell + 30, $0.y * 0.95 + Double(row) * cell + 10) }
+                    return q
+                }
+                ZXArt.appendShapes(canv, palette: .paperInk, into: &shapes)
+            }
+        }
+        let drawing = ZXArt.Drawing(width: cell * 4, height: cell * Double(kinds.count),
+                                    background: ZXArt.Palette.paperInk.paper, layers: [.init(blend: .multiply, shapes: shapes)])
+        let image = try XCTUnwrap(ZXArt.render(drawing, pixelWidth: 800, pixelHeight: 1200))
+        try write(image, to: URL(fileURLWithPath: dir).appendingPathComponent("trees.png"))
+    }
+
     /// 在画上用淡线框出诗句框。
     private func framedWithVerse(_ image: CGImage, procedural: ZXArt.Procedural, size: CGSize,
                                  palette: ZXArt.Palette) throws -> CGImage {

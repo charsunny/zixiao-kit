@@ -194,7 +194,7 @@ struct ZXArtPaintingSceneTests {
                             #expect(rect.height <= mountain.height * 0.30)
                         }
                         if ["house", "hut", "pavilion", "templeGate", "cityGate", "pagoda"].contains(element.motif) {
-                            #expect(rect.height <= mountain.height * (element.motif == "pagoda" ? 0.18 : 0.10))
+                            #expect(rect.height <= mountain.height * (element.motif == "pagoda" ? 0.27 : 0.14))
                             #expect(rect.maxY >= mountain.minY + mountain.height * 0.5)
                         }
                     }

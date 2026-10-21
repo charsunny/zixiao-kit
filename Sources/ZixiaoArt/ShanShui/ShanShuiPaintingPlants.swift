@@ -34,42 +34,94 @@ extension ShanShuiEngine {
         return c
     }
 
+    /// A tree drawn from its own trunk: the trunk bends at random joints and leans, branches
+    /// leave at species-specific angles, and the crown takes the species' shape —
+    /// pine: near-level limbs with flat layered needle clusters and a flat top (松);
+    /// blossom / maple / layered: limbs angled up, a rounded crown of leaf or flower clusters;
+    /// bare: crab-claw limbs whose tips hook down (蟹爪); willow: an arching trunk, hanging strands.
     func paintingTree(_ kind: ZXArt.SceneMotif) -> ZXArt.SSCanv {
         if kind == .oldTree { return paintingLegacy(tree06(65, 175, hei: 165, wid: 5)) }
         let bare = kind == .bareTree, pine = kind == .pine, willow = kind == .willow
-        let flowering = kind == .blossom, old = kind == .oldTree
-        let spine = inkCurve([P(66, 178), P(62, 151), P(67, 123), P(57, 95), P(68, 63), P(78, 32), P(73, 9)])
+        let flowering = kind == .blossom
+        // Trunk: a random walk upward with a lean; pines and willows bend more.
+        let height = (pine ? 168 : 150) + r() * 20
+        let lean = (r() - 0.5) * (willow ? 60 : (pine ? 40 : 28))
+        var joints: [P] = [P(66, 178)]
+        let segments = 5
+        for k in 1...segments {
+            let t = Double(k) / Double(segments)
+            let wander = (r() - 0.5) * (pine || bare ? 16 : 10)
+            joints.append(P(66 + lean * pow(t, willow ? 0.7 : 1.3) + wander * (1 - t * 0.5), 178 - height * t))
+        }
+        let spine = inkCurve(joints)
+        func spinePoint(_ t: Double) -> P {
+            let i = min(spine.count - 1, max(0, Int(t * Double(spine.count - 1))))
+            return spine[i]
+        }
         var c: ZXArt.SSCanv = []
-        // Off-centre branch groups produce the staggered rhythm of a tree, not a symmetric symbol.
-        for k in 0..<(willow ? 4 : 7) {
-            let right = k % 3 == 0, dir = right ? 1.0 : -1.0
-            let y = 124 - Double(k) * 16, x = 65 + Double(k) * 1.8
-            let span = (25 + r() * 29) * (1 - Double(k) * 0.065)
-            let joint = P(x + dir * span * 0.55, y - 9 - r() * 10)
-            let tip = P(x + dir * span, y - 18 - r() * 12)
-            c += inkLine(inkCurve([P(x, y + 5), joint, tip]), width: 3.8 - Double(k) * 0.34,
-                tone: 0.72, dry: old || bare ? 0.45 : 0.25)
-            for j in 0..<3 {
-                let end = P(tip.x + Double(j - 1) * 10, tip.y - 14 - r() * 12)
-                c += inkLine(inkCurve([joint, P(tip.x + dir * 4, tip.y - 4), end]),
-                    width: 1.4 - Double(k) * 0.08, tone: 0.65, dry: 0.42)
-                if !bare && !willow {
-                    c += paintingLeaves(end.x + dir * 4, end.y - 1, width: pine ? 47 : 34,
-                        height: pine ? 15 : 27, needles: pine, flowering: flowering)
+        let limbs = willow ? 4 : (pine ? 6 + Int(r() * 3) : 5 + Int(r() * 3))
+        var side = r() < 0.5 ? -1.0 : 1.0
+        var tips: [(P, Double)] = []
+        for k in 0..<limbs {
+            let t = (pine ? 0.42 : 0.38) + 0.55 * (Double(k) + r() * 0.5) / Double(limbs)
+            let origin = spinePoint(t)
+            if r() < 0.7 { side = -side }
+            let span = (pine ? 34 + r() * 26 : 26 + r() * 24) * (1.1 - t * 0.6)
+            // Pine limbs run nearly level and droop; deciduous limbs rise; bare limbs rise then hook.
+            let rise = pine ? -2 + r() * 6 : (bare ? 14 + r() * 14 : 10 + r() * 16)
+            let joint = P(origin.x + side * span * 0.5, origin.y - rise * 0.6)
+            var tip = P(origin.x + side * span, origin.y - rise)
+            if bare { tip = P(tip.x + side * 4, tip.y + 6 + r() * 6) }          // 蟹爪: the tip hooks down
+            if pine { tip = P(tip.x, tip.y + 3 + r() * 3) }                      // a pine limb droops at the end
+            c += inkLine(inkCurve([origin, joint, tip]), width: max(1.2, 3.6 - t * 2.4), tone: 0.72,
+                dry: bare ? 0.45 : 0.3)
+            // Twigs: two or three short offshoots.
+            for _ in 0..<(2 + Int(r() * 2)) {
+                let u = 0.45 + r() * 0.5
+                let from = P(origin.x + (tip.x - origin.x) * u, origin.y + (tip.y - origin.y) * u)
+                let to = P(from.x + side * (5 + r() * 9), from.y - (pine ? r() * 3 : 6 + r() * 8) + (bare ? 3 : 0))
+                c += inkLine([from, to], width: 0.8, tone: 0.6, dry: 0.45)
+                tips.append((to, side))
+            }
+            tips.append((tip, side))
+        }
+        if !bare && !willow {
+            if pine {
+                // Flat, layered needle clusters along each limb end, plus a flat crown at the top.
+                for (p, _) in tips where r() < 0.8 {
+                    c += paintingLeaves(p.x, p.y - 2, width: 34 + r() * 16, height: 10 + r() * 4, needles: true)
                 }
+                let top = spine.last!
+                c += paintingLeaves(top.x, top.y + 4, width: 46, height: 12, needles: true)
+            } else {
+                // Rounded crown: clusters gather inside an ellipse around the upper trunk.
+                let center = spinePoint(0.78)
+                for (p, _) in tips {
+                    let q = P(p.x + (center.x - p.x) * 0.15, p.y + (center.y - p.y) * 0.15)
+                    c += paintingLeaves(q.x, q.y - 3, width: 26 + r() * 14, height: 20 + r() * 10, flowering: flowering)
+                }
+                c += paintingLeaves(center.x, center.y - 18, width: 40, height: 30, flowering: flowering)
             }
         }
-        // Trunk is painted after the canopy, with dry bark left inside a stronger contour.
-        c += inkLine(spine, width: old ? 8.2 : 6.8, tone: 0.85, dry: 0.42, profile: .cone)
+        // Trunk after the crown, a loaded contour with dry bark inside; roots grip the ground.
+        c += inkLine(spine, width: pine ? 7.4 : 6.6, tone: 0.85, dry: 0.42, profile: .cone)
         for offset in [-2.0, 1.5] {
             c += inkLine(spine.map { P($0.x + offset, $0.y + 1) }, width: 0.7, tone: 0.52, dry: 0.72)
+        }
+        if pine {
+            for _ in 0..<8 {  // bark scales
+                let p = spinePoint(0.1 + r() * 0.7)
+                c += inkLine([P(p.x - 2.5, p.y), P(p.x + 2, p.y + 1.5)], width: 0.9, tone: 0.55, dry: 0.5)
+            }
         }
         for (dx, dy) in [(-13.0, 4.0), (9, 4), (-6, 6)] {
             c += inkLine([P(65, 167), P(65 + dx * 0.4, 177), P(65 + dx, 178 + dy)], width: 2.3, tone: 0.6)
         }
         if willow {
+            let crown = spinePoint(0.9)
             for k in 0..<18 {
-                let x = 19 + Double(k) * 5.4 + (r() - 0.5) * 5, y = 21 + pow((Double(k) - 9) / 9, 2) * 26 + r() * 5
+                let x = crown.x - 48 + Double(k) * 5.6 + (r() - 0.5) * 5
+                let y = crown.y - 6 + pow((Double(k) - 9) / 9, 2) * 26 + r() * 5
                 let len = 55 + r() * 48
                 let line = inkCurve([P(x, y), P(x - 9, y + len * 0.42), P(x - 5, y + len)])
                 c += inkLine(line, width: 0.75, tone: 0.48, dry: 0.15)
