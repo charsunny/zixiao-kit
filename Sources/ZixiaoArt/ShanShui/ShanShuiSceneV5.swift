@@ -1160,7 +1160,8 @@ private final class PaintingStage {
                     placed.insert(.terrace)
                 }
                 if chosen.contains(.traveler) {
-                    let height = min(art.height * 0.028, ledge.width * 0.65)
+                    let mountainHeight = elements.first(where: { $0.motif == "mainMountain" })!.bounds.cgRect.height * h
+                    let height = min(min(art.height * 0.028, ledge.width * 0.65), mountainHeight * 0.04)
                     let box = CGRect(x: ledge.midX - height * 0.25, y: ledge.minY - height,
                                      width: height * 0.5, height: height)
                     if let person = fitted(engine.paintingAsset(.traveler), to: box) {
