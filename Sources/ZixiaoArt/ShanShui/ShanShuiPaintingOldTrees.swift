@@ -13,7 +13,7 @@ extension ShanShuiEngine {
         let form = Int(r() * 65536) % 3
         let direction = r() < 0.5 ? -1.0 : 1.0
         let lean = direction * (form == 1 ? 43 + r() * 16 : 12 + r() * 17)
-        let height = 135 + r() * 22, girth = old ? 14 + r() * 5 : 7 + r() * 3
+        let height = 135 + r() * 22, girth = old ? 19 + r() * 7 : 8 + r() * 3
         let joints = [root, root + P(-direction * 5, -height * 0.20),
             root + P(direction * (old ? 14 : 6), -height * 0.43),
             root + P(lean * 0.45 - direction * 6, -height * 0.66),
@@ -27,17 +27,26 @@ extension ShanShuiEngine {
             let from = at(t), side = k % 2 == 0 ? -direction : direction
             let length = (31 + r() * 22) * (1.15 - t * 0.45)
             let elbow = from + P(side * length * 0.55, -11 - r() * 11)
-            let tip = elbow + P(side * length * 0.45, form == 0 ? 4 + r() * 9 : -17 - r() * 11)
+            let tip = elbow + P(side * length * 0.45, form == 0 ? -3 + r() * 8 : -17 - r() * 11)
             c += inkLine(inkCurve([from, from + P(side * 8, -5), elbow, tip]),
                 width: (old ? 7.5 : 4.3) * (1 - t * 0.6), tone: 0.85, dry: 0.34, profile: .cone)
             perches.append(elbow)
             for j in 0..<2 {
                 let origin = j == 0 ? elbow : tip
-                let end = origin + P(side * (9 + r() * 9), form == 0 ? 9 + r() * 9 : -13 - r() * 8)
-                let bend = origin + P(side * 8, -6 - r() * 5)
+                let reach = 8 + r() * 10
+                let end = origin + P(side * reach, form == 0 ? 6 + r() * 9 : -13 - r() * 8)
+                let bend = origin + P(side * reach * 0.72, form == 0 ? 1 - r() * 4 : -6 - r() * 5)
                 c += inkLine(inkCurve([origin, bend, end]), width: 1.2 + r() * 0.7,
                     tone: 0.73, dry: 0.38, profile: .cone)
             }
+        }
+        if form == 2 {
+            let fork = at(0.23), end = root + P(-direction * (32 + r() * 15), -height * 0.83)
+            let limb = inkCurve([fork, fork + P(-direction * 18, -29), end + P(direction * 7, 23), end])
+            c += inkLine(limb, width: old ? 8 : 4, tone: 0.78, dry: 0.4, profile: .cone)
+            c += inkLine([end + P(direction * 6, 20), end + P(-direction * 17, -8)],
+                width: 1.7, tone: 0.72, dry: 0.35, profile: .cone)
+            perches.append(limb[limb.count * 2 / 3])
         }
         // A tapered, outlined trunk keeps paper in its lit side; knots interrupt the bark.
         let left = spine.enumerated().map { i, p -> P in
