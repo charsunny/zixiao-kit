@@ -1116,7 +1116,8 @@ private final class PaintingStage {
         case .village:
             add(chosen.contains(.pine) ? .pine : .layeredTree, slot(0.01, 0.20, 0.46, 0.53))
             include(chosen.contains(.hut) ? .hut : .house, slot(0.39, 0.56, 0.44, 0.18))
-            if chosen.contains(.house) { add(.house, slot(0.67, 0.59, 0.30, 0.13), repeatable: true) }
+            // One complete dwelling: variable bay counts already supply the village scale.
+            // A second independently grounded house could interleave its roof with the first.
             if chosen.contains(.cookingSmoke), let house = elements.first(where: { ["house", "hut"].contains($0.motif) })?.bounds.cgRect {
                 let smokeHeight = house.height * h * 1.8
                 add(.cookingSmoke, CGRect(x: (house.minX + house.width * 0.5) * w,

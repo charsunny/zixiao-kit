@@ -233,45 +233,6 @@ extension ShanShuiEngine {
         return c
     }
 
-    /// A thatched cottage (茅屋) as landscape painters draw it, frontal and level: a broad roof
-    /// with deep eaves and a ridge whose ends lift slightly, short walls in shadow under the eaves,
-    /// an open bay on the right (the left bay is left for a window), on a low stone plinth.
-    /// Everything is symmetric about the vertical; nothing in the drawing leans.
-    func paintingOldGateBase() -> ZXArt.SSCanv {
-        let ridge = [P(30, 22), P(42, 26), P(122, 26), P(134, 22)]
-        let eave = [P(0, 55), P(10, 58), P(154, 58), P(164, 55)]
-        let roof = [P(42, 26), P(122, 26), P(154, 58), P(10, 58)]
-        let wall = [P(18, 58), P(146, 58), P(146, 92), P(18, 92)]
-        var c = [poly(wall, fil: .white, str: nil), poly(wall, fil: .gray(0, 0.07), str: nil)]
-        // Shadow under the eaves and the open bay carry the darkest ink of the building.
-        c.append(poly([P(18, 58), P(146, 58), P(146, 65), P(18, 65)], fil: .gray(0, 0.22), str: nil))
-        let bay = [P(98, 64), P(124, 64), P(124, 92), P(98, 92)]
-        c.append(poly(bay, fil: .gray(0, 0.55), str: nil))
-        c.append(poly(roof, fil: .white, str: nil))
-        c.append(poly(roof, fil: .gray(0, 0.20), str: nil))
-        // Thatch: strokes fall from the ridge to the eave, fanning out toward the ends.
-        for k in 0..<22 {
-            let t = (Double(k) + 0.3 + r() * 0.4) / 22
-            let top = P(42 + 80 * t, 27), bottom = P(10 + 144 * t, 57 - r() * 1.5)
-            c += inkLine([top, P((top.x + bottom.x) / 2, (top.y + bottom.y) / 2 + 1), bottom],
-                width: 0.5 + r() * 0.5, tone: 0.20 + r() * 0.22, dry: 0.6)
-        }
-        c += inkLine(inkCurve(ridge, steps: 4), width: 2.4, tone: 0.82, dry: 0.35)
-        c += inkLine(inkCurve(eave, steps: 4), width: 2.0, tone: 0.85, dry: 0.30)
-        c += inkEdges([P(42, 26), P(10, 58)], width: 1.3, tone: 0.62, dry: 0.45)
-        c += inkEdges([P(122, 26), P(154, 58)], width: 1.3, tone: 0.62, dry: 0.45)
-        for x in [18.0, 58, 98, 124, 146] {
-            c += inkEdges([P(x, 62), P(x, 92)], width: 1.3, tone: 0.62, dry: 0.3)
-        }
-        // Plinth (台基): a little wider than the walls, level, with a dark foot.
-        let plinth = [P(10, 92), P(154, 92), P(158, 99), P(6, 99)]
-        c.append(poly(plinth, fil: .white, str: nil))
-        c.append(poly(plinth, fil: .gray(0, 0.14), str: nil))
-        c += inkEdges([P(10, 92), P(154, 92)], width: 1.0, tone: 0.55, dry: 0.4)
-        c += inkLine([P(4, 99.5), P(82, 100), P(160, 99.5)], width: 1.8, tone: 0.65, dry: 0.45)
-        return c
-    }
-
     /// A rustic fence: upright posts of slightly uneven height, two level rails sagging a little
     /// between posts. Nothing leans.
     func paintingFence() -> ZXArt.SSCanv {
