@@ -54,6 +54,18 @@ struct ZXArtGuohuaTests {
         }
     }
 
+    @Test func portraitGroundKeepsTheFullWidthBandUnderTheVerse() throws {
+        for scene in [ZXArt.PoetryScene.retreat, .temple, .autumnTravel, .winterForest, .waterTown] {
+            let selection = ZXArt.SceneSelection(scene: scene,
+                options: .init(motifs: ZXArt.defaultMotifs(for: scene)), matched: [])
+            let recipe = selection.paintingProcedural(seed: "guohua-full-band", verseSide: "right", columns: 2, chars: 7)
+            let d = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: .init(width: 750, height: 1000)))
+            let bank = try #require(d.sceneElements.first { $0.motif == "groundBank" }).bounds.cgRect
+            #expect(bank.minX < 0.05 && bank.maxX > 0.95)
+            #expect(bank.minY > #require(recipe.verseLayout(pixelSize: .init(width: 750, height: 1000))).rect.maxY)
+        }
+    }
+
     @Test func inkDepthPreservesPaperAndOrdersInkStrength() throws {
         let engine = ShanShuiEngine(seed: .init("guohua-ink"))
         let source = engine.paintingHouse()

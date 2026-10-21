@@ -699,6 +699,20 @@ private final class PaintingStage {
         }
         if prepareOnly {
             preparedGround = fitted(engine.paintingBank(style: [.retreat, .temple].contains(scene) ? .cliff : (structure == .corner ? .headland : .shoal)), to: box)
+            if groundInBand, var ground = preparedGround {
+                // Terrain fills the whole lower band. Fitting it like a tree would narrow a
+                // steep bank into a floating island; only its horizontal ground plane expands.
+                let scaleX = box.width / ground.bounds.width
+                let x0 = ground.bounds.minX
+                ground.canv = ground.canv.map { poly in
+                    var p = poly
+                    p.p = poly.p.map { .init(box.minX + ($0.x - x0) * scaleX, $0.y) }
+                    return p
+                }
+                ground.bounds.origin.x = box.minX
+                ground.bounds.size.width = box.width
+                preparedGround = ground
+            }
             if let object = preparedGround { recordBank(object) }
             return
         }
