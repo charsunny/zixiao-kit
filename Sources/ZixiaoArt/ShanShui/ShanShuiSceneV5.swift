@@ -471,7 +471,7 @@ private final class PaintingStage {
         if let top = bandTop {
             // The peak stands behind the near ground: its foot meets the bank's upper edge in cloud,
             // never below or in front of it on tall pages.
-            let foot = top + h * 0.05
+            let foot = top + h * 0.12
             peakBox = CGRect(x: peakBox.minX, y: peakBox.minY, width: peakBox.width, height: max(40, foot - peakBox.minY))
         }
         if main, structure == .high {
@@ -482,9 +482,9 @@ private final class PaintingStage {
                 parts.append(.init(canv: engine.paintingInk(guest.canv, depth: .middle),
                     fade: .init(top: r.minY + r.height * 0.55, bottom: r.maxY, seed: engine.inkSeed())))
             }
-            peakBox.size.width *= 0.90
+            peakBox.size.width *= 0.94
         }
-        if main, let object = fitted(engine.paintingMountain(form: structure == .deep ? .clustered : .monumental), to: peakBox) {
+        if main, let object = fitted(engine.paintingMountain(form: structure == .deep ? .clustered : .folded), to: peakBox) {
             // 山腰云锁: the lower third of the main peak dissolves into cloud instead of
             // standing on the bank like a monument.
             let r = object.bounds
@@ -706,7 +706,8 @@ private final class PaintingStage {
         if ![.desert, .ocean, .courtyard].contains(scene) { hills([.retreat, .temple, .historic].contains(scene)) }
         if [.fishing, .waterTown, .farewell, .lotusPond, .moonNight].contains(scene) { water() }
         for motif in [Motif.mist, .afterRain] where chosen.contains(motif) {
-            add(motif, slot(0.02, 0.16, 0.96, 0.10))
+            let y = [.retreat, .temple, .historic].contains(scene) ? 0.58 : 0.16
+            add(motif, slot(0.02, y, 0.96, 0.07))
         }
         // 一河两岸: scenes without a main peak get a pale far bank in the middle distance, so the
         // eye travels near bank → water → far bank → distant hills instead of across empty paper.
@@ -746,8 +747,17 @@ private final class PaintingStage {
         case .farewell:
             include(.pavilion, slot(0.52, 0.60, 0.29, 0.16))
             include(.willow, slot(0.01, 0.13, 0.70, 0.64))
-            include(.traveler, slot(0.56, 0.72, 0.07, 0.09))
-            if chosen.contains(.traveler) { add(.traveler, slot(0.67, 0.73, 0.06, 0.08), repeatable: true) }
+            if chosen.contains(.traveler), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
+                let size = art.width * 0.043
+                for fraction in [0.53, 0.57] {
+                    let x = (bank.minX + bank.width * fraction) * w
+                    if let foot = bankFoot(x - size * 0.2, x + size * 0.2) {
+                        pinned = true
+                        add(.traveler, CGRect(x: x - size * 0.3, y: foot - size, width: size * 0.6, height: size), repeatable: true)
+                        pinned = false
+                    }
+                }
+            }
             include(.path, slot(0.05, 0, 0.28, 0.8, front: true))
             include(.mooredBoat, slot(0.77, 0.55, 0.22, 0.17, front: true))
         case .village:

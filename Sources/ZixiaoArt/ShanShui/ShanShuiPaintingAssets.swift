@@ -64,7 +64,7 @@ extension ShanShuiEngine {
     /// one pale wash, then texture strokes that gather on the shadow side and in the recesses,
     /// leaving the lit top planes as paper. Moss dots in scorched ink sit on the upper edges.
     /// Light comes from the upper left; no straight-edged wash bands.
-    func inkSurface(_ points: [P], textured: Bool) -> ZXArt.SSCanv {
+    func inkSurface(_ points: [P], textured: Bool, shadowWash: Bool = true) -> ZXArt.SSCanv {
         guard let x0 = points.map(\.x).min(), let x1 = points.map(\.x).max(),
               let y0 = points.map(\.y).min(), let y1 = points.map(\.y).max(),
               x1 - x0 > 25, y1 - y0 > 15 else { return [] }
@@ -95,7 +95,7 @@ extension ShanShuiEngine {
             let pull = 1 - min(1, shade(p.x, p.y) * 1.6)
             return P(p.x + (x1 - p.x) * pull * 0.55, p.y + (y1 - p.y) * pull * 0.45)
         }
-        result.append(poly(shadow, fil: .gray(0, 0.10), str: nil))
+        if shadowWash { result.append(poly(shadow, fil: .gray(0, 0.10), str: nil)) }
 
         // Texture strokes: density and tone follow the shade.
         let count = min(900, max(50, Int(w * h / 45)))

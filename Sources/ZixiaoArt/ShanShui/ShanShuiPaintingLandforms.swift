@@ -4,7 +4,7 @@ import Foundation
 extension ShanShuiEngine {
     /// A bank is one continuous slope, not four copies of a stone asset.
     func paintingSlope(_ style: BankStyle) -> ZXArt.SSCanv {
-        let flip = r() < 0.5
+        let flip = style == .shoal && r() < 0.5
         let height = style == .shoal ? 34.0 : (style == .cliff ? 100 : 72)
         let crest = inkCurve([P(0, height * 0.86), P(24, height * 0.55), P(60, height * 0.38),
             P(91, height * 0.10), P(119, height * 0.18), P(149, height * 0.42),
@@ -13,15 +13,16 @@ extension ShanShuiEngine {
             P(119, height + 13), P(52, height + 7), P(0, height * 0.86)])
         var c = [poly(crest + bottom, fil: .white, str: nil),
                  poly(crest + bottom, fil: .gray(0, 0.045), str: nil)]
+        c += inkSurface(crest + bottom, textured: true, shadowWash: false)
         // 折带 / 披麻: long broken fibres bend with the low bank; cliff planes use broad side strokes.
-        for k in 0..<48 {
+        for k in 0..<34 {
             let i = 2 + Int(r() * Double(crest.count - 5)), p = crest[i]
             let reach = max(2, height + 3 - p.y) * (0.25 + r() * 0.65)
             let dx = (style == .cliff ? -0.25 : -0.75) * reach
             let line = inkCurve([P(p.x, p.y + 2), P(p.x + dx * 0.25, p.y + reach * 0.42),
                 P(p.x + dx, p.y + reach * 0.8), P(p.x + dx + 8, p.y + reach)])
-            c += inkLine(line, width: style == .cliff ? 2.0 + r() * 4 : 0.65 + r() * 1.0,
-                tone: k % 7 == 0 ? 0.46 : 0.12 + r() * 0.17, dry: 0.65)
+            c += inkLine(line, width: style == .cliff ? 1.0 + r() * 2.2 : 0.4 + r() * 0.6,
+                tone: k % 7 == 0 ? 0.48 : 0.15 + r() * 0.18, dry: 0.65)
         }
         for start in stride(from: 1, to: crest.count - 5, by: 7) {
             c += inkLine(Array(crest[start...min(start + 5, crest.count - 1)]),
@@ -46,7 +47,7 @@ extension ShanShuiEngine {
     /// 矾头 and stacked shoulders, with dry folds flowing down from the ridge.
     /// This path does not call legacy mountain(), whose uniform tree rim is frozen for older versions.
     func paintingMassif(_ profile: PaintingMountainProfile) -> ZXArt.SSCanv {
-        let width = profile.width * (profile.form == .monumental ? 0.74 : 1)
+        let width = profile.width * (profile.form == .monumental ? 0.88 : 1)
         let height = profile.height
         let ridge = (0...90).map { i -> P in
             let t = Double(i) / 90
@@ -56,23 +57,44 @@ extension ShanShuiEngine {
         }
         let outline = ridge + [P(width * 0.88, height + 8), P(width * 0.12, height + 8)]
         var c = [poly(outline, fil: .white, str: nil)]
-        c += inkSurface(outline, textured: true)
+        c += inkSurface(outline, textured: true, shadowWash: false)
         for start in stride(from: 0, to: ridge.count - 3, by: 5) {
             c += inkLine(Array(ridge[start...min(start + 4, ridge.count - 1)]), width: 1.4 + r(), tone: 0.62, dry: 0.48)
         }
-        // 主脉: each buttress starts on its own shoulder, not at an arbitrary rectangle edge.
-        for u in [0.22, 0.34, 0.49, 0.63, 0.77] {
-            let p = ridge[Int(u * 90)], reach = (height - p.y) * (0.55 + r() * 0.3)
-            guard reach > 25 else { continue }
-            let bend = (u < 0.5 ? -1.0 : 1.0) * width * (0.04 + r() * 0.05)
-            for k in 0..<7 {
-                let offset = Double(k) * (1.3 + r() * 1.4)
-                let path = inkCurve([P(p.x + offset, p.y + 8),
-                    P(p.x + bend * 0.3 + offset, p.y + reach * 0.26),
-                    P(p.x + bend * 0.5 + offset, p.y + reach * 0.62),
-                    P(p.x + bend + offset * 0.5, p.y + reach)])
-                c += inkLine(path, width: k == 0 ? 3.4 : 0.9 + r(),
-                             tone: k == 0 ? 0.48 : 0.17 + r() * 0.13, dry: 0.68)
+        // 山块叠起: short convex shoulders overlap in unequal tiers. The folds stop and
+        // resume at ledges; they never run in parallel from summit to foot.
+        for tier in 0..<4 {
+            let level = Double(tier) / 4
+            for u in [0.29, 0.50, 0.70] {
+                let cx = width * (u + (r() - 0.5) * 0.045)
+                let crestY = ridge[Int(u * 90)].y
+                let available = height - crestY
+                guard available > height * 0.22 else { continue }
+                let top = crestY + available * (0.06 + level * 0.75)
+                let rx = width * (0.07 + r() * 0.045), ry = available * (0.13 + r() * 0.1)
+                let cap = inkCurve([P(cx - rx, top + ry * 0.5), P(cx - rx * 0.65, top + ry * 0.08),
+                    P(cx - rx * 0.15, top), P(cx + rx * 0.48, top + ry * 0.16), P(cx + rx, top + ry * 0.7)])
+                let foot = inkCurve([cap.last!, P(cx + rx * 0.7, top + ry * 1.65),
+                    P(cx - rx * 0.5, top + ry * 1.8), cap[0]])
+                c.append(poly(cap + foot, fil: .white, str: nil))
+                c += inkSurface(cap + foot, textured: true, shadowWash: false)
+                c += inkLine(Array(cap.dropLast(3)), width: 1.3 + r(), tone: 0.48 + r() * 0.16, dry: 0.58)
+                // Broken hemp fibres curl down the shaded right face, with a dry broad accent.
+                for k in 0..<9 {
+                    let offset = Double(k) * rx / 13
+                    let start = P(cx + offset, top + ry * 0.2 + r() * ry * 0.22)
+                    let endY = top + ry * (0.9 + r() * 0.55)
+                    let path = inkCurve([start, P(start.x + rx * 0.25, top + ry * 0.68),
+                        P(start.x + rx * 0.1, endY - ry * 0.12), P(start.x - rx * 0.2, endY)])
+                    c += inkLine(path, width: k == 2 ? 3.8 : 0.7 + r(),
+                        tone: k == 2 ? 0.30 : 0.24 + r() * 0.2, dry: 0.7)
+                }
+                if tier % 2 == 1 {
+                    for _ in 0..<4 {
+                        let q = cap[Int(r() * Double(cap.count - 1))]
+                        c += inkBlot(q.x, q.y, radius: 1 + r() * 1.5, squash: 0.4, tone: 0.75)
+                    }
+                }
             }
         }
         // Ridge groves have unequal density; distant trees are tiny dabs, without drawn branches.
