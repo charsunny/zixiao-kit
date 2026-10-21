@@ -164,7 +164,7 @@ final class ZXArtSceneReviewTests: XCTestCase {
                 }
                 // One scale per row, so the seeds of one element keep their size differences.
                 let scale = min(1.6, boxes.map { min((cell.width - 16) / $0.width, (cell.height - 16) / $0.height) }.min() ?? 1)
-                notes.append(["rain", "snow"].contains(entry.0) ? "\(entry.0): overlay" : String(format: "%@  ×%.2f", entry.0, scale))
+                notes.append(String(format: "%@  ×%.2f", entry.0, scale))
                 for (col, canv) in canvases.enumerated() {
                     let box = boxes[col]
                     let ox = label + Double(col) * cell.width + (cell.width - box.width * scale) / 2

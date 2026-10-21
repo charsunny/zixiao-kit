@@ -4,6 +4,45 @@ import Testing
 @testable import ZixiaoArt
 
 struct ZXArtElementsCompletionTests {
+    @Test func autumnScaleReadsAsMountainTreeHorsePerson() throws {
+        let selection = ZXArt.poetryScene(text: "枯藤老树昏鸦，小桥流水人家，古道西风瘦马。夕阳西下。", title: "秋思")
+        for index in 0..<6 {
+            for size in [CGSize(width: 750, height: 1000), CGSize(width: 1200, height: 675)] {
+                let drawing = try #require(ZXArt.drawing(procedural: selection.paintingProcedural(seed: "scale-autumn-\(index)"),
+                    palette: .paperInk, pixelSize: size))
+                func box(_ name: String) throws -> CGRect {
+                    try #require(drawing.sceneElements.first { $0.motif == name }, "\(index) \(size): \(name)").bounds.cgRect
+                }
+                let person = try box("traveler"), horse = try box("horse"), tree = try box("oldTree")
+                let door = try box("houseDoor"), eaves = try box("houseEaves"), bridge = try box("bridge")
+                #expect((3...8).contains(tree.height / person.height), "tree/person \(index) \(size)")
+                #expect((0.7...1.4).contains(door.height / person.height), "door/person \(index) \(size): \(door.height / person.height)")
+                #expect((1.3...1.8).contains(eaves.height / person.height), "eaves/person \(index) \(size): \(eaves.height / person.height)")
+                // Head position changes with gait; the withers sit about 65% up the complete horse.
+                #expect((0.7...1.3).contains(horse.height * 0.65 / (person.height * 0.78)))
+                #expect((4...8).contains(bridge.width * size.width / (person.height * size.height)),
+                    "bridge/person \(index) \(size): \(bridge.width * size.width / (person.height * size.height))")
+            }
+        }
+    }
+
+    @Test func thumbnailSeedsChangeTheSceneArrangement() throws {
+        for poem in ZXArtSceneReviewTests.poems {
+            let selection = ZXArt.poetryScene(text: poem.text, title: poem.title)
+            var arrangements = Set<[Int]>()
+            for index in 0..<4 {
+                let recipe = selection.paintingProcedural(seed: "variety-\(index)-\(poem.id)")
+                let d = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: .init(width: 375, height: 500)))
+                let structural = d.sceneElements.filter { !["stars", "rain", "snow", "houseDoor", "houseEaves"].contains($0.motif) }
+                arrangements.insert(structural.flatMap { element in
+                    let b = element.bounds.cgRect
+                    return [Int(b.midX * 10), Int(b.midY * 10), Int(b.width * 10), Int(b.height * 10)]
+                })
+            }
+            #expect(arrangements.count >= 3, "\(poem.id): distinct thumbnail arrangements")
+        }
+    }
+
     @Test func selectedPoemObjectsAreActuallyDrawnAcrossFormats() throws {
         let poems = ZXArtSceneReviewTests.poems
         for poem in poems {
