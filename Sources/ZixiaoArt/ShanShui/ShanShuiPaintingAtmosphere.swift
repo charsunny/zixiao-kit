@@ -12,11 +12,11 @@ extension ShanShuiEngine {
             // Clouds obscure an unequal part of the rim; never stripe the disc like a badge.
             let form = Int(r() * 65536) % 3
             if form > 0 {
-                let y = form == 1 ? 58.0 : 48.0
-                let edge = inkCurve([P(form == 1 ? 12 : 43, y + 2), P(49, y - 1),
+                let y = form == 1 ? 58.0 : 51.0
+                let edge = inkCurve([P(12, y + 2), P(49, y - 1),
                     P(59, y + 1), P(70, y - 2)])
-                c.append(poly(edge + [P(72, 68), P(form == 1 ? 12 : 43, 68)], fil: .white, str: nil))
-                c += inkLine(edge, width: 2.0, tone: 0.055, dry: 0.72)
+                c.append(poly(edge + [P(72, 68), P(12, 68)], fil: .white, str: nil))
+                c += inkLine(edge, width: 1.2, tone: 0.12, dry: 0.68)
             }
             return c
         case .stars:

@@ -659,7 +659,7 @@ private final class PaintingStage {
             let box: CGRect
             if !main, structure == .deep || structure == .level {
                 // Keep both ranges above the far bank, higher/paler first, then lower/darker.
-                box = slot(x, 0.015 + Double(k) * 0.14 / Double(ranges), width, 0.15)
+                box = slot(x, 0.015 + Double(k) * 0.14 / Double(ranges), width, ranges == 3 ? 0.12 : 0.15)
             } else if structure == .deep {
                 box = slot(0.40 - Double(k) * 0.17, 0.02 + Double(k) * 0.19,
                            0.54 + Double(k) * 0.10, 0.30)
@@ -700,7 +700,7 @@ private final class PaintingStage {
             peakBox.origin.y += headroom
             peakBox.size.height -= headroom
         }
-        if main, let object = fitted(engine.paintingMountain(form: [PaintingMountainProfile.Form.monumental, .leaning, .folded, .clustered][layoutVariant], terraced: currentScene == .historic), to: peakBox) {
+        if main, let object = fitted(engine.paintingMountain(form: [PaintingMountainProfile.Form.folded, .clustered, .folded, .clustered][layoutVariant], terraced: currentScene == .historic), to: peakBox) {
             // 山腰云锁: the lower third of the main peak dissolves into cloud instead of
             // standing on the bank like a monument.
             let r = object.bounds
@@ -829,7 +829,7 @@ private final class PaintingStage {
         let treeHeight = (tree ?? 0.16) * h
         var height = min(bank.width * w * 0.078, treeHeight * 0.20)
         if let bridge = elements.first(where: { $0.motif == "bridge" })?.bounds.cgRect {
-            height = max(treeHeight / 7.7, min(height, bridge.width * w / 4.8))
+            height = max(treeHeight / 7.9, min(height, bridge.width * w / 4.8))
         }
         return height
     }

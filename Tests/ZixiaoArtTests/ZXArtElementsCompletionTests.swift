@@ -72,6 +72,9 @@ struct ZXArtElementsCompletionTests {
         #expect(!ZXArt.poetryScene(text: "月亭", title: "随笔").options.contains(.pavilion))
         #expect(!ZXArt.poetryScene(text: "亭亭净植").options.contains(.pavilion))
         #expect(!ZXArt.poetryScene(text: "纤云弄巧", title: "鹊桥仙").options.contains(.bridge))
+        #expect(!ZXArt.poetryScene(text: "今宵酒醒何处", title: "雨霖铃").options.contains(.rain))
+        #expect(!ZXArt.poetryScene(text: "晚风吹过", title: "西江月").options.contains(.moon))
+        #expect(ZXArt.poetryScene(text: "接天莲叶无穷碧，映日荷花别样红", title: "晓出净慈寺送林子方").scene == .lotusPond)
     }
 
     @Test func lotusPhenologyIsSavedWithThePoemAndDoesNotChangeWithSeed() throws {

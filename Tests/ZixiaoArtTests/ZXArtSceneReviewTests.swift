@@ -307,6 +307,23 @@ final class ZXArtSceneReviewTests: XCTestCase {
                           to: URL(fileURLWithPath: dir).appendingPathComponent("\(name)-\(format)-light.png"))
             }
         }
+        // Text-selected forms need scene evidence as well as isolated atlas rows.
+        let semanticSamples = [
+            ("lotus-spent", "秋池", "秋阴不散霜飞晚，留得残荷听雨声。"),
+            ("lotus-flowering", "晓出净慈寺送林子方", "接天莲叶无穷碧，映日荷花别样红。"),
+            ("sky-crescent", "雨霖铃", "今宵酒醒何处，杨柳岸，晓风残月。"),
+            ("sky-stars", "旅夜书怀", "星垂平野阔，月涌大江流。"),
+            ("objects-donkey", "山行", "古道秋风，行人牵驴过小桥，古木临流水。")
+        ]
+        for (name, title, text) in semanticSamples {
+            let selection = ZXArt.poetryScene(text: text, title: title)
+            for (format, size) in [("portrait", CGSize(width: 750, height: 1000)), ("wide", CGSize(width: 1200, height: 675))] {
+                let recipe = selection.paintingProcedural(seed: "review-" + name, verseSide: "right", columns: 2, chars: 7)
+                let image = try XCTUnwrap(ZXArt.render(procedural: recipe, palette: .paperInk, pixelSize: size))
+                try write(try framedWithVerse(image, procedural: recipe, size: size, palette: .paperInk),
+                    to: URL(fileURLWithPath: dir).appendingPathComponent("\(name)-\(format)-light.png"))
+            }
+        }
         // The narrow recommendation page exposed a house above the widened mountain's
         // lower half. Keep the exact regression seed and presentation visible for review.
         let recommendation = ZXArt.SceneSelection(scene: .retreat,

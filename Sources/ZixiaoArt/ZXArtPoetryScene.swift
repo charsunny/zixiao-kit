@@ -96,7 +96,8 @@ public extension ZXArt {
 
     /// Explicit scene evidence outranks broad landscape words. A tune name is not a landscape.
     static func poetryScene(text: String, title: String = "") -> SceneSelection {
-        let cleanTitle = title.replacingOccurrences(of: "天净沙", with: "").replacingOccurrences(of: "鹊桥仙", with: "")
+        let tuneNames = ["天净沙", "鹊桥仙", "雨霖铃", "蝶恋花", "浣溪沙", "水调歌头", "西江月", "卜算子", "如梦令", "鹧鸪天", "清平乐", "临江仙"]
+        let cleanTitle = tuneNames.reduce(title) { $0.replacingOccurrences(of: $1, with: "") }
         let body = text + "\n" + cleanTitle
         let moonWords = ["正月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月", "腊月", "岁月", "年月"]
         let moonText = moonWords.reduce(body) { $0.replacingOccurrences(of: $1, with: "") }
@@ -121,7 +122,7 @@ public extension ZXArt {
             (.retreat, ["山居", "竹里", "山中", "寻隐"]), (.fishing, ["渔歌", "渔父", "垂钓", "泛舟"]),
             (.waterTown, ["江南春", "水乡"]), (.farewell, ["送元", "送友", "送别", "送孟", "劳劳亭"]),
             (.village, ["归园田居", "村居", "田家", "田园"]), (.spring, ["寻花", "春日", "春游"]),
-            (.lotusPond, ["小池", "采莲", "荷塘"]), (.autumnTravel, ["秋思", "枫桥夜泊", "秋浦"]),
+            (.lotusPond, ["小池", "采莲", "荷塘", "晓出净慈寺"]), (.autumnTravel, ["秋思", "枫桥夜泊", "秋浦"]),
             (.winterForest, ["江雪", "逢雪", "寒林", "暮雪"]), (.moonNight, ["静夜思", "夜思"]),
             (.temple, ["寺", "访僧", "禅院"]), (.courtyard, ["庭院", "闺思"]),
             (.historic, ["怀古", "幽州台", "登楼", "登高", "登鹳雀楼"]),
@@ -170,6 +171,7 @@ public extension ZXArt {
         if scene == .autumnTravel, motifs.contains(.oldTree) { motifs.removeAll { $0 == .bareTree } }
         let state: LotusState = has(["残荷", "枯荷", "留得"]) ? .spent
             : has(["小荷才露尖尖角", "小荷", "初荷"]) ? .young : .flowering
+        if state == .spent, !has(["蜻蜓"]) { motifs.removeAll { $0 == .dragonfly } }
         var options = SceneOptions(motifs: motifs, lotusState: state, donkey: has(["驴"]) ? true : nil)
         options.motifs = options.canonicalMotifs
         return SceneSelection(scene: scene, options: options,

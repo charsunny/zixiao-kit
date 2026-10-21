@@ -270,6 +270,17 @@ extension ShanShuiEngine {
         }
         let outline = ridge + [P(width * 0.88, height + 8), P(width * 0.12, height + 8)]
         var c = [poly(outline, fil: .white, str: nil)]
+        // A first dilute wash follows the whole mountain face. Its bands have the same curved
+        // shoulders as the silhouette, no rectangular patches; the lit summit stays nearly paper.
+        for band in 0..<24 {
+            func contour(_ t: Double) -> [P] {
+                ridge.map { p in P(p.x, p.y + (height + 1 - p.y) * t) }
+            }
+            let t = Double(band) / 24
+            let tone = 0.012 + 0.042 * pow(sin(t * .pi), 1.3)
+            c.append(poly(contour(t) + contour(Double(band + 1) / 24).reversed(),
+                fil: .gray(0, tone), str: nil))
+        }
         // Three long contour gestures retain shoulders, rather than a necklace of dashes.
         for (lo, hi) in [(0, ridge.count / 3), (ridge.count / 3, ridge.count * 2 / 3), (ridge.count * 2 / 3, ridge.count - 1)] {
             c += slopeStroke(Array(ridge[lo...hi]), width: 2.1, tone: 0.67,
