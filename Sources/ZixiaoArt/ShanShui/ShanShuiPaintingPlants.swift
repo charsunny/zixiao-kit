@@ -55,7 +55,7 @@ extension ShanShuiEngine {
     /// blossom / maple / layered: limbs angled up, a rounded crown of leaf or flower clusters;
     /// bare: crab-claw limbs whose tips hook down (蟹爪); willow: an arching trunk, hanging strands.
     func paintingTree(_ kind: ZXArt.SceneMotif) -> ZXArt.SSCanv {
-        if kind == .oldTree { return paintingLegacy(tree06(65, 175, hei: 165, wid: 5)) }
+        if kind == .oldTree || kind == .bareTree { return paintingWoodyTree(old: kind == .oldTree).canvas }
         let bare = kind == .bareTree, pine = kind == .pine, willow = kind == .willow
         let flowering = kind == .blossom
         let leaf: LeafStyle = kind == .layeredTree ? .flat : (kind == .maple ? .ge : .dots)

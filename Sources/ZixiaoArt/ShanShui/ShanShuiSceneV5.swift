@@ -99,6 +99,8 @@ private final class PaintingStage {
     var elements: [ZXArt.SceneElement] = []
     var placed = Set<Motif>()
     var paintedTrees: [Motif: ZXArt.SSCanv] = [:]
+    var treePerches: [Motif: [ZXArt.P]] = [:]
+    var treeVines: [Motif: ZXArt.SSCanv] = [:]
     var celestialLayers: [(layer: Int, motif: Motif)] = []
     var boats: [ZXArt.Anchors.Boat] = []
     var mountainRidges: [[ZXArt.P]] = []
@@ -199,8 +201,14 @@ private final class PaintingStage {
     private func add(_ motif: Motif, _ box: CGRect, repeatable: Bool = false, source: ZXArt.SSCanv? = nil) -> Bool {
         guard repeatable || !placed.contains(motif) else { return false }
         let raw: ZXArt.SSCanv
+        var woodyTree: ShanShuiEngine.PaintedWoodyTree?
         let reserveWindow = motif == .house && currentScene == .moonNight && selectedMotifs.contains(.window)
         if let source { raw = source }
+        else if motif == .oldTree || motif == .bareTree {
+            let tree = engine.paintingWoodyTree(old: motif == .oldTree)
+            woodyTree = tree
+            raw = tree.canvas
+        }
         else if reserveWindow { raw = engine.paintingHouse(reservingWindow: true) }
         else if motif == .mooredBoat { raw = engine.paintingBoat(.mooredBoat, mooring: false) }
         else if motif == .stream {
@@ -279,6 +287,18 @@ private final class PaintingStage {
             object.canv += mooring(from: bow, boat: actual)
         }
         if trees.contains(motif) { paintedTrees[motif] = object.canv }
+        if let tree = woodyTree {
+            let points = raw.flatMap(\.p)
+            let x0 = points.map(\.x).min()!, x1 = points.map(\.x).max()!, y0 = points.map(\.y).min()!
+            let scale = actual.width / (x1 - x0)
+            func moved(_ p: ZXArt.P) -> ZXArt.P {
+                .init(actual.minX + (p.x - x0) * scale, actual.minY + (p.y - y0) * scale)
+            }
+            treePerches[motif] = tree.perches.map(moved)
+            treeVines[motif] = tree.vine.map { polygon in
+                var p = polygon; p.p = p.p.map(moved); p.wid *= scale; return p
+            }
+        }
         if motif == .stream { engine.noted(.water, object.canv) }
         support(motif, bounds: actual, root: plantedRoot)
         if let root = plantedRoot { parts.append(.near(engine.paintingRootMoss(root))) }
@@ -714,17 +734,8 @@ private final class PaintingStage {
     private func treeCrows() {
         guard let tree = elements.first(where: { ["oldTree", "bareTree"].contains($0.motif) })?.bounds.cgRect else { return }
         let b = CGRect(x: tree.minX * w, y: tree.minY * h, width: tree.width * w, height: tree.height * h)
-        let minX = Double(b.minX), maxX = Double(b.maxX)
-        let minY = Double(b.minY + b.height * 0.22), maxY = Double(b.minY + b.height * 0.55)
-        var candidates: [ZXArt.P] = []
         let treeMotif: Motif = paintedTrees[.oldTree] == nil ? .bareTree : .oldTree
-        for polygon in paintedTrees[treeMotif] ?? [] {
-            for point in polygon.p {
-                if point.x >= minX && point.x <= maxX && point.y > minY && point.y < maxY {
-                    candidates.append(point)
-                }
-            }
-        }
+        let candidates = treePerches[treeMotif] ?? []
         let perches = engine.r() < 0.5 ? [0.23] : [0.23, 0.77]
         for fraction in perches {
             let target = ZXArt.P(b.minX + b.width * fraction, b.minY + b.height * 0.38)
@@ -1206,10 +1217,10 @@ private final class PaintingStage {
         case .autumnTravel:
             if chosen.contains(.bridge) { crossing(river: false) }
             include(chosen.contains(.oldTree) ? .oldTree : .bareTree, slot(0.0, 0.08, 0.76, 0.72))
-            // The vine hangs from the old tree's crown; it never floats on its own.
-            if chosen.contains(.vine), let tree = elements.first(where: { ["oldTree", "bareTree"].contains($0.motif) })?.bounds.cgRect {
-                add(.vine, CGRect(x: (tree.minX + tree.width * 0.12) * w, y: (tree.minY + tree.height * 0.06) * h,
-                    width: tree.width * w * 0.76, height: tree.height * h * 0.55))
+            if chosen.contains(.vine), let vine = treeVines[.oldTree] ?? treeVines[.bareTree],
+               let x0 = vine.flatMap(\.p).map(\.x).min(), let x1 = vine.flatMap(\.p).map(\.x).max(),
+               let y0 = vine.flatMap(\.p).map(\.y).min(), let y1 = vine.flatMap(\.p).map(\.y).max() {
+                add(.vine, CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0), source: vine)
             }
             if chosen.contains(.crow) { treeCrows() }
             // The accepted pair now belongs to the nearer bend of its own bounded road.

@@ -134,31 +134,10 @@ extension ShanShuiEngine {
         return result
     }
 
-    /// Withered vine (枯藤) hanging from branches: a few strands of unequal length that sway
-    /// slightly, with small dark leaves bunched near the top. Drawn in the crown's own frame.
+    /// Show the vine on its supporting tree in the atlas, using the scene's same skeleton.
     func paintingVine() -> ZXArt.SSCanv {
-        var c: ZXArt.SSCanv = []
-        let strands = 3 + Int(r() * 3)
-        for k in 0..<strands {
-            let x = 15 + r() * 65, top = r() * 12
-            let length = 24 + pow(r(), 0.7) * 80
-            let sway = (r() - 0.5) * 36
-            let line = inkCurve([P(x, top), P(x + sway + 7, top + length * 0.25),
-                P(x + sway - 5, top + length * 0.52), P(x + sway * 0.5, top + length * 0.78),
-                P(x + sway * 0.6 + 4, top + length)])
-            c += inkLine(line, width: k == 0 ? 1.5 : 0.65, tone: 0.65, dry: 0.5)
-            if k < 2 {
-                let loop = inkCurve([P(x, top + 4), P(x + 12, top - 5), P(x + 21, top + 3), P(x + 13, top + 12)])
-                c += inkLine(loop, width: 0.7, tone: 0.6, dry: 0.5)
-            }
-            for _ in 0..<(3 + Int(r() * 6)) {
-                let t = pow(r(), 2.2) * 0.55
-                let i = min(line.count - 1, Int(t * Double(line.count - 1)))
-                c += inkBlot(line[i].x + (r() - 0.5) * 6, line[i].y, radius: 1.4 + r() * 1.8,
-                    squash: 0.45, angle: r() * 3, tone: 0.65 + r() * 0.2)
-            }
-        }
-        return c
+        let tree = paintingWoodyTree(old: true)
+        return paintingInk(tree.canvas, depth: .far) + tree.vine
     }
 
     /// 白描瘦马: hip, withers and tucked belly remain legible through a very dilute coat.
