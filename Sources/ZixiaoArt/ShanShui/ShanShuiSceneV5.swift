@@ -660,9 +660,11 @@ private final class PaintingStage {
         }
         for fraction in [0.23, 0.77] {
             let target = ZXArt.P(b.minX + b.width * fraction, b.minY + b.height * 0.38)
-            guard let branch = candidates.min(by: {
-                hypot($0.x - target.x, $0.y - target.y) < hypot($1.x - target.x, $1.y - target.y)
-            }) else { continue }
+            func distance(_ point: ZXArt.P) -> Double {
+                let dx = point.x - target.x, dy = point.y - target.y
+                return dx * dx + dy * dy
+            }
+            guard let branch = candidates.min(by: { distance($0) < distance($1) }) else { continue }
             let scale = b.height * 0.036 / 17
             let bird = engine.paintingPerchedCrow().map { poly -> ZXArt.SSPoly in
                 var p = poly; p.p = p.p.map { .init(branch.x + $0.x * scale, branch.y + $0.y * scale) }
