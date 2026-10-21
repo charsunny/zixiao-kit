@@ -113,6 +113,7 @@ private final class PaintingStage {
     var structure: Structure = .level
     var currentScene: ZXArt.PoetryScene = .retreat
     var bankSurface: (x0: Double, step: Double, heights: [Double])?
+    var preparedGround: (canv: ZXArt.SSCanv, bounds: CGRect)?
     var groundInBand = false
     /// Set while placing an object at an explicit, already-grounded position and size.
     var pinned = false
@@ -288,6 +289,9 @@ private final class PaintingStage {
             }
         case .pine, .oldTree, .bareTree, .layeredTree, .willow, .blossom, .maple:
             let mountainScene = [ZXArt.PoetryScene.retreat, .temple, .historic].contains(currentScene)
+            if currentScene == .retreat, let ground = preparedGround {
+                maxWidth = min(maxWidth, ground.bounds.width * 0.38)
+            }
             maxHeight = min(maxHeight, min(art.height * (mountainScene ? 0.46 : 0.62), art.width * (mountainScene ? 0.85 : 0.65)))
             if let main = elements.first(where: { $0.motif == "mainMountain" }) {
                 // The pine of 明月松间照 is the protagonist of a mountain retreat, not a sapling.
@@ -332,7 +336,9 @@ private final class PaintingStage {
         guard let m = elements.first(where: { $0.motif == "mainMountain" })?.bounds.cgRect else { return }
         let peak = CGRect(x: m.minX * w, y: m.minY * h, width: m.width * w, height: m.height * h)
         let bh = peak.height * height, bw = bh * aspect
-        let cx = peak.minX + peak.width * along
+        guard let surface = bankSurface else { return }
+        let bankEnd = surface.x0 + surface.step * Double(surface.heights.count - 1)
+        let cx = min(max(peak.minX + peak.width * along, surface.x0 + bw * 0.5), bankEnd - bw * 0.5)
         guard let foot = bankFoot(cx - bw * 0.4, cx + bw * 0.4) else { return }
         pinned = true
         add(motif, CGRect(x: cx - bw / 2, y: foot - bh, width: bw, height: bh))
@@ -468,11 +474,10 @@ private final class PaintingStage {
             }
         }
         var peakBox = slot(0.02, 0.01, 0.95, 0.75)
-        if let top = bandTop {
-            // The peak stands behind the near ground: its foot meets the bank's upper edge in cloud,
-            // never below or in front of it on tall pages.
-            let foot = top + h * 0.12
-            peakBox = CGRect(x: peakBox.minX, y: peakBox.minY, width: peakBox.width, height: max(40, foot - peakBox.minY))
+        if let ground = preparedGround {
+            let foot = ground.bounds.minY + ground.bounds.height * 0.58
+            peakBox = CGRect(x: peakBox.minX, y: peakBox.minY, width: peakBox.width,
+                             height: max(40, foot - peakBox.minY))
         }
         if main, structure == .high {
             let guestBox = CGRect(x: peakBox.minX + peakBox.width * 0.48,
@@ -604,14 +609,14 @@ private final class PaintingStage {
         }
         let obstacles = elements.filter { ["pine", "bamboo", "hut"].contains($0.motif) }
             .map { $0.bounds.cgRect }.sorted { $0.minX < $1.minX }
-        var gaps: [(Double, Double)] = [], cursor = bank.minX + bank.width * 0.12
+        var gaps: [(Double, Double)] = [], cursor = bank.minX + 0.002
         for obstacle in obstacles {
             if obstacle.minX > cursor { gaps.append((cursor, obstacle.minX)) }
             cursor = max(cursor, obstacle.maxX)
         }
-        gaps.append((cursor, bank.maxX - bank.width * 0.08))
-        let viable = gaps.filter { $0.1 - $0.0 > bank.width * 0.08 }
-        let gap = viable.min { abs(($0.0 + $0.1) / 2 - bank.midX) < abs(($1.0 + $1.1) / 2 - bank.midX) }
+        gaps.append((cursor, bank.maxX - 0.002))
+        let viable = gaps.filter { $0.1 - $0.0 > 0.004 }
+        let gap = viable.max { $0.1 - $0.0 < $1.1 - $1.0 }
             ?? (bank.minX + bank.width * 0.35, bank.minX + bank.width * 0.55)
         let near = elements.first(where: { $0.motif == "nearBank" })?.bounds.cgRect ?? bank
         let bottom = max(bank.maxY, near.maxY) * h
@@ -653,7 +658,7 @@ private final class PaintingStage {
         }
     }
 
-    private func ground(for scene: ZXArt.PoetryScene) {
+    private func ground(for scene: ZXArt.PoetryScene, prepareOnly: Bool = false) {
         guard ![.desert, .ocean, .courtyard, .historic].contains(scene) else { return }
         let narrow = [.fishing, .lotusPond].contains(scene)
         var box: CGRect
@@ -669,7 +674,12 @@ private final class PaintingStage {
             box = CGRect(x: x, y: top, width: width, height: max(20, min(bottom - top, h * 0.13)))
             groundInBand = true
         }
-        if let object = fitted(engine.paintingBank(style: [.retreat, .temple].contains(scene) ? .cliff : (structure == .corner ? .headland : .shoal)), to: box) {
+        if prepareOnly {
+            preparedGround = fitted(engine.paintingBank(style: [.retreat, .temple].contains(scene) ? .cliff : (structure == .corner ? .headland : .shoal)), to: box)
+            if let object = preparedGround { recordBank(object) }
+            return
+        }
+        if let object = preparedGround {
             // In the band beneath the verse the near ground dissolves downward into mist and water,
             // instead of ending in a hard edge like an island floating on the paper.
             let b = object.bounds
@@ -677,7 +687,6 @@ private final class PaintingStage {
                 ? .init(canv: object.canv, near: true, fade: .init(top: b.minY + b.height * 0.40,
                         bottom: b.maxY + b.height * 0.08, seed: engine.inkSeed()))
                 : .near(object.canv))
-            recordBank(object)
         }
         // Foreground slope: a small dark corner, not a second ground plane across the page.
         if !narrow, !groundInBand, structure != .level, let object = fitted(engine.paintingBank(),
@@ -701,6 +710,7 @@ private final class PaintingStage {
             }
         }
         if scene == .winterForest { engine.snowLight = 0.45 }
+        ground(for: scene, prepareOnly: true)
         let chosen = Set(options.motifs)
         func include(_ motif: Motif, _ box: CGRect) { if chosen.contains(motif) { add(motif, box) } }
         if ![.desert, .ocean, .courtyard].contains(scene) { hills([.retreat, .temple, .historic].contains(scene)) }
