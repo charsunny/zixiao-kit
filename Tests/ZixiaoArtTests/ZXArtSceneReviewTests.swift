@@ -139,6 +139,7 @@ final class ZXArtSceneReviewTests: XCTestCase {
                     ("rock", { $0.paintingRock() }), ("dunes.far", { $0.paintingDunes(far: true) }),
                     ("longRiver", { $0.paintingLongRiver() }), ("riverRibbon", { $0.paintingRiverRibbon() }),
                     ("channel.river", { $0.paintingChannel(width: 320, height: 120, river: true) }),
+                    ("stream.rocky", { $0.paintingRockyStream() }),
                     ("reflection", { $0.paintingReflection(width: 200, height: 80) })]
         for kind in PaintingWaterKind.allCases {
             entries.append(("water.\(kind.rawValue)", { $0.paintingSurface(kind, width: 320, height: 140) }))

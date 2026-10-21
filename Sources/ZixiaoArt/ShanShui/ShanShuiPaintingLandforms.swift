@@ -290,7 +290,7 @@ extension ShanShuiEngine {
             let rib = inkCurve(controls, steps: 10)
             func inside(_ p: P) -> P { P(p.x, max(ridgeY(p.x) + 1, min(height + 1, p.y))) }
             // Adjacent narrow wash strips fade away from the valley edge, without rectangles.
-            let shadowWidth = width * (0.045 + r() * 0.04)
+            let shadowWidth = width * (0.10 + r() * 0.065)
             for band in 0..<12 {
                 func edge(_ t: Double) -> [P] {
                     rib.enumerated().map { i, p in
@@ -301,23 +301,49 @@ extension ShanShuiEngine {
                 }
                 let t = Double(band) / 12
                 c.append(poly(edge(t) + edge(Double(band + 1) / 12).reversed(),
-                    fil: .gray(0, 0.10 * pow(1 - t, 1.7)), str: nil))
+                    fil: .gray(0, 0.19 * pow(1 - t, 1.4)), str: nil))
             }
             c += slopeStroke(Array(rib.prefix(rib.count * 3 / 4)).map(inside), width: 1.6,
                 tone: 0.49, pressures: [0.25, 0.75, 0.5, 0.65, 0.05], dry: 0.56)
-            // Bundles follow the same rib tangent; omit the lit side and the clouded foot.
-            for bundle in 0..<(2 + k % 2) {
-                let start = 3 + bundle * 8
-                guard start + 7 < rib.count else { continue }
-                for strand in 0..<(4 + Int(r() * 3)) {
-                    let offset = 3.5 + Double(strand) * (2.2 + r() * 1.6)
-                    let length = 3 + Int(r() * 4)
+            // 披麻 / 解索: long, overlapping bundles on the valley face. The strands
+            // follow one structural rib rather than repeating independent curls over the mountain.
+            for bundle in 0..<3 {
+                let start = 2 + bundle * 7
+                for strand in 0..<(8 + Int(r() * 5)) {
+                    let offset = 2.5 + Double(strand) * (2.0 + r() * 1.4)
+                    let length = 9 + Int(r() * 7)
                     let line = (0...length).map { j -> P in
-                        let p = rib[min(rib.count - 1, start + j)]
-                        return inside(p + P(offset + Double(j) * (1.5 + Double(strand) * 0.15), Double(strand) * 1.6))
+                        let index = min(rib.count - 1, start + j)
+                        let p = rib[index]
+                        let t = Double(j) / Double(length)
+                        let loosen = sin(t * .pi * 1.5 + Double(strand) * 0.35) * (2 + t * 3)
+                        return inside(p + P(offset + loosen + t * Double(strand) * 0.6,
+                            Double(strand) * 1.2))
                     }
-                    c += slopeStroke(line, width: strand == 0 ? 3.4 : 0.8 + r() * 0.5,
-                        tone: 0.32 + r() * 0.16, pressures: [0.4, 0.85, 0.6, 0.3, 0.03], dry: 0.66)
+                    c += slopeStroke(line, width: strand % 5 == 0 ? 2.7 : 1.0 + r() * 0.65,
+                        tone: 0.43 + r() * 0.14, pressures: [0.3, 0.9, 0.65, 0.7, 0.04], dry: 0.58)
+                }
+            }
+            // A second, broad wash settles in the lower valley. Each strip fades sideways;
+            // the scene's existing LayerFade dissolves the whole mountain into waist clouds.
+            for band in 0..<16 {
+                func lowerEdge(_ t: Double) -> [P] {
+                    rib.enumerated().map { i, p in
+                        let v = Double(i) / Double(rib.count - 1)
+                        let swell = pow(sin(v * .pi), 0.8) * (0.35 + v)
+                        return inside(p + P(width * 0.13 * t * swell, available * 0.10 * t))
+                    }
+                }
+                let t = Double(band) / 16
+                c.append(poly(lowerEdge(t) + lowerEdge(Double(band + 1) / 16).reversed(),
+                    fil: .gray(0, 0.09 * pow(1 - t, 1.5)), str: nil))
+            }
+            for cluster in 0..<(2 + k % 2) {
+                let at = 4 + cluster * 8 + Int(r() * 3)
+                for j in 0..<(3 + Int(r() * 4)) {
+                    let p = inside(rib[min(rib.count - 1, at + j / 3)] + P(Double(j) * 2.2 - 4, 0))
+                    c += slopeStroke([p, p + P(2.4 + r() * 1.8, -0.6)], width: 1.7,
+                        tone: 0.80 + r() * 0.1, pressures: [0.2, 1, 0.85, 0.4, 0.05], dry: 0.30)
                 }
             }
             // Smaller shoulders turn each broad face. Their short fibres descend into the
@@ -363,13 +389,20 @@ extension ShanShuiEngine {
                   !terraced || p.y < 0.91 else { continue }
             for k in 0..<(2 + Int(r() * 3)) {
                 let x = width * p.x + Double(k - 1) * width * 0.027
-                let rx = width * (0.025 + r() * 0.018), ry = height * (0.018 + r() * 0.012)
+                let rx = width * (0.032 + r() * 0.018), ry = height * (0.022 + r() * 0.014)
                 let top = ridgeY(x) + ry * (0.6 + Double(k) * 0.35)
                 let cap = inkCurve([P(x - rx, top + ry), P(x - rx * 0.65, top),
                     P(x + rx * 0.15, top - ry * 0.15), P(x + rx, top + ry * 0.6)])
                 let clipped = cap.map { P($0.x, max(ridgeY($0.x) + 1, $0.y)) }
                 c += slopeStroke(clipped, width: 1.7, tone: 0.56,
                     pressures: [0.2, 0.7, 0.5, 0.65, 0.1], dry: 0.45)
+                for j in 0..<4 {
+                    let sx = x + Double(j) * rx * 0.15
+                    let sy = max(ridgeY(sx) + 2, top + ry * 0.15)
+                    c += slopeStroke(inkCurve([P(sx, sy), P(sx + rx * 0.2, sy + ry * 0.65),
+                        P(sx + rx * 0.4, sy + ry * 1.4)]), width: 1.0, tone: 0.44,
+                        pressures: [0.3, 0.8, 0.6, 0.3, 0.05], dry: 0.58)
+                }
             }
         }
         // Groves gather on a few shoulders, with broad intervals of bare ridge.

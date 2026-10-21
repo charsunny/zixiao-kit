@@ -221,6 +221,7 @@ private final class PaintingStage {
         else if motif == .mooredBoat { raw = engine.paintingBoat(.mooredBoat, mooring: false) }
         else if motif == .stream {
             raw = currentScene == .desert ? waterEngine.paintingLongRiver()
+                : currentScene == .retreat ? waterEngine.paintingRockyStream()
                 : waterEngine.paintingChannel(width: box.width, height: box.height)
         } else if motif == .curtain {
             raw = engine.paintingCurtain(width: box.width, height: box.height)
