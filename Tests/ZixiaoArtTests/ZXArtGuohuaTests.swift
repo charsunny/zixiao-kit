@@ -117,7 +117,7 @@ struct ZXArtGuohuaTests {
                     } else {
                         let person = try bounds("traveler"), horse = try bounds("horse"), road = try bounds("path")
                         #expect(person.height * size.height > bank.width * size.width * 0.035)
-                        #expect(horse.width > bank.width * 0.08)
+                        #expect(horse.width * size.width > min(size.width, size.height) * 0.055)
                         #expect(road.contains(CGPoint(x: horse.midX, y: horse.maxY)))
                         #expect(road.contains(CGPoint(x: person.midX, y: person.maxY)))
                     }

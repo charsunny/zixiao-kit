@@ -718,7 +718,8 @@ private final class PaintingStage {
         let farY = bankFoot(farX - 1, farX + 1) ?? (b.minY + b.height * 0.5)
         let center = engine.inkCurve([.init(farX, farY + 1),
             .init(right + personH * 0.15, foot - personH * 0.35), .init(right, foot),
-            .init(x - personH * 0.25, foot), .init(b.minX + b.width * 0.47, b.maxY + b.height * 0.12)])
+            .init(x - personH * 0.25, foot),
+            .init(b.minX + b.width * 0.47, min(b.maxY + b.height * 0.12, footer - personH * 0.34 - 2))])
         let upper = center.enumerated().map { i, p in
             let t = Double(i) / Double(center.count - 1)
             return ZXArt.P(p.x, p.y - personH * (0.035 + 0.32 * pow(t, 1.3)))
@@ -772,7 +773,7 @@ private final class PaintingStage {
         let width = b.width * 0.40
         let startY = max(b.minY - b.height * 0.35, verse.isNull ? art.minY : verse.maxY + 4)
         let box = CGRect(x: b.minX + b.width * (river ? 0.36 : 0.025), y: startY,
-                         width: width, height: b.maxY - startY + b.height * 0.12)
+                         width: width, height: min(b.maxY - startY + b.height * 0.12, footer - startY - 2))
         let phase = waterEngine.r() * 1.6 - 0.8
         let channel = PaintingWaterChannel(width: width, height: box.height, phase: phase, broad: true)
         func place(_ raw: ZXArt.SSCanv, x: Double, y: Double, scale: Double = 1, motif: String) {
@@ -789,9 +790,18 @@ private final class PaintingStage {
         }
         place(waterEngine.paintingChannel(channel), x: box.minX, y: box.minY, motif: river ? "riverChannel" : "stream")
         placed.insert(.stream)
-        let left = channel.point(0.64, across: -1), right = channel.point(0.64, across: 1)
         let bridge = engine.paintingBridgePlan()
-        let scale = (right.x - left.x) * 1.16 / bridge.width
+        // Move a crossing upstream if its reflected arch would enter the page's caption band.
+        let reflectionDepth = bridge.kind == .arch ? max(24, bridge.rise + 2) : 24
+        func spanScale(_ t: Double) -> Double {
+            (channel.point(t, across: 1).x - channel.point(t, across: -1).x) * 1.16 / bridge.width
+        }
+        var crossingT = 0.64
+        while crossingT > 0.32, box.minY + box.height * crossingT + reflectionDepth * spanScale(crossingT) > footer - 1 {
+            crossingT -= 0.04
+        }
+        let left = channel.point(crossingT, across: -1), right = channel.point(crossingT, across: 1)
+        let scale = spanScale(crossingT)
         let x = box.minX + (left.x + right.x) / 2 - bridge.width * scale / 2
         let y = box.minY + left.y - 60 * scale
         place(engine.paintingBridge(bridge), x: x, y: y, scale: scale, motif: "bridge")
@@ -1077,7 +1087,7 @@ private final class PaintingStage {
             if chosen.contains(.traveler), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
                 let size = art.width * 0.043
                 for fraction in [0.68, 0.74] {
-                    let x = (bank.minX + bank.width * fraction) * w
+                    let x = supportedBankX((bank.minX + bank.width * fraction) * w)
                     if let foot = bankFoot(x - size * 0.2, x + size * 0.2) {
                         pinned = true
                         add(.traveler, CGRect(x: x - size * 0.3, y: foot - size, width: size * 0.6, height: size), repeatable: true)
