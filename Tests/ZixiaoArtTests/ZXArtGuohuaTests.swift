@@ -76,7 +76,7 @@ struct ZXArtGuohuaTests {
                                 let path = CGMutablePath()
                                 path.addLines(between: shape.points.map { CGPoint(x: Double($0.x), y: Double($0.y)) })
                                 path.closeSubpath()
-                                return [terrace.minX, terrace.maxX].allSatisfy { x in
+                                return [terrace.minX, terrace.midX, terrace.maxX].allSatisfy { x in
                                     path.contains(CGPoint(x: x * drawing.width, y: (terrace.minY + 0.001) * drawing.height))
                                 } && !path.contains(CGPoint(x: person.midX * drawing.width, y: person.minY * drawing.height))
                             }
@@ -130,6 +130,24 @@ struct ZXArtGuohuaTests {
             #expect(bank.minX < 0.05 && bank.maxX > 0.95)
             let verse = try #require(recipe.verseLayout(pixelSize: .init(width: 750, height: 1000)))
             #expect(bank.minY > verse.rect.maxY)
+        }
+    }
+
+    @Test func courtyardWindowIsInsetAndWillowContinuesBehindWall() throws {
+        for size in [CGSize(width: 750, height: 1000), CGSize(width: 1200, height: 675)] {
+            for seed in 0..<4 {
+                let selection = ZXArt.SceneSelection(scene: .courtyard,
+                    options: .init(motifs: [.courtyard, .willow, .window]), matched: [])
+                let d = try #require(ZXArt.drawing(procedural: selection.paintingProcedural(seed: "court-\(seed)"),
+                    palette: .paperInk, pixelSize: size))
+                let wall = try #require(d.sceneElements.first { $0.motif == "courtyard" }).bounds.cgRect
+                let tree = try #require(d.sceneElements.first { $0.motif == "willow" }).bounds.cgRect
+                let window = try #require(d.sceneElements.first { $0.motif == "window" }).bounds.cgRect
+                #expect(wall.insetBy(dx: wall.width * 0.12, dy: wall.height * 0.12).contains(window))
+                #expect(tree.maxY > wall.minY + wall.height * 0.55)
+                #expect(tree.maxY < wall.maxY)
+                #expect(tree.minY < wall.minY)
+            }
         }
     }
 

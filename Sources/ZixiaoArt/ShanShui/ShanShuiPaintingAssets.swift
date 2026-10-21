@@ -277,7 +277,12 @@ extension ShanShuiEngine {
         let slope = 0.22
         let top = [P(14, 48), P(176, 48 + 162 * slope)], bottom = [P(14, 140), P(176, 140 + 162 * slope)]
         let face = [top[0], top[1], bottom[1], bottom[0]]
-        var c = [poly(face, fil: .white, str: nil), poly(face, fil: .gray(0, 0.04), str: nil)]
+        let ground = inkCurve([P(-18, 139), P(6, 133), P(52, 147), P(124, 160), P(194, 178),
+            P(159, 202), P(70, 186), P(-12, 164)])
+        var c = [poly(ground, fil: .white, str: nil), poly(ground, fil: .gray(0, 0.045), str: nil)]
+        c += inkLine([P(-14, 146), P(8, 142), P(32, 148)], width: 0.8, tone: 0.27, dry: 0.7)
+        c += inkLine([P(132, 178), P(172, 185), P(187, 183)], width: 0.7, tone: 0.19, dry: 0.72)
+        c += [poly(face, fil: .white, str: nil), poly(face, fil: .gray(0, 0.04), str: nil)]
         // The near end turns a corner: a narrow return face in shadow shows the wall's thickness.
         let end = [P(0, 42), P(14, 48), P(14, 140), P(0, 134)]
         c.append(poly(end, fil: .white, str: nil))

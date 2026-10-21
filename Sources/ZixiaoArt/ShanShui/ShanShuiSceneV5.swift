@@ -111,6 +111,7 @@ private final class PaintingStage {
     var boats: [ZXArt.Anchors.Boat] = []
     var mountainRidges: [[ZXArt.P]] = []
     var summitLedge: CGRect?
+    var historicGroundNeeded = false
     enum Structure { case high, deep, level, corner }
     var structure: Structure = .level
     var currentScene: ZXArt.PoetryScene = .retreat
@@ -206,6 +207,8 @@ private final class PaintingStage {
         if motif == .stream {
             raw = currentScene == .desert ? waterEngine.paintingLongRiver()
                 : waterEngine.paintingChannel(width: box.width, height: box.height)
+        } else if motif == .window, currentScene == .courtyard {
+            raw = engine.paintingWindow(embedded: true)
         } else { raw = engine.paintingAsset(motif) }
         var box = box
         // Paths and fields are drawn on the ground they belong to, never hanging below it.
@@ -510,7 +513,7 @@ private final class PaintingStage {
         // Two ranges, staggered: the far one higher, paler and to one side; the nearer one lower
         // and offset the other way. Each covers part of the width so the sky stays open.
         let side = engine.r() < 0.5
-        let ranges = structure == .corner || structure == .high ? 1 : 2
+        let ranges = currentScene == .historic || structure == .corner || structure == .high ? 1 : 2
         for k in 0..<ranges {
             let raw = engine.paintingDistant(k)
             let width = 0.58 + engine.r() * 0.16
@@ -560,7 +563,14 @@ private final class PaintingStage {
                 let ridge = Array(outline.p.dropLast(2))
                 mountainRidges.append(ridge)
                 if currentScene == .historic, let top = ridge.map(\.y).min() {
-                    let ledge = ridge.filter { abs($0.y - top) < 0.001 }
+                    // Choose one contiguous bearing plane, never bridge two summits over a cleft.
+                    var runs: [[ZXArt.P]] = [], run: [ZXArt.P] = []
+                    for p in ridge {
+                        if abs(p.y - top) < 0.001 { run.append(p) }
+                        else if !run.isEmpty { runs.append(run); run = [] }
+                    }
+                    if !run.isEmpty { runs.append(run) }
+                    let ledge = runs.max { ($0.last!.x - $0.first!.x) < ($1.last!.x - $1.first!.x) } ?? []
                     if let left = ledge.first, let right = ledge.last {
                         summitLedge = CGRect(x: left.x, y: top, width: right.x - left.x, height: 1)
                     }
@@ -805,8 +815,19 @@ private final class PaintingStage {
                 ground.bounds.size.width = box.width
                 preparedGround = ground
             }
-            if let object = preparedGround { recordBank(object) }
+            if let object = preparedGround, scene != .historic || historicGroundNeeded { recordBank(object) }
             return
+        }
+        if scene == .historic {
+            let band = lowerBand(columnFrom: 0.74)
+            let box = CGRect(x: band.minX, y: band.minY + band.height * 0.20,
+                             width: band.width * 0.90, height: band.height * 0.20)
+            if let earth = fitted(waterEngine.paintingDistant(0), to: box) {
+                parts.append(.init(canv: engine.paintingInk(earth.canv, depth: .far),
+                    mist: .init(depth: earth.bounds.height, blur: 0.45, peak: 0.6,
+                                floorY: earth.bounds.maxY, floorDepth: earth.bounds.height * 0.9)))
+            }
+            if !historicGroundNeeded { return }
         }
         if let object = preparedGround {
             // In the band beneath the verse the near ground dissolves downward into mist and water,
@@ -819,7 +840,7 @@ private final class PaintingStage {
                 : .near(canvas))
         }
         // Foreground slope: a small dark corner, not a second ground plane across the page.
-        if !narrow, !groundInBand, structure != .level, let object = fitted(engine.paintingBank(),
+        if scene != .historic, !narrow, !groundInBand, structure != .level, let object = fitted(engine.paintingBank(),
                                         to: slot(0.0, 0.52, 0.40, 0.48, front: true)) {
             parts.append(.near(object.canv))
             let r = object.bounds
@@ -830,6 +851,7 @@ private final class PaintingStage {
 
     func compose(scene: ZXArt.PoetryScene, options: ZXArt.SceneOptions) {
         currentScene = scene
+        historicGroundNeeded = options.motifs.contains(.ruins) || options.motifs.contains(.cityGate)
         if [.retreat, .temple, .historic].contains(scene) {
             structure = composition == .depth ? .deep : .high
         } else {
@@ -846,6 +868,13 @@ private final class PaintingStage {
         if ![.desert, .ocean, .courtyard].contains(scene) { hills([.retreat, .temple, .historic].contains(scene)) }
         if [.fishing, .waterTown, .farewell, .lotusPond, .moonNight].contains(scene) { water() }
         for motif in [Motif.mist, .afterRain] where chosen.contains(motif) {
+            if ![ZXArt.PoetryScene.retreat, .temple, .historic].contains(scene),
+               let range = elements.first(where: { $0.motif == "farMountain" }) {
+                // Existing distant ranges already dissolve into mist; do not add a third ridge.
+                elements.append(.init(motif: motif.rawValue, bounds: range.bounds))
+                placed.insert(motif)
+                continue
+            }
             let y = [.retreat, .temple, .historic].contains(scene) ? 0.58 : 0.16
             add(motif, slot(0.02, y, 0.96, 0.07))
         }
@@ -986,16 +1015,17 @@ private final class PaintingStage {
             if let wall = fitted(engine.paintingCourtyard(), to: wallBox) {
                 // Root the willow just behind the wall's near end, so the wall hides its trunk.
                 let willowW = art.width * 0.62
-                let rootY = wall.bounds.minY + wall.bounds.height * 0.32
+                let rootY = wall.bounds.minY + wall.bounds.height * 0.67
                 let x = min(max(art.minX, wall.bounds.minX + wall.bounds.width * 0.18 - willowW / 2), art.maxX - willowW)
                 include(.willow, CGRect(x: x, y: art.minY, width: willowW, height: rootY - art.minY))
-                parts.append(.near(wall.canv))
                 let r = wall.bounds
+                parts.append(.init(canv: wall.canv, near: true,
+                    fade: .init(top: r.minY + r.height * 0.76, bottom: r.maxY, seed: engine.inkSeed())))
                 elements.append(.init(motif: Motif.courtyard.rawValue, bounds: .init(x: r.minX / w, y: r.minY / h,
                     width: r.width / w, height: r.height / h)))
                 placed.insert(.courtyard)
-                let near = CGRect(x: r.minX + r.width * 0.06, y: r.minY + r.height * 0.34,
-                                  width: r.width * 0.18, height: r.height * 0.30)
+                let near = CGRect(x: r.minX + r.width * 0.20, y: r.minY + r.height * 0.34,
+                                  width: r.width * 0.12, height: r.height * 0.23)
                 include(.window, near)
                 include(.curtain, near.insetBy(dx: near.width * 0.12, dy: near.height * 0.10))
             }
@@ -1043,7 +1073,7 @@ private final class PaintingStage {
                     width: far.bounds.width / w, height: far.bounds.height / h)))
             }
             if chosen.contains(.stream) {
-                layWater(waterEngine.paintingRiverRibbon(), in: CGRect(x: full.minX, y: horizon + full.height * 0.10,
+                layWater(engine.paintingInk(waterEngine.paintingRiverRibbon(), depth: .middle), in: CGRect(x: full.minX, y: horizon + full.height * 0.10,
                     width: full.width, height: full.height * 0.16), motif: "stream")
                 placed.insert(.stream)
             }

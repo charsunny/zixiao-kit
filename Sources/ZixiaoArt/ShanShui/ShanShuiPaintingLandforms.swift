@@ -123,21 +123,25 @@ extension ShanShuiEngine {
         } else {
             // 披麻: groups collect on the shaded shoulders, with open lit passages between them.
             // Analytic single-direction curves preserve the accepted no-hook stroke endings.
-            for group in 0..<7 {
-                let center = width * (0.08 + (Double(group) + r() * 0.7) / 7 * 0.84)
-                let strands = 3 + Int(r() * 3)
+            let groups = 4 + Int(r() * 4)
+            for _ in 0..<groups {
+                let center = width * (0.12 + r() * 0.76)
+                let spread = width * (0.025 + r() * 0.055)
+                let strands = 2 + Int(r() * 6)
+                let startDepth = 0.09 + r() * 0.32
                 for k in 0..<strands {
-                    let px = min(width - 3, max(3, center + (r() - 0.5) * width * 0.07))
-                    let start = surface(px, 0.10 + r() * 0.20)
+                    let px = min(width - 3, max(3, center + (r() - 0.5) * spread))
+                    let start = surface(px, startDepth + r() * 0.12)
                     let available = floor(at: px) - start.y
-                    let reach = available * (0.24 + r() * 0.58)
+                    let reach = available * (0.15 + pow(r(), 0.65) * 0.70)
                     guard reach > 3 else { continue }
                     let direction = top(at: px + 2) > top(at: px - 2) ? 1.0 : -1.0
                     let edge = direction > 0 ? width - px - 2 : px - 2
-                    let dx = direction * min(edge, reach * (0.35 + r() * 0.55))
+                    let dx = direction * min(edge, reach * (0.12 + r() * 0.95))
+                    let curve = 0.48 + r() * 0.70
                     let line = (0...18).map { i -> P in
                         let t = Double(i) / 18
-                        return P(px + dx * (0.65 * t + 0.35 * t * t), start.y + reach * t)
+                        return P(px + dx * pow(t, curve), start.y + reach * pow(t, 1.15))
                     }
                     guard line.allSatisfy({ $0.y >= top(at: $0.x) && $0.y <= floor(at: $0.x) }) else { continue }
                     c += inkLine(line, width: k == 0 ? 1.2 + r() * 0.8 : 0.5 + r() * 0.6,
