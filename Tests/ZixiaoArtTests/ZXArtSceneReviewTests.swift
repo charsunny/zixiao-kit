@@ -288,6 +288,12 @@ final class ZXArtSceneReviewTests: XCTestCase {
         }
     }
 
+    static let pavilionSamples: [(String, ZXArt.PoetryScene, [ZXArt.SceneMotif])] = [
+        ("pavilion-water", .waterTown, [.pavilion, .willow, .boat]),
+        ("pavilion-mountain", .retreat, [.pavilion, .pine, .stream]),
+        ("pavilion-courtyard", .courtyard, [.pavilion, .courtyard, .willow, .window])
+    ]
+
     /// Buildings and sails that none of the representative poems explicitly request.
     func testBuildingObjectSceneReview() throws {
         guard let dir = ProcessInfo.processInfo.environment["ZXART_REVIEW_DIR"] else {
@@ -297,7 +303,7 @@ final class ZXArtSceneReviewTests: XCTestCase {
             ("objects-historic", .historic, [.cityGate, .ruins, .terrace, .traveler]),
             ("objects-sail", .fishing, [.sail, .reeds]),
             ("plants-waterfall", .retreat, [.waterfall, .stream, .pine])
-        ]
+        ] + Self.pavilionSamples
         for (name, scene, motifs) in samples {
             let selection = ZXArt.SceneSelection(scene: scene, options: .init(motifs: motifs), matched: [])
             for (format, size) in [("portrait", CGSize(width: 750, height: 1000)), ("wide", CGSize(width: 1200, height: 675))] {
@@ -306,6 +312,18 @@ final class ZXArtSceneReviewTests: XCTestCase {
                 try write(try framedWithVerse(image, procedural: recipe, size: size, palette: .paperInk),
                           to: URL(fileURLWithPath: dir).appendingPathComponent("\(name)-\(format)-light.png"))
             }
+        }
+        // Six whole compositions per context expose occlusion and grounding, not only roof shapes.
+        for (name, scene, motifs) in Self.pavilionSamples {
+            var images: [CGImage] = []
+            for seed in 0..<6 {
+                let selection = ZXArt.SceneSelection(scene: scene, options: .init(motifs: motifs), matched: [])
+                let recipe = selection.paintingProcedural(seed: "\(name)-\(seed)", verseSide: nil, composition: .corner)
+                images.append(try XCTUnwrap(ZXArt.render(procedural: recipe, palette: .paperInk,
+                    pixelSize: CGSize(width: 700, height: 525))))
+            }
+            try write(try contactSheet(images, columns: 3, cell: CGSize(width: 400, height: 300)),
+                to: URL(fileURLWithPath: dir).appendingPathComponent("groups-\(name).png"))
         }
         // Text-selected forms need scene evidence as well as isolated atlas rows.
         let semanticSamples = [
