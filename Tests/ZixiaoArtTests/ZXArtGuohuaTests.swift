@@ -95,6 +95,37 @@ struct ZXArtGuohuaTests {
         }
     }
 
+    @Test func bridgeAndJourneyRemainLegibleAtSceneScale() throws {
+        for size in [CGSize(width: 750, height: 1000), CGSize(width: 1200, height: 675)] {
+            for seed in 0..<6 {
+                for scene in [ZXArt.PoetryScene.waterTown, .autumnTravel] {
+                    let motifs: [ZXArt.SceneMotif] = scene == .waterTown
+                        ? [.bridge, .stream, .house, .willow] : [.path, .horse, .traveler, .bareTree]
+                    let selection = ZXArt.SceneSelection(scene: scene, options: .init(motifs: motifs), matched: [])
+                    let recipe = selection.paintingProcedural(seed: "legible-\(seed)", verseSide: "right", composition: .corner)
+                    let drawing = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: size))
+                    func bounds(_ motif: String) throws -> CGRect {
+                        try #require(drawing.sceneElements.first { $0.motif == motif }).bounds.cgRect
+                    }
+                    let bank = try bounds("groundBank")
+                    if scene == .waterTown {
+                        let bridge = try bounds("bridge"), house = try bounds("house"), water = try bounds("riverChannel")
+                        #expect(bridge.width > house.width * 0.8)
+                        #expect(house.midX > bridge.midX)
+                        #expect(bridge.intersects(water))
+                        #expect(water.maxY > bridge.maxY)
+                    } else {
+                        let person = try bounds("traveler"), horse = try bounds("horse"), road = try bounds("path")
+                        #expect(person.height * size.height > bank.width * size.width * 0.035)
+                        #expect(horse.width > bank.width * 0.08)
+                        #expect(road.contains(CGPoint(x: horse.midX, y: horse.maxY)))
+                        #expect(road.contains(CGPoint(x: person.midX, y: person.maxY)))
+                    }
+                }
+            }
+        }
+    }
+
     @Test func buildingsHaveGroundBelowThemIncludingHistoricAccents() throws {
         let buildings: Set<String> = ["house", "hut", "pavilion", "pagoda", "templeGate", "terrace", "ruins", "cityGate"]
         for scene in [ZXArt.PoetryScene.retreat, .temple, .historic, .village, .farewell, .waterTown, .winterForest, .moonNight] {

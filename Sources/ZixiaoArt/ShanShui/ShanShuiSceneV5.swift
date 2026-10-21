@@ -714,7 +714,9 @@ private final class PaintingStage {
         let foot = min(b.maxY - 2, max(crest + 3, b.minY + b.height * 0.78))
         // The road passes through the near face, rather than putting the pair on a distant rim.
         let right = x + horseW + personW + personH * 0.30
-        let center = engine.inkCurve([.init(b.maxX - b.width * 0.03, b.minY + b.height * 0.20),
+        let farX = b.minX + b.width * 0.88
+        let farY = bankFoot(farX - 1, farX + 1) ?? (b.minY + b.height * 0.5)
+        let center = engine.inkCurve([.init(farX, farY + 1),
             .init(right + personH * 0.15, foot - personH * 0.35), .init(right, foot),
             .init(x - personH * 0.25, foot), .init(b.minX + b.width * 0.47, b.maxY + b.height * 0.12)])
         let upper = center.enumerated().map { i, p in
@@ -732,9 +734,9 @@ private final class PaintingStage {
         }
         // A narrow earthen lip outside the road binds it to the slope without filling the road.
         let lip = upper.enumerated().map { i, p in
-            ZXArt.P(p.x + 1, p.y - 2 - Double(i) / Double(upper.count) * 4)
+            ZXArt.P(p.x + 0.5, p.y - 0.8 - Double(i) / Double(upper.count) * 1.8)
         }
-        road.append(engine.poly(upper + lip.reversed(), fil: .gray(0, 0.065), str: nil))
+        road.append(engine.poly(upper + lip.reversed(), fil: .gray(0, 0.045), str: nil))
         parts.append(.near(road))
         let roadPoints = upper + lower
         let roadBox = CGRect(x: roadPoints.map(\.x).min()!, y: roadPoints.map(\.y).min()!,
