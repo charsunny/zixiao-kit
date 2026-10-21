@@ -150,8 +150,9 @@ extension ShanShuiEngine {
             vine += inkLine(wrap, width: 1.0, tone: 0.72, dry: 0.35)
         }
         for perch in perches.prefix(form == 2 ? 2 : 1) {
+            let drop = min(58 + r() * 15, root.y - perch.y - 4)
             let loop = inkCurve([perch + P(-7, 4), perch + P(-3, -4), perch + P(5, -2),
-                perch + P(9, 17), perch + P(3, 37), perch + P(11, 58 + r() * 15)])
+                perch + P(9, 17), perch + P(3, 37), perch + P(11, drop)])
             vine += inkLine(loop, width: 0.9, tone: 0.68, dry: 0.4)
             for p in loop.prefix(15) where r() < 0.2 {
                 vine += inkLine([p, p + P(3, 2)], width: 2.0, tone: 0.8, profile: .lens)

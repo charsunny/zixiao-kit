@@ -1391,12 +1391,16 @@ private final class PaintingStage {
                 let root = treeRoots[.oldTree]
                 let treeWidth = elements.first(where: { $0.motif == "oldTree" })?.bounds.cgRect.width ?? 0
                 let clearance = width * 0.60 + treeWidth * w * 0.06
-                let alternatives = bankSurface.map { surface in
-                    surface.heights.indices.filter { surface.heights[$0].isFinite }
-                        .map { surface.x0 + Double($0) * surface.step }
-                        .filter { $0 > bank.minX * w + width * 0.52 && $0 < bank.maxX * w - width * 0.52 }
-                        .sorted { abs($0 - desired) < abs($1 - desired) }
-                } ?? []
+                var alternatives: [Double] = []
+                if let surface = bankSurface {
+                    let low = bank.minX * w + width * 0.52
+                    let high = bank.maxX * w - width * 0.52
+                    for i in surface.heights.indices where surface.heights[i].isFinite {
+                        let x = surface.x0 + Double(i) * surface.step
+                        if x > low, x < high { alternatives.append(x) }
+                    }
+                    alternatives.sort { abs($0 - desired) < abs($1 - desired) }
+                }
                 for x in [desired] + alternatives {
                     guard root.map({ abs(x - $0.x) >= clearance }) ?? true else { continue }
                     guard let foot = bankFoot(x - width * 0.36, x + width * 0.36) else { continue }
