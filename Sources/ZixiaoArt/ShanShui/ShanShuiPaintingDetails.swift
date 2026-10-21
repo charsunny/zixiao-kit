@@ -2,29 +2,54 @@
 import Foundation
 
 extension ShanShuiEngine {
+    /// Straight joinery: vertical mullions, square lattice, or ice-crack tracery. No skewed
+    /// wall slab is carried with the window, so the same frame can be set into a house or court.
     func paintingWindow(embedded: Bool = false) -> ZXArt.SSCanv {
-        if embedded {
-            // A recess in the existing wall plane, without another wall slab or projecting roof.
-            let frame = [P(0, 0), P(48, 10.56), P(48, 63.56), P(0, 53), P(0, 0)]
-            var c = [poly(frame, fil: .gray(0, 0.11), str: nil)]
-            c += inkLine(frame, width: 1.5, tone: 0.58, dry: 0.48)
-            for x in [16.0, 32] {
-                c += inkLine([P(x, x * 0.22 + 2), P(x, x * 0.22 + 51)], width: 0.8, tone: 0.48, dry: 0.5)
+        let form = Int(r() * 65_536) % 3
+        let w = [44.0, 56, 62][form], h = 52.0
+        let frame = [P(0, 0), P(w, 0), P(w, h), P(0, h), P(0, 0)]
+        var c = [poly(frame, fil: .white, str: nil), poly(frame, fil: .gray(0, embedded ? 0.045 : 0.065), str: nil)]
+        c += inkEdges(frame, width: 1.8, tone: 0.72, dry: 0.30)
+        c += inkEdges([P(3, 3), P(w - 3, 3), P(w - 3, h - 3), P(3, h - 3), P(3, 3)],
+                      width: 0.7, tone: 0.48, dry: 0.35)
+        if form < 2 {
+            let spacing = form == 0 ? 8.0 : 12.0
+            for x in stride(from: 10.0, to: w - 5, by: spacing) {
+                c += inkLine([P(x, 4), P(x, h - 4)], width: 0.8, tone: 0.61, dry: 0.3)
             }
-            for y in [18.0, 36] {
-                c += inkLine([P(2, y), P(46, y + 44 * 0.22)], width: 0.7, tone: 0.42, dry: 0.5)
+            for y in (form == 0 ? [37.0] : [16.0, 28, 40]) {
+                c += inkLine([P(4, y), P(w - 4, y)], width: 0.8, tone: 0.56, dry: 0.3)
             }
-            return c
+        } else {
+            let a = P(19, 17), b = P(41, 13), d = P(35, 34), e = P(15, 37)
+            for line in [[P(4, 9), a, b, P(48, 4)], [P(4, 28), a, e, P(10, 48)],
+                         [a, d, b, P(58, 24)], [e, d, P(49, 48)], [d, P(58, 39)]] {
+                c += inkEdges(line, width: 0.85, tone: 0.58, dry: 0.32)
+            }
         }
-        let wall = [P(0, 7), P(100, 24), P(100, 118), P(0, 118)]
-        var c = [poly(wall, fil: .white, str: nil), poly(wall, fil: .gray(0, 0.06), str: nil)]
-        c += inkEdges([P(0, 0), P(104, 18)], width: 7, tone: 0.68, dry: 0.43)
-        c += inkEdges([P(20, 31), P(76, 40), P(76, 100), P(20, 91), P(20, 31)], width: 2.6, tone: 0.72)
-        let opening = [P(25, 37), P(71, 44), P(71, 94), P(25, 86)]
-        c.append(poly(opening, fil: .gray(0, 0.11), str: nil))
-        for x in [39.0, 55] { c += inkEdges([P(x, 39 + (x - 25) * 0.15), P(x, 88 + (x - 25) * 0.15)], width: 1.1, tone: 0.62) }
-        for y in [58.0, 76] { c += inkEdges([P(26, y), P(71, y + 7)], width: 0.9, tone: 0.52) }
-        c += inkEdges([P(13, 96), P(80, 107)], width: 2.5, tone: 0.75)
+        c += inkLine([P(-2, h + 2), P(w + 2, h + 2)], width: 1.6, tone: 0.66, dry: 0.33)
+        return c
+    }
+
+    /// Bamboo blind: horizontal slats bound by two tapes, with a rolled lower edge.
+    /// Pull cords keep the full hanging extent even when most of the blind is rolled up.
+    func paintingCurtain() -> ZXArt.SSCanv {
+        let form = Int(r() * 65_536) % 3
+        let w = 54.0, drop = [20.0, 43, 67][form]
+        let blind = [P(0, 0), P(w, 0), P(w, drop), P(0, drop)]
+        var c = [poly(blind, fil: .white, str: nil)]
+        for y in stride(from: 3.0, through: drop - 1, by: 3) {
+            c += inkLine([P(1, y), P(w - 1, y)], width: 0.7, tone: 0.34 + r() * 0.12, dry: 0.43)
+        }
+        for x in [13.0, 41] {
+            c += inkLine([P(x, 0), P(x, drop)], width: 1.1, tone: 0.53, dry: 0.32)
+        }
+        c += inkEdges([P(0, drop), P(0, 0), P(w, 0), P(w, drop)], width: 0.9, tone: 0.55, dry: 0.35)
+        let roll = [P(0, drop), P(w, drop), P(w, drop + 4), P(0, drop + 4), P(0, drop)]
+        c += inkEdges(roll, width: 1.4, tone: 0.65, dry: 0.3)
+        c += inkLine([P(-3, -2), P(w + 3, -2)], width: 2, tone: 0.73)
+        c += inkLine([P(w - 6, 1), P(w - 6, 75)], width: 0.55, tone: 0.48, dry: 0.4)
+        c += inkLine([P(w - 8, 75), P(w - 4, 75)], width: 1.1, tone: 0.6)
         return c
     }
 

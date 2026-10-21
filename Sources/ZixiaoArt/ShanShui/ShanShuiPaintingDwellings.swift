@@ -4,8 +4,8 @@ import Foundation
 extension ShanShuiEngine {
     /// 瓦屋: one to three bays, a visible gable and a short return wall. A level front sill
     /// meets the bank; the return recedes only a little, rather than tipping the whole house.
-    func paintingHouse() -> ZXArt.SSCanv {
-        let bays = 1 + Int(r() * 65_536) % 3
+    func paintingHouse(reservingWindow: Bool = false) -> ZXArt.SSCanv {
+        let bays = max(reservingWindow ? 2 : 1, 1 + Int(r() * 65_536) % 3)
         let w = 38.0 * Double(bays) + 10, d = 21 + r() * 12
         let eave = 33.0, foot = 70 + r() * 5, rise = 10.0
         let front = [P(0, eave), P(w, eave), P(w, foot), P(0, foot)]
@@ -15,8 +15,9 @@ extension ShanShuiEngine {
         c += inkEdges([P(0, eave), P(0, foot), P(w, foot), P(w + d, foot - rise), P(w + d, eave - rise)],
                      width: 1.1, tone: 0.63, dry: 0.32)
         c += inkLine([P(w, eave), P(w, foot)], width: 1.2, tone: 0.64, dry: 0.3)
-        let door = Int(r() * Double(bays)) % bays
+        let door = reservingWindow ? bays - 1 : Int(r() * Double(bays)) % bays
         for k in 0..<bays {
+            if reservingWindow && k == 0 { continue }
             let x = 5 + Double(k) * 38
             if k == door {
                 let open = r() < 0.65

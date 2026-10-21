@@ -103,6 +103,7 @@ private final class PaintingStage {
     var boats: [ZXArt.Anchors.Boat] = []
     var mountainRidges: [[ZXArt.P]] = []
     var summitLedge: CGRect?
+    var houseWindowFrame: CGRect?
     var historicGroundNeeded = false
     enum Structure { case high, deep, level, corner }
     var structure: Structure = .level
@@ -196,7 +197,9 @@ private final class PaintingStage {
     private func add(_ motif: Motif, _ box: CGRect, repeatable: Bool = false, source: ZXArt.SSCanv? = nil) -> Bool {
         guard repeatable || !placed.contains(motif) else { return false }
         let raw: ZXArt.SSCanv
+        let reserveWindow = motif == .house && currentScene == .moonNight && chosen.contains(.window)
         if let source { raw = source }
+        else if reserveWindow { raw = engine.paintingHouse(reservingWindow: true) }
         else if motif == .stream {
             raw = currentScene == .desert ? waterEngine.paintingLongRiver()
                 : waterEngine.paintingChannel(width: box.width, height: box.height)
@@ -258,6 +261,15 @@ private final class PaintingStage {
         if accents.contains(motif) { object.canv = engine.paintingInk(object.canv, depth: .near) }
         // Each object gets its own layer, retaining stable ordering and inspection metadata.
         let actual = object.bounds
+        if reserveWindow {
+            // Transform the reserved first-bay opening with the dwelling's actual fitting.
+            let points = raw.flatMap(\.p)
+            let x0 = points.map(\.x).min()!, x1 = points.map(\.x).max()!
+            let y0 = points.map(\.y).min()!
+            let scale = actual.width / (x1 - x0)
+            houseWindowFrame = CGRect(x: actual.minX + (12 - x0) * scale,
+                y: actual.minY + (44 - y0) * scale, width: 19 * scale, height: 15 * scale)
+        }
         if trees.contains(motif) { paintedTrees[motif] = object.canv }
         if motif == .stream { engine.noted(.water, object.canv) }
         support(motif, bounds: actual, root: plantedRoot)
@@ -384,11 +396,7 @@ private final class PaintingStage {
 
     /// Buildings and trees meet the actual bank silhouette, not independent percentage baselines.
     private func groundedSlot(_ motif: Motif, _ requested: CGRect) -> CGRect {
-        if motif == .window, currentScene == .moonNight,
-           let house = elements.first(where: { ["house", "hut"].contains($0.motif) })?.bounds.cgRect {
-            return CGRect(x: (house.minX + house.width * 0.17) * w,
-                y: (house.minY + house.height * 0.64) * h, width: house.width * w * 0.17, height: house.height * h * 0.22)
-        }
+        if motif == .window, currentScene == .moonNight, let frame = houseWindowFrame { return frame }
         let rooted: Set<Motif> = [.oldTree, .bareTree, .layeredTree, .pine, .bamboo, .willow,
             .blossom, .maple, .house, .hut, .pavilion, .pagoda, .templeGate, .cityGate, .terrace, .ruins, .fence, .traveler, .horse]
         guard rooted.contains(motif), let surface = bankSurface else { return requested }

@@ -16,6 +16,7 @@ extension ShanShuiEngine {
         case .path: return paintingFootpath()
         case .courtyard: return paintingCourtyard()
         case .window: return paintingWindow()
+        case .curtain: return paintingCurtain()
         case .fields: return paintingFields()
         case .dunes: return paintingDunes()
         case .beaconSmoke, .cookingSmoke: return paintingSmoke(beacon: motif == .beaconSmoke)
@@ -255,47 +256,49 @@ extension ShanShuiEngine {
         return c
     }
 
+    /// 粉墙黛瓦: the long face and its footing are level. Only the short return recedes.
+    /// The moon gate and rectangular entrance are voids in a wall, never a floating panel.
     func paintingCourtyard() -> ZXArt.SSCanv {
-        // Oblique parallel projection, as in ruled-line painting (界画): top and foot stay parallel.
-        let slope = 0.22
-        let top = [P(14, 48), P(176, 48 + 162 * slope)], bottom = [P(14, 140), P(176, 140 + 162 * slope)]
-        let face = [top[0], top[1], bottom[1], bottom[0]]
-        let ground = inkCurve([P(-18, 139), P(6, 133), P(52, 147), P(124, 160), P(194, 178),
-            P(159, 202), P(70, 186), P(-12, 164)])
-        var c = [poly(ground, fil: .white, str: nil), poly(ground, fil: .gray(0, 0.045), str: nil)]
-        c += inkLine([P(-14, 146), P(8, 142), P(32, 148)], width: 0.8, tone: 0.27, dry: 0.7)
-        c += inkLine([P(132, 178), P(172, 185), P(187, 183)], width: 0.7, tone: 0.19, dry: 0.72)
-        c += [poly(face, fil: .white, str: nil), poly(face, fil: .gray(0, 0.04), str: nil)]
-        // The near end turns a corner: a narrow return face in shadow shows the wall's thickness.
-        let end = [P(0, 42), P(14, 48), P(14, 140), P(0, 134)]
-        c.append(poly(end, fil: .white, str: nil))
-        c.append(poly(end, fil: .gray(0, 0.16), str: nil))
-        c += inkEdges([P(0, 42), P(0, 134), P(14, 140)], width: 1.0, tone: 0.5)
-        c += inkLine([P(14, 48), P(14, 140)], width: 0.8, tone: 0.45, dry: 0.4)
-        // Coping: a dark tiled band along the top, overhanging both faces.
-        let coping = [P(-4, 36), P(10, 41), P(180, 41 + 170 * slope), P(180, 48 + 170 * slope), P(10, 50), P(-4, 44)]
-        c.append(poly(coping, fil: .gray(0, 0.62), str: nil))
-        c += inkLine([P(-4, 36), P(10, 41), P(180, 41 + 170 * slope)], width: 1.6, tone: 0.85, dry: 0.3)
-        for k in 0..<24 {
-            let t = (Double(k) + 0.5) / 24
-            let x = 12 + 166 * t, y = 42 + 166 * t * slope
-            c += inkLine([P(x, y), P(x + 0.4, y + 6)], width: 0.5, tone: 0.3, dry: 0.5)
+        let form = Int(r() * 65_536) % 3
+        let w = [178.0, 215, 244][form], foot = 82.0
+        let wall = [P(0, 20), P(w, 20), P(w, foot), P(0, foot)]
+        var c = [poly(wall, fil: .white, str: nil)]
+        if form != 0 {
+            let end = [P(w, 20), P(w + 20, 12), P(w + 20, 74), P(w, foot)]
+            c += [poly(end, fil: .white, str: nil), poly(end, fil: .gray(0, 0.055), str: nil)]
+            c += inkEdges([P(w, foot), P(w + 20, 74), P(w + 20, 12)], width: 0.9, tone: 0.53)
+            c += inkLine([P(w, 18), P(w + 23, 9)], width: 2.5, tone: 0.79)
         }
-        // Moon gate: a circular opening; inside, the paler wall of the next court.
-        let cx = 86.0, cy = 108.0 + 72 * slope, rx = 22.0, ry = 25.0
-        let ring = (0...48).map { i -> P in
-            let a = Double(i) / 48 * 2 * Double.pi
-            return P(cx + cos(a) * rx, cy + sin(a) * ry)
-        }.filter { $0.y <= 140 + (($0.x - 14) * slope) - 3 }
-        c.append(poly(ring, fil: .gray(0, 0.10), str: nil))
-        c += inkLine(ring, width: 1.6, tone: 0.62, dry: 0.3)
-        c += inkLine([P(cx - rx + 4, cy + 4), P(cx + rx - 3, cy + 4 + 6 * slope)], width: 0.8, tone: 0.25, dry: 0.5)
-        c += inkLine([P(cx - rx + 6, cy - 4), P(cx + rx - 4, cy - 4 + 6 * slope)], width: 2.4, tone: 0.30, dry: 0.4)
-        // Plinth and a few faint wall stains.
-        c += inkLine([P(0, 134), P(14, 140), P(176, 140 + 162 * slope)], width: 1.6, tone: 0.55, dry: 0.45)
-        for _ in 0..<8 {
-            let x = 20 + r() * 150, y = 62 + x * slope + r() * 60
-            c += inkLine([P(x, y), P(x + 3 + r() * 4, y + 1)], width: 0.6, tone: 0.08, dry: 0.6)
+        c += inkEdges([P(0, 20), P(0, foot), P(w, foot), P(w, 20)], width: 1.05, tone: 0.57, dry: 0.38)
+        c += inkLine([P(-4, 19), P(w + 4, 19)], width: 3.6, tone: 0.84, dry: 0.25)
+        c += inkLine([P(-2, 14), P(w + 2, 14)], width: 1.3, tone: 0.65, dry: 0.35)
+        for x in stride(from: 1.0, to: w, by: 6) {
+            c += inkLine([P(x, 14), P(x + 1.5, 18)], width: 0.7, tone: 0.58, dry: 0.3)
+        }
+        let cx = w * 0.66
+        if form == 1 {
+            let opening = [P(cx - 18, 37), P(cx + 18, 37), P(cx + 18, foot), P(cx - 18, foot)]
+            c.append(poly(opening, fil: .gray(0, 0.10), str: nil))
+            c += inkEdges(opening, width: 1.6, tone: 0.63, dry: 0.32)
+            c += inkLine([P(cx - 22, 34), P(cx + 22, 34)], width: 2.2, tone: 0.75)
+        } else {
+            // A circle meets the sill at its lowest point. The faint far sill shows depth.
+            let radius = form == 0 ? 23.0 : 27.0
+            let ring = (0...48).map { i -> P in
+                let a = Double(i) / 48 * 2 * Double.pi
+                return P(cx + cos(a) * radius, foot - radius + sin(a) * radius)
+            }
+            c.append(poly(ring, fil: .gray(0, 0.06), str: nil))
+            c += inkLine(ring, width: 1.6, tone: 0.64, dry: 0.32)
+            c += inkLine([P(cx - radius * 0.68, foot - 7), P(cx + radius * 0.68, foot - 7)], width: 0.6, tone: 0.24)
+        }
+        if form == 2 { // A small leak window in the far wing; the scene's near window is separate.
+            c += paintingWindow(embedded: true).map { p in
+                var q = p; q.p = p.p.map { P(w * 0.85 + $0.x * 0.32, 36 + $0.y * 0.32) }; q.wid *= 0.32; return q
+            }
+        }
+        for x in [10.0, w * 0.37, w - 21] {
+            c += inkLine([P(x, foot - 3), P(x + 12, foot - 3)], width: 0.7, tone: 0.2, dry: 0.6)
         }
         return c
     }

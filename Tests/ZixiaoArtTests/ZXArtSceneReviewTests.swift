@@ -207,7 +207,12 @@ final class ZXArtSceneReviewTests: XCTestCase {
             ("渔舟", .fishing, [.angler, .reeds]),
             ("山居", .village, [.hut, .fence, .cookingSmoke, .pine]),
             ("长亭送别", .farewell, [.pavilion, .willow, .traveler, .path]),
-            ("山寺", .temple, [.templeGate, .pagoda, .bamboo])
+            ("山寺", .temple, [.templeGate, .pagoda, .bamboo]),
+            ("粉墙轩窗", .courtyard, [.courtyard, .window, .curtain, .willow]),
+            ("故垒城楼", .historic, [.ruins, .cityGate]),
+            ("扁舟竹篷", .fishing, [.boat, .reeds]),
+            ("江上风帆", .fishing, [.sail, .reeds]),
+            ("岸边系舟", .waterTown, [.mooredBoat, .house, .bridge, .stream])
         ]
         let cell = CGSize(width: 400, height: 260)
         let paper = ZXArt.Palette.paperInk.paper
@@ -250,8 +255,10 @@ final class ZXArtSceneReviewTests: XCTestCase {
                 images.append(try XCTUnwrap(ctx.makeImage()))
             }
         }
-        try write(try contactSheet(images, columns: 4, cell: cell, background: paperColor),
+        try write(try contactSheet(Array(images.prefix(28)), columns: 4, cell: cell, background: paperColor),
                   to: URL(fileURLWithPath: dir).appendingPathComponent("groups.png"))
+        try write(try contactSheet(Array(images.dropFirst(28)), columns: 4, cell: cell, background: paperColor),
+                  to: URL(fileURLWithPath: dir).appendingPathComponent("groups-objects.png"))
     }
 
     /// The fifteen representative poems contain no swallow: review it explicitly at scene scale.
