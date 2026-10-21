@@ -112,8 +112,8 @@ extension ShanShuiEngine {
         paintingSlope(style)
     }
 
-    func paintingMountain(form: PaintingMountainProfile.Form? = nil) -> ZXArt.SSCanv {
-        paintingMassif(PaintingMountainProfile(form: form, random: { self.r() }))
+    func paintingMountain(form: PaintingMountainProfile.Form? = nil, terraced: Bool = false) -> ZXArt.SSCanv {
+        paintingMassif(PaintingMountainProfile(form: form, random: { self.r() }), terraced: terraced)
     }
 
     /// Cloud at the foot of a peak (山腰云锁), painted by leaving paper: stacked paper-coloured

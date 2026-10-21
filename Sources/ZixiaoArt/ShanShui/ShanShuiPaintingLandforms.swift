@@ -183,14 +183,33 @@ extension ShanShuiEngine {
 
     /// 矾头 and stacked shoulders, with dry folds flowing down from the ridge.
     /// This path does not call legacy mountain(), whose uniform tree rim is frozen for older versions.
-    func paintingMassif(_ profile: PaintingMountainProfile) -> ZXArt.SSCanv {
+    func paintingMassif(_ profile: PaintingMountainProfile, terraced: Bool = false) -> ZXArt.SSCanv {
         let width = profile.width * (profile.form == .clustered ? 0.88 : 0.64)
         let height = profile.height
-        let ridge = (0...90).map { i -> P in
+        var ridge = (0...90).map { i -> P in
             let t = Double(i) / 90
             let elevation = profile.elevation(at: t)
             let grain = (n(t * 34, 4) - 0.5) * 9 * sin(t * .pi)
             return P(width * t, height * (1 - elevation) + grain)
+        }
+        if terraced, let summit = ridge.map(\.y).min() {
+            // Cut the actual rock silhouette. The small terrace will share this bearing plane.
+            let level = summit + height * 0.055
+            var cut: [P] = []
+            for (a, b) in zip(ridge, ridge.dropFirst()) {
+                cut.append(P(a.x, max(a.y, level)))
+                if (a.y < level) != (b.y < level) {
+                    cut.append(P(a.x + (b.x - a.x) * (level - a.y) / (b.y - a.y), level))
+                }
+            }
+            cut.append(ridge.last!)
+            ridge = cut
+        }
+        func ridgeY(_ x: Double) -> Double {
+            for (a, b) in zip(ridge, ridge.dropFirst()) where a.x <= x && x <= b.x {
+                return a.y + (b.y - a.y) * (x - a.x) / max(0.001, b.x - a.x)
+            }
+            return height
         }
         let outline = ridge + [P(width * 0.88, height + 8), P(width * 0.12, height + 8)]
         var c = [poly(outline, fil: .white, str: nil)]
@@ -205,19 +224,35 @@ extension ShanShuiEngine {
             let shoulders = tier % 2 == 0 ? [0.37, 0.66] : [0.24, 0.54, 0.76]
             for u in shoulders where r() > 0.14 {
                 let cx = width * (u + (r() - 0.5) * 0.045)
-                let crestY = ridge[Int(u * 90)].y
+                let crestY = ridgeY(cx)
                 let available = height - crestY
                 guard available > height * 0.22 else { continue }
                 let top = crestY + available * (0.04 + level * 0.72 + r() * 0.09)
                 let rx = width * (0.08 + r() * 0.065), ry = available * (0.15 + r() * 0.18)
-                let cap = inkCurve([P(cx - rx, top + ry * 0.5), P(cx - rx * 0.58, top + ry * 0.12),
+                let controls = [P(cx - rx, top + ry * 0.5), P(cx - rx * 0.58, top + ry * 0.12),
                     P(cx - rx * 0.3, top + ry * 0.15), P(cx, top),
-                    P(cx + rx * 0.48, top + ry * 0.26), P(cx + rx, top + ry * 0.72)])
-                let foot = inkCurve([cap.last!, P(cx + rx * 0.7, top + ry * 1.65),
-                    P(cx - rx * 0.5, top + ry * 1.8), cap[0]])
-                // No opaque oval masks: dry ridges and dilute ink join the parent mountain.
-                c.append(poly(cap + foot, fil: .gray(0, 0.025 + r() * 0.025), str: nil))
-                c += inkSurface(cap + foot, textured: true, shadowWash: false)
+                    P(cx + rx * 0.48, top + ry * 0.26), P(cx + rx, top + ry * 0.72)]
+                let cap = zip(controls, controls.dropFirst()).flatMap { a, b in
+                    (0..<5).map { i -> P in
+                        let t = Double(i) / 5, x = a.x + (b.x - a.x) * t
+                        return P(x, max(ridgeY(x) + 1, a.y + (b.y - a.y) * t))
+                    }
+                } + [controls.last!]
+                // Shoulder wash follows its broken ridge, then loses ink into the parent body.
+                // Thin adjacent strips fade down; there is no closed rounded foot contour.
+                let wash = 0.09 + r() * 0.035
+                for band in 0..<18 {
+                    func edge(_ t: Double) -> [P] {
+                        cap.enumerated().map { index, p in
+                            let u = Double(index) / Double(cap.count - 1)
+                            let reach = ry * (1.2 + 0.35 * n(p.x * 0.035, top * 0.025))
+                            return P(p.x, min(height + 2, p.y + reach * t * pow(sin(u * .pi), 0.45)))
+                        }
+                    }
+                    let t = Double(band) / 18
+                    c.append(poly(edge(t) + edge(Double(band + 1) / 18).reversed(),
+                        fil: .gray(0, wash * pow(1 - t, 1.7)), str: nil))
+                }
                 let startIndex = Int(r() * 6)
                 c += inkLine(Array(cap[startIndex...min(cap.count - 1, startIndex + 12)]),
                     width: 1.2 + r(), tone: 0.48 + r() * 0.16, dry: 0.63)
@@ -244,7 +279,7 @@ extension ShanShuiEngine {
             let count = 3 + Int(r() * 6)
             for k in 0..<count {
                 let t = min(0.94, u + Double(k) * 0.009)
-                let p = ridge[Int(t * 90)], treeH = 3 + r() * 8
+                let p = P(width * t, ridgeY(width * t)), treeH = 3 + r() * 8
                 c += inkBlot(p.x, p.y - treeH * 0.35, radius: treeH * 0.45,
                     squash: 0.38, angle: .pi / 2, tone: 0.5 + r() * 0.3)
             }

@@ -4,7 +4,7 @@ import Testing
 
 struct ZXArtGuohuaTests {
     @Test func travelersStandOnTheBankAndBridgesCrossWater() throws {
-        for scene in [ZXArt.PoetryScene.farewell, .autumnTravel, .waterTown, .winterForest, .historic, .village, .spring] {
+        for scene in [ZXArt.PoetryScene.farewell, .autumnTravel, .waterTown, .winterForest, .village, .spring] {
             for size in [CGSize(width: 750, height: 1000), CGSize(width: 1200, height: 675)] {
                 for index in 0..<3 {
                     // The autumn poem explicitly names bridge and horse; winter names a traveler.
@@ -54,7 +54,7 @@ struct ZXArtGuohuaTests {
                         let recipe = selection.paintingProcedural(seed: "guohua-support-\(seed)", composition: composition)
                         let drawing = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: size))
                         let bank = try #require(drawing.sceneElements.first { $0.motif == "groundBank" }).bounds.cgRect
-                        for building in drawing.sceneElements where buildings.contains(building.motif) {
+                        for building in drawing.sceneElements where buildings.contains(building.motif) && !(scene == .historic && building.motif == "terrace") {
                             let b = building.bounds.cgRect
                             #expect(b.midX >= bank.minX && b.midX <= bank.maxX)
                             #expect(b.maxY >= bank.minY - 0.003 && b.maxY <= bank.maxY + 0.003,
@@ -64,9 +64,23 @@ struct ZXArtGuohuaTests {
                             let terrace = try #require(drawing.sceneElements.first { $0.motif == "terrace" }).bounds.cgRect
                             let person = try #require(drawing.sceneElements.first { $0.motif == "traveler" }).bounds.cgRect
                             let mountain = try #require(drawing.sceneElements.first { $0.motif == "mainMountain" }).bounds.cgRect
-                            #expect(terrace.minY > mountain.midY && person.minY > mountain.midY)
-                            #expect(person.maxY >= bank.minY - 0.003 && person.maxY <= bank.maxY + 0.003)
-                            #expect(!person.intersects(terrace))
+                            #expect(terrace.minY < mountain.minY + mountain.height * 0.08)
+                            #expect(abs(person.maxY - terrace.minY) < 0.002)
+                            #expect(person.minX >= terrace.minX && person.maxX <= terrace.maxX)
+                            #expect(person.height < mountain.height * 0.05)
+                            // Inspect real mountain polygons: both ends of the inset terrace must
+                            // rest in rock, while the tiny person's head must be outside it.
+                            let outlines = drawing.layers.filter { $0.fade != nil && $0.tooth != nil }
+                                .compactMap { $0.shapes.first }
+                            let supported = outlines.contains { shape in
+                                let path = CGMutablePath()
+                                path.addLines(between: shape.points.map { CGPoint(x: Double($0.x), y: Double($0.y)) })
+                                path.closeSubpath()
+                                return [terrace.minX, terrace.maxX].allSatisfy { x in
+                                    path.contains(CGPoint(x: x * drawing.width, y: (terrace.minY + 0.001) * drawing.height))
+                                } && !path.contains(CGPoint(x: person.midX * drawing.width, y: person.minY * drawing.height))
+                            }
+                            #expect(supported, "terrace must be embedded in the actual summit")
                         }
                     }
                 }
@@ -83,6 +97,26 @@ struct ZXArtGuohuaTests {
             #expect(d.sceneElements.contains { $0.motif == "farShore" } == (composition == .oppositeBank))
             #expect(d.sceneElements.contains { $0.motif == "pavilion" })
             #expect(d.sceneElements.contains { $0.motif == "willow" })
+        }
+    }
+
+    @Test func distantRangesStayBehindTheFarShore() throws {
+        for scene in [ZXArt.PoetryScene.village, .spring] {
+            for composition in [ZXArt.SceneComposition.depth, .oppositeBank] {
+                for size in [CGSize(width: 750, height: 1000), CGSize(width: 1200, height: 675)] {
+                    for seed in 0..<4 {
+                        let selection = ZXArt.SceneSelection(scene: scene,
+                            options: .init(motifs: ZXArt.defaultMotifs(for: scene)), matched: [])
+                        let recipe = selection.paintingProcedural(seed: "distance-\(seed)", composition: composition)
+                        let d = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: size))
+                        let shore = try #require(d.sceneElements.first { $0.motif == "farShore" }).bounds.cgRect
+                        let ranges = d.sceneElements.filter { $0.motif == "farMountain" }.map { $0.bounds.cgRect }
+                        #expect(ranges.count == 2)
+                        #expect(ranges.allSatisfy { $0.maxY <= shore.minY })
+                        #expect(ranges[0].maxY < ranges[1].maxY)
+                    }
+                }
+            }
         }
     }
 

@@ -110,6 +110,7 @@ private final class PaintingStage {
     var celestialLayers: [(layer: Int, motif: Motif)] = []
     var boats: [ZXArt.Anchors.Boat] = []
     var mountainRidges: [[ZXArt.P]] = []
+    var summitLedge: CGRect?
     enum Structure { case high, deep, level, corner }
     var structure: Structure = .level
     var currentScene: ZXArt.PoetryScene = .retreat
@@ -509,13 +510,16 @@ private final class PaintingStage {
         // Two ranges, staggered: the far one higher, paler and to one side; the nearer one lower
         // and offset the other way. Each covers part of the width so the sky stays open.
         let side = engine.r() < 0.5
-        let ranges = structure == .corner || structure == .high ? 1 : (structure == .deep ? 3 : 2)
+        let ranges = structure == .corner || structure == .high ? 1 : 2
         for k in 0..<ranges {
             let raw = engine.paintingDistant(k)
             let width = 0.58 + engine.r() * 0.16
             let x = (k == 0) == side ? 1 - width : 0.0
             let box: CGRect
-            if structure == .deep {
+            if !main, structure == .deep || structure == .level {
+                // Keep both ranges above the far bank, higher/paler first, then lower/darker.
+                box = slot(x, 0.015 + Double(k) * 0.07, width, 0.15)
+            } else if structure == .deep {
                 box = slot(0.40 - Double(k) * 0.17, 0.02 + Double(k) * 0.19,
                            0.54 + Double(k) * 0.10, 0.30)
             } else if structure == .corner {
@@ -526,6 +530,9 @@ private final class PaintingStage {
                 parts.append(.init(canv: object.canv, mist: .init(depth: object.bounds.height * 1.1,
                     blur: 0.35, peak: 0.95, floorY: object.bounds.maxY, floorDepth: object.bounds.height * 0.7)))
                 engine.noted(.ridge(.far), object.canv)
+                let r = object.bounds
+                elements.append(.init(motif: "farMountain", bounds: .init(x: r.minX / w, y: r.minY / h,
+                    width: r.width / w, height: r.height / h)))
             }
         }
         var peakBox = slot(0.02, 0.01, 0.95, 0.75)
@@ -545,11 +552,20 @@ private final class PaintingStage {
             }
             peakBox.size.width *= 0.94
         }
-        if main, let object = fitted(engine.paintingMountain(form: structure == .deep ? .clustered : .folded), to: peakBox) {
+        if main, let object = fitted(engine.paintingMountain(form: structure == .deep ? .clustered : .folded, terraced: currentScene == .historic), to: peakBox) {
             // 山腰云锁: the lower third of the main peak dissolves into cloud instead of
             // standing on the bank like a monument.
             let r = object.bounds
-            if let outline = object.canv.first { mountainRidges.append(Array(outline.p.dropLast(2))) }
+            if let outline = object.canv.first {
+                let ridge = Array(outline.p.dropLast(2))
+                mountainRidges.append(ridge)
+                if currentScene == .historic, let top = ridge.map(\.y).min() {
+                    let ledge = ridge.filter { abs($0.y - top) < 0.001 }
+                    if let left = ledge.first, let right = ledge.last {
+                        summitLedge = CGRect(x: left.x, y: top, width: right.x - left.x, height: 1)
+                    }
+                }
+            }
             parts.append(.init(canv: object.canv, fade: .init(top: r.maxY - r.height * 0.42,
                 bottom: r.maxY - r.height * 0.04, seed: engine.inkSeed())))
             engine.noted(.ridge(.main), object.canv)
@@ -769,6 +785,10 @@ private final class PaintingStage {
             box = CGRect(x: x, y: top, width: width, height: max(20, min(bottom - top, h * 0.13)))
             groundInBand = true
         }
+        if scene == .historic {
+            box = CGRect(x: box.minX, y: box.maxY - box.height * 0.35,
+                         width: box.width, height: box.height * 0.35)
+        }
         if prepareOnly {
             preparedGround = fitted(engine.paintingBank(style: [.retreat, .temple].contains(scene) ? .cliff : (scene == .historic || structure == .corner ? .headland : .shoal)), to: box)
             if groundInBand, var ground = preparedGround {
@@ -792,10 +812,11 @@ private final class PaintingStage {
             // In the band beneath the verse the near ground dissolves downward into mist and water,
             // instead of ending in a hard edge like an island floating on the paper.
             let b = object.bounds
+            let canvas = scene == .historic ? engine.paintingInk(object.canv, depth: .far) : object.canv
             parts.append(groundInBand
-                ? .init(canv: object.canv, near: true, fade: .init(top: b.minY + b.height * 0.60,
+                ? .init(canv: canvas, near: true, fade: .init(top: b.minY + b.height * 0.60,
                         bottom: b.maxY + b.height * 0.08, seed: engine.inkSeed()))
-                : .near(object.canv))
+                : .near(canvas))
         }
         // Foreground slope: a small dark corner, not a second ground plane across the page.
         if !narrow, !groundInBand, structure != .level, let object = fitted(engine.paintingBank(),
@@ -979,12 +1000,36 @@ private final class PaintingStage {
                 include(.curtain, near.insetBy(dx: near.width * 0.12, dy: near.height * 0.10))
             }
         case .historic:
-            // 古台 belongs to a broad, accessible foothill. The distant summit stays bare;
-            // a small traveler approaches the terrace on the same near ground plane.
-            include(.terrace, slot(0.26, 0.66, 0.28, 0.08))
+            // The summit itself is the platform; its rim is inset into the bearing rock.
+            if let ledge = summitLedge {
+                let left = ledge.minX + ledge.width * 0.12, right = ledge.maxX - ledge.width * 0.12
+                let depth = max(0.8, ledge.width * 0.08)
+                if chosen.contains(.terrace) {
+                    let rim = engine.inkLine([.init(left, ledge.minY), .init(right, ledge.minY)],
+                        width: 0.8, tone: 0.6, dry: 0.55)
+                        + engine.inkLine([.init(left + 1, ledge.minY + depth), .init(right - 1, ledge.minY + depth)],
+                            width: 0.5, tone: 0.32, dry: 0.65)
+                    parts.append(.init(canv: rim))
+                    engine.noted(.building(.pavilion), rim)
+                    elements.append(.init(motif: "terrace", bounds: .init(x: left / w, y: ledge.minY / h,
+                        width: (right - left) / w, height: depth / h)))
+                    placed.insert(.terrace)
+                }
+                if chosen.contains(.traveler) {
+                    let height = min(art.height * 0.028, ledge.width * 0.65)
+                    let box = CGRect(x: ledge.midX - height * 0.25, y: ledge.minY - height,
+                                     width: height * 0.5, height: height)
+                    if let person = fitted(engine.paintingAsset(.traveler), to: box) {
+                        parts.append(.init(canv: person.canv))
+                        let b = person.bounds
+                        elements.append(.init(motif: "traveler", bounds: .init(x: b.minX / w, y: b.minY / h,
+                            width: b.width / w, height: b.height / h)))
+                        placed.insert(.traveler)
+                    }
+                }
+            }
             include(.ruins, slot(0.08, 0.62, 0.20, 0.12))
             include(.cityGate, slot(0.65, 0.58, 0.24, 0.16))
-            include(.traveler, slot(0.61, 0.69, 0.06, 0.09))
         case .desert:
             // 大漠孤烟直，长河落日圆: a low horizon under the verse and a vast sky. Far dunes, the
             // long river and the near dunes run the full width; the sun sits on the horizon and
