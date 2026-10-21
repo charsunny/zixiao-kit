@@ -529,12 +529,20 @@ extension ShanShuiEngine {
     /// Feet at the origin, so a perch can be attached to an actual painted branch.
     func paintingPerchedCrow() -> ZXArt.SSCanv {
         let flip = r() < 0.5 ? -1.0 : 1.0
-        let lean = -2 + r() * 4
-        var c = inkLine([P(-2, -7), P(lean, -12), P(4, -10)], width: 5.2, tone: 0.88, profile: .lens)
-        c += inkBlot(4 + lean * 0.3, -15, radius: 2.3, squash: 0.85, tone: 0.9)
-        c += inkLine([P(5, -15), P(9, -14)], width: 1.1, tone: 0.85)
-        c += inkLine([P(-2, -8), P(-7, -3)], width: 2, tone: 0.86, profile: .cone)
-        for x in [-1.0, 2] { c += inkLine([P(x, -6), P(x, 0), P(x + 2, 0)], width: 0.7, tone: 0.8) }
+        let attitude = Int(r() * 3)
+        let headY = attitude == 0 ? -8.0 : (attitude == 1 ? -10.0 : -7.0)
+        let headX = attitude == 2 ? 4.0 : 2.5
+        // The belly sits directly on the branch. Only two tiny claws show below it.
+        var c: ZXArt.SSCanv = []
+        for x in [-1.5, 1.0] {
+            c += inkLine([P(x, -1), P(x + 0.5, 0), P(x + 1.5, 0)], width: 0.7, tone: 0.85, dry: 0.2)
+        }
+        let tailY = attitude == 1 ? 3.5 : 1.0
+        c += inkLine([P(-2, -4), P(-5.5, -1), P(-10, tailY)], width: 3.5, tone: 0.92, dry: 0.18, profile: .cone)
+        c += inkBlot(-0.7, -4.8, radius: 5.1, squash: 0.92, angle: -0.25, tone: 0.92)
+        c += inkBlot(headX, headY, radius: 2.8, squash: 0.95, tone: 0.94)
+        c.append(poly([P(headX + 2, headY - 0.6), P(headX + 6, headY + 0.7),
+                       P(headX + 2, headY + 1.1)], fil: .gray(0, 0.94), str: nil))
         return c.map { var p = $0; p.p = p.p.map { P($0.x * flip, $0.y) }; return p }
     }
 
