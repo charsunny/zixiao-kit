@@ -47,7 +47,7 @@ extension ShanShuiEngine {
     /// 矾头 and stacked shoulders, with dry folds flowing down from the ridge.
     /// This path does not call legacy mountain(), whose uniform tree rim is frozen for older versions.
     func paintingMassif(_ profile: PaintingMountainProfile) -> ZXArt.SSCanv {
-        let width = profile.width * (profile.form == .monumental ? 0.88 : 1)
+        let width = profile.width * (profile.form == .clustered ? 0.88 : 0.64)
         let height = profile.height
         let ridge = (0...90).map { i -> P in
             let t = Double(i) / 90
@@ -65,29 +65,34 @@ extension ShanShuiEngine {
         // resume at ledges; they never run in parallel from summit to foot.
         for tier in 0..<4 {
             let level = Double(tier) / 4
-            for u in [0.29, 0.50, 0.70] {
+            let shoulders = tier % 2 == 0 ? [0.37, 0.66] : [0.24, 0.54, 0.76]
+            for u in shoulders where r() > 0.14 {
                 let cx = width * (u + (r() - 0.5) * 0.045)
                 let crestY = ridge[Int(u * 90)].y
                 let available = height - crestY
                 guard available > height * 0.22 else { continue }
-                let top = crestY + available * (0.06 + level * 0.75)
-                let rx = width * (0.07 + r() * 0.045), ry = available * (0.13 + r() * 0.1)
-                let cap = inkCurve([P(cx - rx, top + ry * 0.5), P(cx - rx * 0.65, top + ry * 0.08),
-                    P(cx - rx * 0.15, top), P(cx + rx * 0.48, top + ry * 0.16), P(cx + rx, top + ry * 0.7)])
+                let top = crestY + available * (0.04 + level * 0.72 + r() * 0.09)
+                let rx = width * (0.08 + r() * 0.065), ry = available * (0.15 + r() * 0.18)
+                let cap = inkCurve([P(cx - rx, top + ry * 0.5), P(cx - rx * 0.58, top + ry * 0.12),
+                    P(cx - rx * 0.3, top + ry * 0.15), P(cx, top),
+                    P(cx + rx * 0.48, top + ry * 0.26), P(cx + rx, top + ry * 0.72)])
                 let foot = inkCurve([cap.last!, P(cx + rx * 0.7, top + ry * 1.65),
                     P(cx - rx * 0.5, top + ry * 1.8), cap[0]])
-                c.append(poly(cap + foot, fil: .white, str: nil))
+                // No opaque oval masks: dry ridges and dilute ink join the parent mountain.
+                c.append(poly(cap + foot, fil: .gray(0, 0.025 + r() * 0.025), str: nil))
                 c += inkSurface(cap + foot, textured: true, shadowWash: false)
-                c += inkLine(Array(cap.dropLast(3)), width: 1.3 + r(), tone: 0.48 + r() * 0.16, dry: 0.58)
+                let startIndex = Int(r() * 6)
+                c += inkLine(Array(cap[startIndex...min(cap.count - 1, startIndex + 12)]),
+                    width: 1.2 + r(), tone: 0.48 + r() * 0.16, dry: 0.63)
                 // Broken hemp fibres curl down the shaded right face, with a dry broad accent.
-                for k in 0..<9 {
-                    let offset = Double(k) * rx / 13
+                for k in 0..<12 {
+                    let offset = r() * rx * 0.7
                     let start = P(cx + offset, top + ry * 0.2 + r() * ry * 0.22)
-                    let endY = top + ry * (0.9 + r() * 0.55)
+                    let endY = min(height + 2, top + ry * (0.65 + r() * 0.85))
                     let path = inkCurve([start, P(start.x + rx * 0.25, top + ry * 0.68),
                         P(start.x + rx * 0.1, endY - ry * 0.12), P(start.x - rx * 0.2, endY)])
-                    c += inkLine(path, width: k == 2 ? 3.8 : 0.7 + r(),
-                        tone: k == 2 ? 0.30 : 0.24 + r() * 0.2, dry: 0.7)
+                    c += inkLine(path, width: k % 4 == 0 ? 3.5 + r() * 3 : 0.6 + r(),
+                        tone: k % 4 == 0 ? 0.30 + r() * 0.13 : 0.25 + r() * 0.22, dry: 0.7)
                 }
                 if tier % 2 == 1 {
                     for _ in 0..<4 {

@@ -448,7 +448,7 @@ private final class PaintingStage {
         // Two ranges, staggered: the far one higher, paler and to one side; the nearer one lower
         // and offset the other way. Each covers part of the width so the sky stays open.
         let side = engine.r() < 0.5
-        let ranges = structure == .corner ? 1 : (structure == .deep ? 3 : 2)
+        let ranges = structure == .corner || structure == .high ? 1 : (structure == .deep ? 3 : 2)
         for k in 0..<ranges {
             let raw = engine.paintingDistant(k)
             let width = 0.58 + engine.r() * 0.16
@@ -745,7 +745,7 @@ private final class PaintingStage {
             if chosen.contains(.bridge) { crossing(river: true) }
             include(.mooredBoat, slot(0.78, 0.55, 0.20, 0.17, front: true))
         case .farewell:
-            include(.pavilion, slot(0.52, 0.60, 0.29, 0.16))
+            include(.pavilion, slot(0.33, 0.60, 0.29, 0.16))
             include(.willow, slot(0.01, 0.13, 0.70, 0.64))
             if chosen.contains(.traveler), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
                 let size = art.width * 0.043
