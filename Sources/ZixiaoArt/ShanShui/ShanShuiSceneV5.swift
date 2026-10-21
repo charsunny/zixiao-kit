@@ -226,6 +226,10 @@ private final class PaintingStage {
                 object = moved
             }
         }
+        if currentScene != .historic, motif == .traveler || motif == .horse {
+            let cleared = clearFigureGround(object.bounds)
+            if cleared != object.bounds, let moved = fitted(raw, to: cleared) { object = moved }
+        }
         let accents: Set<Motif> = [.pine, .oldTree, .bareTree, .layeredTree, .willow, .bamboo,
             .blossom, .maple, .house, .hut, .pavilion, .templeGate, .pagoda, .boat, .angler,
             .mooredBoat, .traveler, .horse, .bridge, .reeds]
@@ -388,22 +392,26 @@ private final class PaintingStage {
             if left >= surface.x0, left + landed.width <= endX { landed.origin.x = left }
             else if right + landed.width <= endX { landed.origin.x = right }
         }
-        if motif == .traveler || motif == .horse {
-            let buildings = elements.filter { ["house", "hut", "pavilion", "templeGate", "pagoda"].contains($0.motif) }
-                .map { CGRect(x: $0.bounds.cgRect.minX * w, y: $0.bounds.cgRect.minY * h,
-                    width: $0.bounds.cgRect.width * w, height: $0.bounds.cgRect.height * h) }
-            for building in buildings where landed.intersects(building) {
-                for x in [building.minX - landed.width - 3, building.maxX + 3] {
-                    guard x >= surface.x0, x + landed.width <= endX,
-                          let foot = bankFoot(x, x + landed.width) else { continue }
-                    let candidate = CGRect(x: x, y: foot - landed.height, width: landed.width, height: landed.height)
-                    guard !candidate.intersects(verse), !buildings.contains(where: { $0.intersects(candidate) }) else { continue }
-                    landed = candidate
-                    break
-                }
-            }
-        }
         return landed
+    }
+
+    /// Applies to both explicitly pinned farewell figures and ordinary grounded travelers.
+    private func clearFigureGround(_ requested: CGRect) -> CGRect {
+        guard let surface = bankSurface else { return requested }
+        let endX = surface.x0 + surface.step * Double(surface.heights.count - 1)
+        let occupied = elements.filter { ["house", "hut", "pavilion", "templeGate", "pagoda", "traveler", "horse"].contains($0.motif) }
+            .map { CGRect(x: $0.bounds.cgRect.minX * w, y: $0.bounds.cgRect.minY * h,
+                width: $0.bounds.cgRect.width * w, height: $0.bounds.cgRect.height * h) }
+        guard occupied.contains(where: { $0.intersects(requested) }) else { return requested }
+        var xs = [surface.x0 + 1, endX - requested.width - 1]
+        for obstacle in occupied { xs += [obstacle.minX - requested.width - 3, obstacle.maxX + 3] }
+        for x in xs.sorted(by: { abs($0 - requested.minX) < abs($1 - requested.minX) }) {
+            guard x >= surface.x0, x + requested.width <= endX,
+                  let foot = bankFoot(x, x + requested.width) else { continue }
+            let candidate = CGRect(x: x, y: foot - requested.height, width: requested.width, height: requested.height)
+            if !candidate.intersects(verse), !occupied.contains(where: { $0.intersects(candidate) }) { return candidate }
+        }
+        return requested
     }
 
     private func recordBank(_ object: (canv: ZXArt.SSCanv, bounds: CGRect)) {

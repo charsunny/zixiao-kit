@@ -21,7 +21,7 @@ struct ZXArtGuohuaTests {
                         #expect(r.midX >= bank.minX && r.midX <= bank.maxX)
                         #expect(r.maxY >= bank.minY - 0.003 && r.maxY <= bank.maxY + 0.003)
                         for building in drawing.sceneElements where ["house", "pavilion", "hut"].contains(building.motif) {
-                            #expect(!r.intersects(building.bounds.cgRect))
+                            #expect(!r.intersects(building.bounds.cgRect), "\(scene) \(size) seed=\(index) person=\(r) \(building.motif)=\(building.bounds.cgRect)")
                         }
                         if let tree = drawing.sceneElements.first(where: { ["willow", "bareTree"].contains($0.motif) }) {
                             #expect(r.height < tree.bounds.cgRect.height * 0.25)
