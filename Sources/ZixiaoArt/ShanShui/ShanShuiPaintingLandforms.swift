@@ -2,193 +2,246 @@
 import Foundation
 
 extension ShanShuiEngine {
-    /// Seeded shores: separate low shoals, angular bluffs, or descending rock shelves.
+    /// A bank (坡石) as landscape painters build it: one main stone, lower companions in front
+    /// and sometimes a back stone peeking over. Each stone shows its faces (石分三面): a lit top
+    /// left as paper, a fold line where the top turns down, and a shaded front face below it that
+    /// carries the texture and the wash. Shoals are long and low with 折带 strokes; earth banks
+    /// hang 披麻 strands from the fold; cliffs are flat-topped, square-shouldered and split by
+    /// side-brush axe cuts (斧劈).
     func paintingSlope(_ style: BankStyle) -> ZXArt.SSCanv {
-        let width = 270 + r() * 70
-        let height = style == .shoal ? 24 + r() * 20 : (style == .cliff ? 75 + r() * 35 : 52 + r() * 32)
+        let width = 280 + r() * 50
+        let height = style == .shoal ? 30 + r() * 12 : (style == .cliff ? 84 + r() * 24 : 64 + r() * 24)
         let flip = r() < 0.5
-        let sections = style == .headland ? 3 : 2 + Int(r() * 2)
-        let lengths = (0..<sections).map { _ in 0.7 + r() * 0.8 }
-        let total = lengths.reduce(0, +)
-        var controls = [P(0, height * (style == .headland ? 0.35 : 0.88))]
-        var x = 0.0
-        for k in 0..<sections {
-            let span = width * lengths[k] / total
-            let peak = x + span * (0.24 + r() * 0.32)
-            switch style {
-            case .shoal:
-                let top = height * (0.08 + r() * 0.48)
-                controls += [P(x + span * 0.12, height * (0.65 + r() * 0.2)),
-                    P(peak, top), P(x + span * 0.82, top + height * (0.15 + r() * 0.18)),
-                    P(x + span, height * (0.78 + r() * 0.20))]
-            case .cliff:
-                let top = height * (0.05 + r() * 0.36)
-                controls += [P(peak, top), P(x + span * 0.62, top + height * (0.18 + r() * 0.14)),
-                    P(x + span * 0.75, top + height * (0.08 + r() * 0.10)),
-                    P(x + span * 0.86, height * (0.48 + r() * 0.17)),
-                    P(x + span, height * (0.63 + r() * 0.17))]
-            case .headland:
-                let top = height * (0.04 + Double(k) * 0.24 + r() * 0.09)
-                controls += [P(peak, top), P(x + span * 0.74, top + height * (0.04 + r() * 0.07)),
-                    P(x + span, top + height * (0.20 + r() * 0.08))]
+        struct Stone { var x0, x1, top, floor: Double; var rank: Int }
+        var stones: [Stone] = []
+        let mainWidth = width * (style == .shoal ? 0.58 + r() * 0.16 : 0.46 + r() * 0.16)
+        let mainX = width * (0.02 + r() * 0.08)
+        let main = Stone(x0: mainX, x1: mainX + mainWidth, top: height * (0.10 + r() * 0.06), floor: height, rank: 1)
+        if style != .shoal || r() < 0.4 {
+            // The back stone rises behind the main one, offset to the gentle side.
+            let w = mainWidth * (0.45 + r() * 0.25)
+            let x = mainX + mainWidth * (0.30 + r() * 0.40)
+            stones.append(Stone(x0: x, x1: min(width, x + w), top: 0,
+                floor: height * (0.55 + r() * 0.15), rank: 0))
+        }
+        stones.append(main)
+        var x = main.x1 - mainWidth * (0.22 + r() * 0.16)
+        for k in 0..<(1 + Int(r() * 2.4)) {
+            let w = width * (0.20 + r() * 0.14) * (k == 0 ? 1 : 0.7)
+            guard x + w <= width + 1 else { break }
+            let top = height * (0.36 + r() * 0.22 + Double(k) * 0.12)
+            stones.append(Stone(x0: x, x1: min(width, x + w), top: top, floor: height * (0.97 + r() * 0.03), rank: 2))
+            x += w * (0.55 + r() * 0.30)
+        }
+
+        var c: ZXArt.SSCanv = []
+        for stone in stones {
+            c += paintingStone(x0: stone.x0, x1: stone.x1, top: stone.top, floor: stone.floor,
+                style: style, rank: stone.rank)
+        }
+        if flip { c = c.map { var p = $0; p.p = p.p.map { P(width - $0.x, $0.y) }; return p } }
+        return c
+    }
+
+    func paintingStone(x0: Double, x1: Double, top: Double, floor: Double,
+                               style: BankStyle, rank: Int) -> ZXArt.SSCanv {
+        let w = x1 - x0, h = floor - top
+        let cliff = style == .cliff, shoal = style == .shoal
+        // One side rises gently (the back of the slope), the other turns down steeply toward the
+        // water. Cliffs turn both shoulders sharply; the top stays nearly level.
+        let gentleLeft = r() < 0.5
+        // Shoals slide into the water over a long run; cliffs lean back like a battered wall.
+        let rise = cliff ? 0.14 + r() * 0.10 : (shoal ? 0.30 + r() * 0.16 : 0.18 + r() * 0.14)
+        let fall = cliff ? 0.08 + r() * 0.06 : (shoal ? 0.10 + r() * 0.08 : 0.08 + r() * 0.08)
+        // A tilted top: the gentle side sits lower than the steep shoulder.
+        let tilt = h * (cliff ? 0.06 + r() * 0.12 : 0.04 + r() * 0.10)
+        let left = gentleLeft ? rise : fall, right = gentleLeft ? fall : rise
+        var keys = [P(x0, floor - h * 0.04),
+                    P(x0 + w * left * 0.45, top + h * (cliff ? 0.30 : 0.42) + h * r() * 0.12),
+                    P(x0 + w * left, top + h * r() * 0.06 + (gentleLeft ? tilt : 0))]
+        let bumps = cliff ? 1 + Int(r() * 2) : 1 + Int(r() * 3)
+        for k in 1...bumps {
+            let u = left + (1 - left - right) * Double(k) / Double(bumps + 1)
+            let lean = gentleLeft ? tilt * (1 - Double(k) / Double(bumps + 1)) : tilt * Double(k) / Double(bumps + 1)
+            keys.append(P(x0 + w * (u + (r() - 0.5) * 0.06), top + lean + h * r() * (cliff ? 0.05 : shoal ? 0.14 : 0.16)))
+        }
+        keys += [P(x1 - w * right, top + h * (0.03 + r() * 0.10) + (gentleLeft ? 0 : tilt)),
+                 P(x1 - w * right * 0.35, top + h * (cliff ? 0.30 : 0.45) + h * r() * 0.15),
+                 P(x1, floor - h * 0.02)]
+        // Cliffs keep their corners; earth and shoals are rounded by the brush.
+        let crest = cliff ? densify(keys, step: 3) : inkCurve(keys, steps: 8)
+        func ridge(_ x: Double) -> Double {
+            for (a, b) in zip(crest, crest.dropFirst()) where x >= min(a.x, b.x) && x <= max(a.x, b.x) {
+                return abs(b.x - a.x) < 0.001 ? min(a.y, b.y) : a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x)
             }
-            x += span
+            return floor
         }
-        let crest: [P]
-        if style == .shoal { crest = inkCurve(controls) }
-        else {
-            // Straight, unequal ledges preserve the angular faces instead of rounding every rock.
-            crest = zip(controls, controls.dropFirst()).flatMap { a, b in
-                (0..<6).map { i in let t = Double(i) / 6; return P(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t) }
-            } + [controls.last!]
+        let base = inkCurve([crest.last!, P(x0 + w * 0.70, floor + 1.5), P(x0 + w * 0.30, floor + 0.5), crest[0]], steps: 8)
+        var c = [poly(crest + base, fil: .white, str: nil)]
+
+        // The fold where the lit top turns into the face, roughly parallel to the crest.
+        let drop = h * (shoal ? 0.38 + r() * 0.12 : cliff ? 0.16 + r() * 0.08 : 0.22 + r() * 0.10)
+        // The fold is partial and starts at the steep shoulder, so it never doubles the contour.
+        let foldSpan = shoal ? 0.30 + r() * 0.20 : 0.40 + r() * 0.25
+        let foldFrom = gentleLeft ? x0 + w * (1 - right - foldSpan) : x0 + w * left * 0.6
+        let foldTo = gentleLeft ? x0 + w * (1 - right * 0.6) : foldFrom + w * foldSpan
+        let fold = (0...20).map { i -> P in
+            let x = foldFrom + (foldTo - foldFrom) * Double(i) / 20
+            let wobble = (n(x * 0.05, Double(rank) + 7) - 0.5) * h * 0.08
+            return P(x, min(floor - 2, ridge(x) + drop + wobble))
+        } + [P(foldTo + w * 0.04, min(floor - 1, ridge(foldTo) + drop + h * (cliff ? 0.30 : 0.18)))]
+        func faceTop(_ x: Double) -> Double {
+            guard x >= foldFrom, x <= foldTo else { return min(floor, ridge(x) + drop * 1.1) }
+            let i = min(19, Int((x - foldFrom) / max(0.001, foldTo - foldFrom) * 20))
+            return fold[i].y
         }
-        let bottom = inkCurve([crest.last!, P(width * (0.77 + r() * 0.10), height + 4 + r() * 8),
-            P(width * (0.37 + r() * 0.18), height + 6 + r() * 10),
-            P(width * (0.08 + r() * 0.12), height + r() * 5), crest[0]])
-        let outline = crest + bottom
-        var c = [poly(outline, fil: .white, str: nil)]
-        func top(at x: Double) -> Double {
-            for (a, b) in zip(crest, crest.dropFirst()) where a.x <= x && x <= b.x {
-                return a.y + (b.y - a.y) * (x - a.x) / max(0.001, b.x - a.x)
-            }
-            return height
-        }
-        func floor(at x: Double) -> Double {
-            for (a, b) in zip(bottom, bottom.dropFirst()) where min(a.x, b.x) <= x && x <= max(a.x, b.x) {
-                if abs(b.x - a.x) > 0.001 { return a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x) }
-            }
-            return height + 5
-        }
-        func surface(_ x: Double, _ depth: Double) -> P {
-            let x = min(width, max(0, x)), y = top(at: x)
-            return P(x, y + max(0, floor(at: x) - y) * depth)
-        }
-        // Reserve the lit top; a connected dilute face makes the bank read as earth, not a few
-        // floating strokes. The darker wash sits lower and on the back of each unequal shoulder.
-        let faceTop = (0...100).map { i -> P in
-            let x = width * Double(i) / 100
-            return surface(x, 0.09 + 0.035 * sin(Double(i) * 0.23))
-        }
-        let faceFoot = (0...100).map { surface(width * Double($0) / 100, 0.98) }
-        c.append(poly(faceTop + faceFoot.reversed(), fil: .gray(0, 0.085), str: nil))
-        let lower = (0...100).map { i -> P in
-            let x = width * Double(i) / 100
-            return surface(x, 0.30 + 0.08 * n(x * 0.025, 3))
-        }
-        c.append(poly(lower + faceFoot.reversed(), fil: .gray(0, 0.045), str: nil))
-        var sectionX = 0.0
-        for spanWeight in lengths {
-            let span = width * spanWeight / total
-            let left = sectionX + span * (0.25 + r() * 0.12)
-            let right = sectionX + span * (0.88 + r() * 0.10)
-            for pass in 0..<2 {
-                let upper = (0...24).map { i -> P in
-                    let t = Double(i) / 24, x = left + (right - left) * t
-                    let belly = sin(t * .pi)
-                    return surface(x, 0.82 - belly * (pass == 0 ? 0.66 : 0.42))
-                }
-                let lower = (0...24).map { i -> P in
-                    let t = Double(i) / 24
-                    return surface(left + (right - left) * t, 0.82 + sin(t * .pi) * 0.12)
-                }
-                c.append(poly(upper + lower.reversed(), fil: .gray(0, style == .cliff ? 0.075 : 0.055), str: nil))
-            }
-            sectionX += span
-        }
-        if style == .cliff {
-            // 斧劈: unequal oblique planes, loaded on one edge and split into dry side strokes.
-            // Each patch has width as well as length; no row of parallel hanging vertical lines.
-            for _ in 0..<(7 + Int(r() * 4)) {
-                let x = width * (0.14 + r() * 0.72)
-                let start = surface(x, 0.13 + r() * 0.13)
-                let reach = max(0, floor(at: x) - start.y) * (0.28 + r() * 0.43)
-                let dx = -reach * (0.45 + r() * 0.65)
-                let breadth = 5 + r() * 11
-                guard reach > 6, x + dx > 2 else { continue }
-                let plane = [start, P(x + breadth, start.y + reach * 0.10),
-                    P(x + dx + breadth * 0.45, start.y + reach * 0.92), P(x + dx, start.y + reach)]
-                guard plane.allSatisfy({ $0.x < width && $0.y >= top(at: $0.x) && $0.y <= floor(at: $0.x) }) else { continue }
-                c.append(poly(plane, fil: .gray(0, 0.10 + r() * 0.10), str: nil))
-                for hair in 0..<3 {
-                    let offset = Double(hair) * breadth * 0.24
-                    let fraction = 0.60 + r() * 0.38
-                    let line = (0...12).map { i -> P in
-                        let t = Double(i) / 12 * fraction
-                        return P(x + offset + dx * (0.85 * t + 0.15 * t * t), start.y + reach * t)
-                    }
-                    c += inkLine(line, width: hair == 0 ? 2.5 + r() * 3.5 : 0.65 + r(),
-                        tone: hair == 0 ? 0.42 + r() * 0.15 : 0.22 + r() * 0.13, dry: 0.72)
+
+        // Wash on the face: strongest just under the fold, fading toward the foot.
+        let washTone = (cliff ? 0.10 : 0.075) + Double(rank) * 0.012
+        for band in 0..<14 {
+            func edge(_ t: Double) -> [P] {
+                (0...28).map { j in
+                    let u = Double(j) / 28, x = x0 + w * (0.04 + u * 0.92)
+                    let y = faceTop(x)
+                    let taper = pow(sin(u * .pi), 0.5)
+                    return P(x, y + max(0, floor - y) * t * taper)
                 }
             }
-        } else {
-            // 披麻: groups collect on the shaded shoulders, with open lit passages between them.
-            // Analytic single-direction curves preserve the accepted no-hook stroke endings.
-            let groups = 4 + Int(r() * 4)
-            for _ in 0..<groups {
-                let center = width * (0.12 + r() * 0.76)
-                let spread = width * (0.025 + r() * 0.055)
-                let strands = 2 + Int(r() * 6)
-                let startDepth = 0.09 + r() * 0.32
-                for k in 0..<strands {
-                    let px = min(width - 3, max(3, center + (r() - 0.5) * spread))
-                    let start = surface(px, startDepth + r() * 0.12)
-                    let available = floor(at: px) - start.y
-                    let reach = available * (0.15 + pow(r(), 0.65) * 0.70)
+            let t = Double(band) / 14
+            c.append(poly(edge(t) + edge(Double(band + 1) / 14).reversed(),
+                fil: .gray(0, washTone * pow(1 - t, 1.6)), str: nil))
+        }
+
+        // Texture hangs from the fold. The shaded side (the steep one) carries more strokes.
+        let shadeLeft = !gentleLeft
+        let groups = cliff ? 3 + Int(r() * 3) : 2 + Int(r() * 3)
+        for g in 0..<groups {
+            var u = (Double(g) + 0.3 + r() * 0.5) / Double(groups)
+            u = shadeLeft ? pow(u, 1.4) : 1 - pow(1 - u, 1.4)
+            let gx = x0 + w * (0.08 + u * 0.84)
+            if cliff {
+                // 斧劈: the face splits into oblique planes. A plane line runs from the fold down
+                // and aside; the shaded plane beside it takes a pale wash and a dragged side stroke.
+                let sy = faceTop(gx) + 1
+                let reach = (floor - sy) * (0.55 + r() * 0.40)
+                guard reach > 4 else { continue }
+                let dir = shadeLeft ? -1.0 : 1.0
+                let lean = reach * (0.30 + r() * 0.45) * dir
+                let edge = [P(gx, sy), P(gx + lean * 0.55, sy + reach * 0.5), P(gx + lean, sy + reach)]
+                let breadth = w * (0.05 + r() * 0.06) * dir
+                let plane = edge + edge.reversed().map { P($0.x + breadth * (0.4 + 0.6 * ($0.y - sy) / reach), $0.y) }
+                c.append(poly(plane, fil: .gray(0, 0.06 + r() * 0.05), str: nil))
+                c += slopeStroke(edge, width: 1.2 + r() * 0.6, tone: 0.55 + r() * 0.12,
+                    pressures: [0.9, 1, 0.7, 0.4, 0.05], dry: 0.5)
+                c += slopeStroke([P(gx + breadth * 0.3, sy + reach * 0.08), P(gx + breadth * 0.5 + lean * 0.7, sy + reach * 0.78)],
+                    width: 4 + r() * 4, tone: 0.32 + r() * 0.12, pressures: [1.1, 0.8, 0.5, 0.2, 0.02], dry: 0.78)
+            } else if shoal {
+                // 折带: short strokes laid along the face, turning down at their ends.
+                for k in 0..<(2 + Int(r() * 2)) {
+                    let sy = faceTop(gx) + 2 + Double(k) * h * 0.13
+                    guard sy < floor - 2 else { break }
+                    let run = w * (0.08 + r() * 0.08)
+                    c += slopeStroke([P(gx, sy), P(gx + run, sy + 0.5), P(gx + run + 2, min(floor - 1, sy + h * 0.10))],
+                        width: 0.9 + r() * 0.5, tone: 0.34 + r() * 0.14, pressures: [0.4, 0.9, 0.8, 0.5, 0.08], dry: 0.62)
+                }
+            } else {
+                // 披麻: a bundle of strands hanging from the fold, leaning with the slope.
+                let lean = (gx < x0 + w / 2 ? -1.0 : 1.0) * (0.10 + r() * 0.20)
+                for k in 0..<(3 + Int(r() * 4)) {
+                    let sx = gx + Double(k) * (2.2 + r() * 1.2)
+                    let sy = faceTop(sx) + r() * 2
+                    let reach = (floor - sy) * (0.25 + r() * 0.45)
                     guard reach > 3 else { continue }
-                    let direction = top(at: px + 2) > top(at: px - 2) ? 1.0 : -1.0
-                    let edge = direction > 0 ? width - px - 2 : px - 2
-                    let dx = direction * min(edge, reach * (0.12 + r() * 0.95))
-                    let curve = 0.48 + r() * 0.70
-                    let line = (0...18).map { i -> P in
-                        let t = Double(i) / 18
-                        return P(px + dx * pow(t, curve), start.y + reach * pow(t, 1.15))
-                    }
-                    guard line.allSatisfy({ $0.y >= top(at: $0.x) && $0.y <= floor(at: $0.x) }) else { continue }
-                    c += inkLine(line, width: k == 0 ? 1.2 + r() * 0.8 : 0.5 + r() * 0.6,
-                        tone: k == 0 ? 0.46 + r() * 0.13 : 0.20 + r() * 0.20, dry: 0.62)
+                    c += slopeStroke(inkCurve([P(sx, sy), P(sx + reach * lean * 0.3, sy + reach * 0.5),
+                        P(sx + reach * lean, sy + reach)]), width: 0.7 + r() * 0.6, tone: 0.30 + r() * 0.16,
+                        pressures: [0.6, 1, 0.8, 0.45, 0.05], dry: 0.62)
                 }
             }
         }
-        var start = 1
-        while start < crest.count - 3 {
-            let run = 2 + Int(r() * 5)
-            c += inkLine(Array(crest[start...min(start + run, crest.count - 1)]),
-                width: style == .shoal ? 0.8 + r() * 0.5 : 1.2 + r() * 0.9,
-                tone: 0.40 + r() * 0.23, dry: 0.52)
-            start += run + (style == .shoal ? 5 : 2) + Int(r() * 6)
+
+        // Contour last: two or three long runs, loaded at the turns, lifted along the top.
+        let tone = 0.60 + Double(rank) * 0.08
+        let n1 = crest.count / 3 + Int(r() * Double(crest.count / 6))
+        let n2 = crest.count * 2 / 3 + Int(r() * Double(crest.count / 6))
+        let runs = [Array(crest[0...min(crest.count - 1, n1 + 1)]),
+                    Array(crest[n1...min(crest.count - 1, n2 + 1)]),
+                    Array(crest[n2...])]
+        for (i, run) in runs.enumerated() where run.count > 1 {
+            c += slopeStroke(run, width: (cliff ? 2.3 : 1.9) * (rank == 0 ? 0.8 : 1), tone: tone,
+                pressures: i == 1 ? [0.5, 0.35, 0.45, 0.6, 0.3] : [0.35, 1.0, 0.75, 0.5, 0.15], dry: 0.40)
         }
-        for _ in 0..<(2 + Int(r() * 3)) {
-            let p = crest[2 + Int(r() * Double(crest.count - 4))]
-            for _ in 0..<(2 + Int(r() * 4)) {
-                let mx = min(width - 1, max(1, p.x + (r() - 0.5) * 13))
-                c += inkBlot(mx, top(at: mx) + 1 + r() * 3,
-                    radius: 0.7 + r() * 1.4, squash: 0.44, tone: 0.55 + r() * 0.30)
+        c += slopeStroke(fold, width: 1.3, tone: tone - 0.10, pressures: [0.15, 0.7, 0.5, 0.8, 0.1], dry: 0.5)
+
+        // 点苔: dark horizontal dabs in clusters on the crest and its turns.
+        for _ in 0..<(rank == 0 ? 1 : 1 + Int(r() * 2)) {
+            let cx = x0 + w * (0.12 + r() * 0.76)
+            for k in 0..<(3 + Int(r() * 4)) {
+                let mx = cx + Double(k) * (2.6 + r() * 1.4) - 6
+                guard mx > x0 + 2, mx < x1 - 2 else { continue }
+                let my = ridge(mx) + r() * 1.5
+                c += slopeStroke([P(mx, my), P(mx + 2.2 + r() * 1.4, my - 0.4)], width: 1.6 + r() * 0.6,
+                    tone: 0.86 + r() * 0.08, pressures: [0.5, 1, 1, 0.8, 0.15], dry: 0.22)
             }
         }
-        // 坡脚压墨: a linked but broken dark foot remains above the last dissolving fringe.
-        // Its bends follow the ground plane; it is neither a straight waterline nor another ridge.
-        var footX = width * 0.025
-        while footX < width * 0.96 {
-            let span = min(width * (0.055 + r() * 0.09), width * 0.98 - footX)
-            let depth = 0.67 + r() * 0.16
-            let bend = (r() - 0.5) * 0.16
-            let line = (0...12).map { i -> P in
-                let t = Double(i) / 12, x = footX + span * t
-                // Follow the local face instead of clamping a horizontal line against its crest.
-                // Each loaded stroke turns with a different shoulder and lifts before the next.
-                return surface(x, depth + bend * sin(t * .pi) + 0.035 * sin(x * 0.19))
+        // The foot of front stones opens into water or ground with a few level strokes.
+        if rank > 0 {
+            for k in 0..<(1 + Int(r() * 2)) {
+                let sx = x0 + w * (0.10 + Double(k) * 0.40 + r() * 0.15)
+                let sy = floor + 1 + Double(k) * 1.8
+                c += slopeStroke([P(sx, sy), P(sx + w * 0.12, sy - 0.6), P(sx + w * 0.24, sy)],
+                    width: 1.1, tone: 0.38, pressures: [0.1, 0.6, 0.5, 0.3, 0.05])
             }
-            c += inkLine(line, width: 1.1 + r() * 1.7, tone: 0.70 + r() * 0.14, dry: 0.62)
-            footX += span + width * (0.012 + r() * 0.027)
         }
-        if flip { c = c.map { poly in var p = poly; p.p = poly.p.map { P(width - $0.x, $0.y) }; return p } }
+        return c
+    }
+
+    private func densify(_ points: [P], step: Double) -> [P] {
+        zip(points, points.dropFirst()).flatMap { a, b -> [P] in
+            let count = max(1, Int(hypot(b.x - a.x, b.y - a.y) / step))
+            return (0..<count).map { a + (b - a) * (Double($0) / Double(count)) }
+        } + [points.last!]
+    }
+
+    func paintingRootMoss(_ root: P) -> ZXArt.SSCanv {
+        var c: ZXArt.SSCanv = []
+        for k in 0..<(3 + Int(r() * 5)) {
+            let p = root + P(-7 + Double(k) * 2.7, 1 + r() * 1.5)
+            c += slopeStroke([p, p + P(2.5 + r(), -0.4)], width: 1.6, tone: 0.88,
+                pressures: [0.4, 1, 0.9, 0.5, 0.1], dry: 0.25)
+        }
+        return c
+    }
+
+    /// Pressure belongs to the long gesture, not to each short polygon edge.
+    private func slopeStroke(_ points: [P], width: Double, tone: Double,
+                             pressures: [Double], dry: Double = 0.42) -> ZXArt.SSCanv {
+        // Even a two-point moss dab needs an interior loaded section between its lifted ends.
+        let samples = zip(points, points.dropFirst()).flatMap { a, b -> [P] in
+            let steps = max(4, Int(hypot(b.x - a.x, b.y - a.y) / 2))
+            return (0..<steps).map { a + (b - a) * (Double($0) / Double(steps)) }
+        } + [points.last!]
+        let path = samples.enumerated().map { index, p -> SIMD3<Double> in
+            let t = Double(index) / Double(max(1, samples.count - 1)) * Double(pressures.count - 1)
+            let i = min(pressures.count - 2, Int(t)), f = t - Double(i)
+            return SIMD3(p.x, p.y, pressures[i] * (1 - f) + pressures[i + 1] * f)
+        }
+        let stroke = ZXArt.Brush.stroke(path, style: .init(width: width, tone: tone, dry: dry,
+            side: 0.2, bristles: width > 4 ? 7 : 3, rough: 0.25, fade: 0.42, profile: .even), seed: inkSeed())
+        var c = [poly(stroke.body.map { P(Double($0.x), Double($0.y)) },
+            fil: .gray(0, tone * (dry > 0.6 ? 0.32 : 0.78)), str: nil)]
+        for hair in stroke.bristles {
+            for run in hair.runs {
+                c.append(poly(run.map { P(Double($0.x), Double($0.y)) }, fil: nil,
+                    str: .gray(0, Double(hair.alpha)), wid: Double(hair.width)))
+            }
+        }
         return c
     }
 
     /// 矾头 and stacked shoulders, with dry folds flowing down from the ridge.
     /// This path does not call legacy mountain(), whose uniform tree rim is frozen for older versions.
     func paintingMassif(_ profile: PaintingMountainProfile, terraced: Bool = false) -> ZXArt.SSCanv {
-        let width = profile.width * (profile.form == .clustered ? 0.88 : 0.64)
+        let width = max(profile.height * 0.62, profile.width)
         let height = profile.height
         var ridge = (0...90).map { i -> P in
             let t = Double(i) / 90
@@ -217,78 +270,171 @@ extension ShanShuiEngine {
         }
         let outline = ridge + [P(width * 0.88, height + 8), P(width * 0.12, height + 8)]
         var c = [poly(outline, fil: .white, str: nil)]
-        c += inkSurface(outline, textured: true, shadowWash: false)
-        for start in stride(from: 0, to: ridge.count - 3, by: 5) {
-            c += inkLine(Array(ridge[start...min(start + 4, ridge.count - 1)]), width: 1.4 + r(), tone: 0.62, dry: 0.48)
+        // A first dilute wash follows the whole mountain face. Its bands have the same curved
+        // shoulders as the silhouette, no rectangular patches; the lit summit stays nearly paper.
+        for band in 0..<24 {
+            func contour(_ t: Double) -> [P] {
+                ridge.map { p in P(p.x, p.y + (height + 1 - p.y) * t) }
+            }
+            let t = Double(band) / 24
+            let tone = 0.012 + 0.042 * pow(sin(t * .pi), 1.3)
+            c.append(poly(contour(t) + contour(Double(band + 1) / 24).reversed(),
+                fil: .gray(0, tone), str: nil))
         }
-        // 山块叠起: short convex shoulders overlap in unequal tiers. The folds stop and
-        // resume at ledges; they never run in parallel from summit to foot.
-        for tier in 0..<4 {
-            let level = Double(tier) / 4
-            let shoulders = tier % 2 == 0 ? [0.37, 0.66] : [0.24, 0.54, 0.76]
-            for u in shoulders where r() > 0.14 {
-                let cx = width * (u + (r() - 0.5) * 0.045)
-                let crestY = ridgeY(cx)
-                let available = height - crestY
-                guard available > height * 0.22 else { continue }
-                let top = crestY + available * (0.04 + level * 0.72 + r() * 0.09)
-                let rx = width * (0.08 + r() * 0.065), ry = available * (0.15 + r() * 0.18)
-                let controls = [P(cx - rx, top + ry * 0.5), P(cx - rx * 0.58, top + ry * 0.12),
-                    P(cx - rx * 0.3, top + ry * 0.15), P(cx, top),
-                    P(cx + rx * 0.48, top + ry * 0.26), P(cx + rx, top + ry * 0.72)]
-                let cap = zip(controls, controls.dropFirst()).flatMap { a, b in
-                    (0..<5).map { i -> P in
-                        let t = Double(i) / 5, x = a.x + (b.x - a.x) * t
-                        return P(x, max(ridgeY(x) + 1, a.y + (b.y - a.y) * t))
+        // Three long contour gestures retain shoulders, rather than a necklace of dashes.
+        for (lo, hi) in [(0, ridge.count / 3), (ridge.count / 3, ridge.count * 2 / 3), (ridge.count * 2 / 3, ridge.count - 1)] {
+            c += slopeStroke(Array(ridge[lo...hi]), width: 2.1, tone: 0.67,
+                pressures: [0.25, 0.8, 0.45, 0.9, 0.2], dry: 0.42)
+        }
+        // Structural ribs begin at unequal summits/shoulders and open toward the broad foot.
+        // The lit left face stays paper; the right-hand valley takes wash and hemp fibres.
+        let ribCount = 3 + Int(r() * 65536) % 3
+        for k in 0..<ribCount {
+            let u = 0.17 + Double(k) * 0.66 / Double(ribCount - 1) + (r() - 0.5) * 0.04
+            let x = width * u, y = ridgeY(x) + height * (0.025 + r() * 0.025)
+            let available = height - y
+            guard available > height * 0.20 else { continue }
+            let outward = (u - 0.5) * width * (0.28 + r() * 0.18)
+            let controls = [P(x, y), P(x + outward * 0.25 - width * 0.025, y + available * 0.27),
+                P(x + outward * 0.65 + width * 0.035, y + available * 0.52),
+                P(x + outward, y + available * (0.88 + r() * 0.10))]
+            let rib = inkCurve(controls, steps: 10)
+            func inside(_ p: P) -> P { P(p.x, max(ridgeY(p.x) + 1, min(height + 1, p.y))) }
+            // Adjacent narrow wash strips fade away from the valley edge, without rectangles.
+            let shadowWidth = width * (0.16 + r() * 0.07)
+            for band in 0..<12 {
+                func edge(_ t: Double) -> [P] {
+                    rib.enumerated().map { i, p in
+                        let v = Double(i) / Double(rib.count - 1)
+                        let spread = shadowWidth * pow(sin(v * .pi), 0.6)
+                        return inside(p + P(spread * t, available * 0.06 * t))
                     }
-                } + [controls.last!]
-                // Shoulder wash follows its broken ridge, then loses ink into the parent body.
-                // Thin adjacent strips fade down; there is no closed rounded foot contour.
-                let wash = 0.09 + r() * 0.035
-                for band in 0..<18 {
+                }
+                let t = Double(band) / 12
+                c.append(poly(edge(t) + edge(Double(band + 1) / 12).reversed(),
+                    fil: .gray(0, 0.19 * pow(1 - t, 1.4)), str: nil))
+            }
+            c += slopeStroke(Array(rib.prefix(rib.count * 3 / 4)).map(inside), width: 1.6,
+                tone: 0.49, pressures: [0.25, 0.75, 0.5, 0.65, 0.05], dry: 0.56)
+            // 披麻 / 解索: long, overlapping bundles on the valley face. The strands
+            // follow one structural rib rather than repeating independent curls over the mountain.
+            for bundle in 0..<3 {
+                let start = 2 + bundle * 7
+                for strand in 0..<(8 + Int(r() * 5)) {
+                    let offset = 2.5 + Double(strand) * (2.4 + r() * 1.6)
+                    let stagger = Int(r() * 5) - 2
+                    let length = 9 + Int(r() * 7)
+                    let line = (0...length).map { j -> P in
+                        let index = max(0, min(rib.count - 1, start + j + stagger))
+                        let p = rib[index]
+                        let t = Double(j) / Double(length)
+                        let loosen = sin(t * .pi * 1.5 + Double(strand) * 0.35) * (2 + t * 3)
+                        return inside(p + P(offset + loosen + t * Double(strand) * 0.6,
+                            Double(strand) * 1.2))
+                    }
+                    c += slopeStroke(line, width: strand % 5 == 0 ? 2.7 : 1.0 + r() * 0.65,
+                        tone: 0.37 + r() * 0.15, pressures: [0.3, 0.9, 0.65, 0.7, 0.04], dry: 0.58)
+                }
+            }
+            // A second, broad wash settles in the lower valley. Each strip fades sideways;
+            // the scene's existing LayerFade dissolves the whole mountain into waist clouds.
+            for band in 0..<16 {
+                func lowerEdge(_ t: Double) -> [P] {
+                    rib.enumerated().map { i, p in
+                        let v = Double(i) / Double(rib.count - 1)
+                        let swell = pow(sin(v * .pi), 0.8) * (0.35 + v)
+                        return inside(p + P(width * 0.13 * t * swell, available * 0.10 * t))
+                    }
+                }
+                let t = Double(band) / 16
+                c.append(poly(lowerEdge(t) + lowerEdge(Double(band + 1) / 16).reversed(),
+                    fil: .gray(0, 0.09 * pow(1 - t, 1.5)), str: nil))
+            }
+            for cluster in 0..<(2 + k % 2) {
+                let at = 4 + cluster * 8 + Int(r() * 3)
+                for j in 0..<(3 + Int(r() * 4)) {
+                    let p = inside(rib[min(rib.count - 1, at + j / 3)] + P(Double(j) * 2.2 - 4, 0))
+                    c += slopeStroke([p, p + P(2.4 + r() * 1.8, -0.6)], width: 1.7,
+                        tone: 0.80 + r() * 0.1, pressures: [0.2, 1, 0.85, 0.4, 0.05], dry: 0.30)
+                }
+            }
+            // Smaller shoulders turn each broad face. Their short fibres descend into the
+            // parent valley, while the top of each shoulder remains lit paper.
+            do {
+                let center = rib[8 + Int(r() * 12)] + P(-width * (0.07 + r() * 0.04), 0)
+                let rx = width * (0.055 + r() * 0.025), ry = height * (0.025 + r() * 0.02)
+                let cap = inkCurve([center + P(-rx, ry * 1.2), center + P(-rx * 0.60, ry * 0.12),
+                    center + P(-rx * 0.17, -ry * 0.18), center + P(rx * 0.3, ry * 0.05),
+                    center + P(rx * 0.8, ry * 0.7), center + P(rx * 0.95, ry * 2)]).map(inside)
+                c += slopeStroke(cap, width: 1.5, tone: 0.52,
+                    pressures: [0.15, 0.7, 0.5, 0.8, 0.08], dry: 0.48)
+                for band in 0..<9 {
                     func edge(_ t: Double) -> [P] {
-                        cap.enumerated().map { index, p in
-                            let u = Double(index) / Double(cap.count - 1)
-                            let reach = ry * (1.2 + 0.35 * n(p.x * 0.035, top * 0.025))
-                            return P(p.x, min(height + 2, p.y + reach * t * pow(sin(u * .pi), 0.45)))
+                        cap.enumerated().map { i, p in
+                            let u = Double(i) / Double(cap.count - 1)
+                            return inside(p + P(rx * t * 0.45, ry * 2.5 * t * sin(u * .pi)))
                         }
                     }
-                    let t = Double(band) / 18
-                    c.append(poly(edge(t) + edge(Double(band + 1) / 18).reversed(),
-                        fil: .gray(0, wash * pow(1 - t, 1.7)), str: nil))
+                    let t = Double(band) / 9
+                    c.append(poly(edge(t) + edge(Double(band + 1) / 9).reversed(),
+                        fil: .gray(0, 0.08 * pow(1 - t, 1.5)), str: nil))
                 }
-                let startIndex = Int(r() * 6)
-                c += inkLine(Array(cap[startIndex...min(cap.count - 1, startIndex + 12)]),
-                    width: 1.2 + r(), tone: 0.48 + r() * 0.16, dry: 0.63)
-                // Broken hemp fibres curl down the shaded right face, with a dry broad accent.
-                for k in 0..<12 {
-                    let offset = r() * rx * 0.7
-                    let start = P(cx + offset, top + ry * 0.2 + r() * ry * 0.22)
-                    let endY = min(height + 2, top + ry * (0.65 + r() * 0.85))
-                    let path = inkCurve([start, P(start.x + rx * 0.25, top + ry * 0.68),
-                        P(start.x + rx * 0.1, endY - ry * 0.12), P(start.x - rx * 0.2, endY)])
-                    c += inkLine(path, width: k % 4 == 0 ? 3.5 + r() * 3 : 0.6 + r(),
-                        tone: k % 4 == 0 ? 0.30 + r() * 0.13 : 0.25 + r() * 0.22, dry: 0.7)
+                for strand in 0..<(4 + Int(r() * 3)) {
+                    let p = cap[cap.count / 2 + strand] + P(0, 2)
+                    let reach = available * (0.10 + r() * 0.13)
+                    let path = inkCurve([p, p + P(reach * 0.10, reach * 0.45), p + P(reach * 0.40, reach)])
+                    c += slopeStroke(path.map(inside), width: strand == 0 ? 3 : 0.85,
+                        tone: 0.34 + r() * 0.1, pressures: [0.5, 0.85, 0.55, 0.3, 0.03], dry: 0.64)
                 }
-                if tier % 2 == 1 {
-                    for _ in 0..<4 {
-                        let q = cap[Int(r() * Double(cap.count - 1))]
-                        c += inkBlot(q.x, q.y, radius: 1 + r() * 1.5, squash: 0.4, tone: 0.75)
-                    }
+            }
+            // One side ridge forks from this rib, so texture reads as a mountain's veins.
+            let fork = rib[rib.count / 3]
+            let branch = inkCurve([fork, fork + P(-width * 0.055, available * 0.10),
+                fork + P(-width * 0.09, available * 0.31)])
+            c += slopeStroke(branch.map(inside), width: 1.1, tone: 0.42,
+                pressures: [0.2, 0.7, 0.6, 0.25, 0.05], dry: 0.58)
+        }
+        // 矾头: short, rounded facets gather on the actual crest, not at uniform heights.
+        for summit in profile.ridge.indices.dropFirst().dropLast() {
+            let p = profile.ridge[summit]
+            guard p.y >= profile.ridge[summit - 1].y, p.y >= profile.ridge[summit + 1].y,
+                  !terraced || p.y < 0.91 else { continue }
+            for k in 0..<(2 + Int(r() * 3)) {
+                let x = width * p.x + Double(k - 1) * width * 0.027
+                let rx = width * (0.032 + r() * 0.018), ry = height * (0.022 + r() * 0.014)
+                let top = ridgeY(x) + ry * (0.6 + Double(k) * 0.35)
+                let cap = inkCurve([P(x - rx, top + ry), P(x - rx * 0.65, top),
+                    P(x + rx * 0.15, top - ry * 0.15), P(x + rx, top + ry * 0.6)])
+                let clipped = cap.map { P($0.x, max(ridgeY($0.x) + 1, $0.y)) }
+                c += slopeStroke(clipped, width: 1.7, tone: 0.56,
+                    pressures: [0.2, 0.7, 0.5, 0.65, 0.1], dry: 0.45)
+                for j in 0..<4 {
+                    let sx = x + Double(j) * rx * 0.15
+                    let sy = max(ridgeY(sx) + 2, top + ry * 0.15)
+                    c += slopeStroke(inkCurve([P(sx, sy), P(sx + rx * 0.2, sy + ry * 0.65),
+                        P(sx + rx * 0.4, sy + ry * 1.4)]), width: 1.0, tone: 0.44,
+                        pressures: [0.3, 0.8, 0.6, 0.3, 0.05], dry: 0.58)
                 }
             }
         }
-        // Ridge groves have unequal density; distant trees are tiny dabs, without drawn branches.
-        for u in [0.19, 0.39, 0.71, 0.81] where r() < 0.85 {
-            let count = 3 + Int(r() * 6)
-            for k in 0..<count {
-                let t = min(0.94, u + Double(k) * 0.009)
-                let p = P(width * t, ridgeY(width * t)), treeH = 3 + r() * 8
-                c += inkBlot(p.x, p.y - treeH * 0.35, radius: treeH * 0.45,
-                    squash: 0.38, angle: .pi / 2, tone: 0.5 + r() * 0.3)
+        // Groves gather on a few shoulders, with broad intervals of bare ridge.
+        for _ in 0..<(2 + Int(r() * 3)) {
+            let u = 0.12 + r() * 0.76
+            for j in 0..<(2 + Int(r() * 5)) {
+                let x = width * (u + Double(j) * 0.008)
+                let y = ridgeY(x), treeH = 3 + r() * 6
+                if terraced, y < (ridge.map(\.y).min() ?? 0) + height * 0.06 { continue }
+                c += inkLine([P(x, y + 1), P(x - 0.5, y - treeH)], width: 0.9, tone: 0.7)
+                c += inkLine([P(x - 2, y - treeH * 0.5), P(x + 1.5, y - treeH * 0.7)],
+                    width: 2.0, tone: 0.72 + r() * 0.13, profile: .lens)
             }
         }
-        return c
+        // Long fibres have many collinear brush samples. Preserve their visible outline within
+        // 0.16 asset units (well below a screen pixel), while keeping the bearing silhouette exact.
+        return c.enumerated().map { index, polygon in
+            guard index > 0 else { return polygon }
+            var p = polygon; p.p = inkSimplified(p.p, tolerance: 0.16); return p
+        }
     }
 
     /// A path appears by reserved paper between broken banks, opening toward the viewer.

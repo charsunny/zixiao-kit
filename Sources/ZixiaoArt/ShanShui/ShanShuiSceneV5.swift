@@ -17,17 +17,8 @@ extension ZXArt {
             var nearSpans: [ShapeSpan] = []
             for (index, part) in stage.parts.enumerated() {
                 var shapes: [Shape] = []
-                ZXArt.appendShapes(part.canv, palette: palette, into: &shapes)
-                if let record = stage.celestialLayers.first(where: { $0.layer == index }) {
-                    for i in shapes.indices {
-                        if record.motif == .sunset || record.motif == .sunrise {
-                            shapes[i].fill = ZXHex(red: 0.67, green: 0.25, blue: 0.20).opacity(palette.isDark ? 0.40 : 0.26)
-                        } else if record.motif == .moon, palette.isDark, let fill = shapes[i].fill {
-                            // On dark paper the moon is the light: a bright disc, a faint halo.
-                            shapes[i].fill = palette.ink.opacity(fill.alpha > 0.9 ? 0.52 : 0.05)
-                        }
-                    }
-                }
+                let motif = stage.celestialLayers.first(where: { $0.layer == index })?.motif
+                ZXArt.appendPaintingShapes(part.canv, motif: motif, palette: palette, into: &shapes)
                 func appendLayer(_ layer: Layer) {
                     guard !layer.shapes.isEmpty else { return }
                     if part.near { nearSpans.append(.init(layer: layers.count, range: 0..<layer.shapes.count)) }
@@ -107,10 +98,18 @@ private final class PaintingStage {
     var parts: [ShanShuiEngine.Part] = []
     var elements: [ZXArt.SceneElement] = []
     var placed = Set<Motif>()
+    var paintedTrees: [Motif: ZXArt.SSCanv] = [:]
+    var treePerches: [Motif: [ZXArt.P]] = [:]
+    var treeVines: [Motif: ZXArt.SSCanv] = [:]
+    var treeRoots: [Motif: ZXArt.P] = [:]
     var celestialLayers: [(layer: Int, motif: Motif)] = []
     var boats: [ZXArt.Anchors.Boat] = []
     var mountainRidges: [[ZXArt.P]] = []
     var summitLedge: CGRect?
+    var houseWindowFrame: CGRect?
+    var lotusFlowerTip: ZXArt.P?
+    var streamInlet: ZXArt.P?
+    var terrainLayerEnd = 0
     var historicGroundNeeded = false
     enum Structure { case high, deep, level, corner }
     var structure: Structure = .level
@@ -123,10 +122,20 @@ private final class PaintingStage {
     /// Top of the full-width ground band beneath the verse, when the page has one.
     let bandTop: Double?
     let waterEngine: ShanShuiEngine
+    let selectedMotifs: Set<Motif>
+    let lotusState: ShanShuiEngine.LotusStage
+    let donkey: Bool
+    let layoutVariant: Int
 
     init(seed: ZXArt.Seed, width: Double, height: Double, palette: ZXArt.Palette, verse: ZXArt.VerseLayout, quietTop: Double, options: ZXArt.SceneOptions) {
         self.w = width; self.h = height; self.palette = palette
         self.seed = seed.string
+        selectedMotifs = Set(options.motifs)
+        lotusState = ShanShuiEngine.LotusStage(rawValue: options.lotusState?.rawValue ?? "flowering") ?? .flowering
+        donkey = options.donkey == true
+        var layoutHash: UInt32 = 2_166_136_261
+        for byte in ("painting-layout-v1:" + seed.string).utf8 { layoutHash = (layoutHash ^ UInt32(byte)) &* 16_777_619 }
+        layoutVariant = Int(layoutHash % 4)
         purpose = options.purpose ?? .inscription; composition = options.composition ?? .corner
         self.verse = options.purpose == .reading ? .null : verse.rect(in: CGSize(width: width, height: height)).insetBy(dx: -8, dy: -8)
         engine = ShanShuiEngine(seed: .init("poetry-painting-v1:" + seed.string))
@@ -200,13 +209,39 @@ private final class PaintingStage {
                       width: (u1 - u0) * band.width, height: r.height)
     }
 
+    private func leadTreeSlot() -> CGRect {
+        let xs = [0.0, 0.24, 0.10, 0.02]
+        let widths = [0.90, 0.70, 0.82, 0.96]
+        let heights = [0.82, 0.64, 0.90, 0.72]
+        return slot(xs[layoutVariant], 0.06, widths[layoutVariant], heights[layoutVariant])
+    }
+
     @discardableResult
-    private func add(_ motif: Motif, _ box: CGRect, repeatable: Bool = false) -> Bool {
+    private func add(_ motif: Motif, _ box: CGRect, repeatable: Bool = false, source: ZXArt.SSCanv? = nil) -> Bool {
         guard repeatable || !placed.contains(motif) else { return false }
         let raw: ZXArt.SSCanv
-        if motif == .stream {
+        var woodyTree: ShanShuiEngine.PaintedWoodyTree?
+        var lotus: ShanShuiEngine.PaintedLotus?
+        let reserveWindow = motif == .house && currentScene == .moonNight && selectedMotifs.contains(.window)
+        if let source { raw = source }
+        else if motif == .oldTree || motif == .bareTree {
+            let tree = engine.paintingWoodyTree(old: motif == .oldTree)
+            woodyTree = tree
+            raw = tree.canvas
+        }
+        else if motif == .lotus {
+            let drawing = engine.paintingLotusDrawing(stage: lotusState)
+            lotus = drawing; raw = drawing.canvas
+        }
+        else if motif == .horse, donkey { raw = engine.paintingHorse(donkey: true) }
+        else if reserveWindow { raw = engine.paintingHouse(reservingWindow: true) }
+        else if motif == .mooredBoat { raw = engine.paintingBoat(.mooredBoat, mooring: false) }
+        else if motif == .stream {
             raw = currentScene == .desert ? waterEngine.paintingLongRiver()
+                : currentScene == .retreat ? waterEngine.paintingRockyStream()
                 : waterEngine.paintingChannel(width: box.width, height: box.height)
+        } else if motif == .curtain {
+            raw = engine.paintingCurtain(width: box.width, height: box.height)
         } else if motif == .window, currentScene == .courtyard {
             raw = engine.paintingWindow(embedded: true)
         } else { raw = engine.paintingAsset(motif) }
@@ -243,7 +278,16 @@ private final class PaintingStage {
             let rootX = object.bounds.minX + (root.x - minX) * scale
             let rootY = object.bounds.minY + (root.y - minY) * scale
             let end = surface.x0 + surface.step * Double(surface.heights.count - 1)
-            let landedX = min(end - 1, max(surface.x0 + 1, rootX))
+            var desiredRoot = rootX
+            if currentScene == .autumnTravel, motif == .oldTree, h > w {
+                // Leave a dwelling-sized opening beside the trunk in the narrow picture
+                // column. Keep the tree's scale, and root it again on the actual bank.
+                let left = verse.midX > w / 2
+                let room = left ? object.bounds.minX - art.minX : art.maxX - object.bounds.maxX
+                let shift = min(max(0, room - 3), object.bounds.width * 0.8)
+                desiredRoot += left ? -shift : shift
+            }
+            let landedX = supportedBankX(min(end - 1, max(surface.x0 + 1, desiredRoot)))
             if let foot = bankFoot(landedX - 0.5, landedX + 0.5) {
                 let landed = object.bounds.offsetBy(dx: landedX - rootX, dy: foot - rootY)
                 guard let moved = fitted(raw, to: landed) else { return false }
@@ -265,8 +309,49 @@ private final class PaintingStage {
         if accents.contains(motif) { object.canv = engine.paintingInk(object.canv, depth: .near) }
         // Each object gets its own layer, retaining stable ordering and inspection metadata.
         let actual = object.bounds
-        if motif == .stream { engine.noted(.water, object.canv) }
+        if reserveWindow {
+            // Transform the reserved first-bay opening with the dwelling's actual fitting.
+            let points = raw.flatMap(\.p)
+            let x0 = points.map(\.x).min()!, x1 = points.map(\.x).max()!
+            let y0 = points.map(\.y).min()!
+            let scale = actual.width / (x1 - x0)
+            houseWindowFrame = CGRect(x: actual.minX + (12 - x0) * scale,
+                y: actual.minY + (44 - y0) * scale, width: 19 * scale, height: 15 * scale)
+        }
+        if motif == .mooredBoat, let bow = object.canv.first?.p.first {
+            object.canv += mooring(from: bow, boat: actual)
+        }
+        if trees.contains(motif) { paintedTrees[motif] = object.canv }
+        if let tree = woodyTree {
+            let points = raw.flatMap(\.p)
+            let x0 = points.map(\.x).min()!, x1 = points.map(\.x).max()!, y0 = points.map(\.y).min()!
+            let scale = actual.width / (x1 - x0)
+            func moved(_ p: ZXArt.P) -> ZXArt.P {
+                .init(actual.minX + (p.x - x0) * scale, actual.minY + (p.y - y0) * scale)
+            }
+            treePerches[motif] = tree.perches.map(moved)
+            treeVines[motif] = tree.vine.map { polygon in
+                var p = polygon; p.p = p.p.map(moved); p.wid *= scale; return p
+            }
+        }
+        if let lotus {
+            let points = raw.flatMap(\.p)
+            let x0 = points.map(\.x).min()!, x1 = points.map(\.x).max()!, y0 = points.map(\.y).min()!
+            let scale = actual.width / (x1 - x0)
+            lotusFlowerTip = .init(actual.minX + (lotus.flowerTip.x - x0) * scale,
+                actual.minY + (lotus.flowerTip.y - y0) * scale)
+        }
+        if motif == .stream {
+            engine.noted(.water, object.canv)
+            if let bank = object.canv.first?.p, let left = bank.first, let right = bank.last {
+                streamInlet = (left + right) / 2
+            }
+        }
         support(motif, bounds: actual, root: plantedRoot)
+        if let root = plantedRoot {
+            treeRoots[motif] = root
+            parts.append(.near(engine.paintingRootMoss(root)))
+        }
         if [.mist, .afterRain, .dunes].contains(motif) {
             parts.append(.init(canv: object.canv, mist: .init(depth: actual.height * 4,
                 blur: motif == .dunes ? 0.4 : 0.7, peak: 0.95, floorY: actual.maxY,
@@ -274,9 +359,27 @@ private final class PaintingStage {
         } else { parts.append(.near(object.canv)) }
         elements.append(.init(motif: motif.rawValue,
             bounds: .init(x: actual.minX / w, y: actual.minY / h, width: actual.width / w, height: actual.height / h)))
-        if [.moon, .sunrise, .sunset].contains(motif) {
+        if [.moon, .crescent, .sunrise, .sunset].contains(motif) {
             celestialLayers.append((parts.count - 1, motif))
         }
+        if motif == .house {
+            // Measure the real four-point door and front wall, not a guessed fraction of the roof.
+            let points = raw.flatMap(\.p)
+            let x0 = points.map(\.x).min()!, x1 = points.map(\.x).max()!, y0 = points.map(\.y).min()!
+            let scale = actual.width / (x1 - x0)
+            for (name, polygon) in [("houseDoor", raw.first { p in
+                p.p.count == 4 && p.fil != nil && abs(p.p[0].y - 43) < 0.01 && abs(p.p[1].x - p.p[0].x - 20) < 0.01
+            }), ("houseEaves", raw.count > 1 ? raw[1] : nil)] {
+                guard let polygon else { continue }
+                let xs = polygon.p.map(\.x), ys = polygon.p.map(\.y)
+                elements.append(.init(motif: name, bounds: .init(
+                    x: (actual.minX + (xs.min()! - x0) * scale) / w,
+                    y: (actual.minY + (ys.min()! - y0) * scale) / h,
+                    width: (xs.max()! - xs.min()!) * scale / w,
+                    height: (ys.max()! - ys.min()!) * scale / h)))
+            }
+        }
+
         let kind: ZXArt.AnchorPiece.Kind?
         switch motif {
         case .boat, .mooredBoat, .angler, .sail:
@@ -298,6 +401,37 @@ private final class PaintingStage {
         return true
     }
 
+    /// Tie the boat to this scene's bank, rather than fitting a floating post with the hull.
+    /// Keep boat metadata limited to the craft; record the rope and post separately for review.
+    private func mooring(from bow: ZXArt.P, boat: CGRect) -> ZXArt.SSCanv {
+        guard bankSurface != nil else { return [] }
+        let size = max(0.28, min(0.8, boat.width / 100))
+        let buildings = elements.filter { ["house", "hut", "pavilion", "templeGate"].contains($0.motif) }
+            .map { CGRect(x: $0.bounds.cgRect.minX * w, y: $0.bounds.cgRect.minY * h,
+                width: $0.bounds.cgRect.width * w, height: $0.bounds.cgRect.height * h) }
+        let desired = boat.minX - boat.width * 0.12
+        var candidates = [desired, desired - boat.width * 0.3, desired + boat.width * 0.3]
+        for building in buildings { candidates += [building.minX - 4, building.maxX + 4] }
+        for candidate in candidates.sorted(by: { abs($0 - desired) < abs($1 - desired) }) {
+            let x = supportedBankX(candidate)
+            guard let y = bankFoot(x - size, x + size) else { continue }
+            let foot = ZXArt.P(x, y)
+            let post = CGRect(x: x - 1.2 * size, y: y - 15 * size, width: 2.4 * size, height: 15 * size)
+            guard !post.intersects(verse), !buildings.contains(where: { $0.intersects(post.insetBy(dx: -1, dy: -1)) }) else { continue }
+            let knot = foot - ZXArt.P(0, 10 * size)
+            let sag = (bow + knot) * 0.5 + ZXArt.P(0, 4 * size)
+            let rope = CGRect(x: min(bow.x, knot.x), y: min(bow.y, knot.y), width: abs(bow.x - knot.x),
+                height: max(bow.y, knot.y, sag.y) - min(bow.y, knot.y)).insetBy(dx: -size, dy: -size)
+            guard !rope.intersects(verse) else { continue }
+            for (name, bounds) in [("mooringPost", post), ("mooringRope", rope)] {
+                elements.append(.init(motif: name, bounds: .init(x: bounds.minX / w, y: bounds.minY / h,
+                    width: bounds.width / w, height: bounds.height / h)))
+            }
+            return engine.paintingMooring(from: bow, postFoot: foot, size: size)
+        }
+        return []
+    }
+
     /// Scale by the scene's common ground plane, rather than filling each independent placeholder.
     private func scaledSlot(_ motif: Motif, _ requested: CGRect) -> CGRect {
         var maxWidth = requested.width, maxHeight = requested.height
@@ -305,8 +439,8 @@ private final class PaintingStage {
         case .house, .hut, .pavilion, .templeGate, .cityGate, .terrace, .ruins:
             let close = currentScene == .moonNight
             let village = currentScene == .village
-            maxWidth = min(maxWidth, art.width * (close ? 0.50 : (village ? 0.33 : 0.26)))
-            maxHeight = min(maxHeight, art.height * (close ? 0.18 : (village ? 0.14 : 0.11)))
+            maxWidth = min(maxWidth, art.width * (close ? 0.65 : (village ? 0.48 : 0.30)))
+            maxHeight = min(maxHeight, art.height * (close ? 0.24 : (village ? 0.20 : 0.14)))
             if let surface = bankSurface {
                 let width = surface.step * Double(surface.heights.count - 1)
                 maxWidth = min(maxWidth, width * (close ? 0.7 : 0.46))
@@ -325,14 +459,16 @@ private final class PaintingStage {
             if currentScene == .retreat, let ground = preparedGround {
                 maxWidth = min(maxWidth, ground.bounds.width * 0.38)
             }
-            maxHeight = min(maxHeight, min(art.height * (mountainScene ? 0.46 : 0.62), art.width * (mountainScene ? 0.85 : 0.65)))
+            maxHeight = min(maxHeight, min(art.height * (mountainScene ? 0.46 : 0.62), art.width * (mountainScene ? 0.95 : 1.05)))
             if let main = elements.first(where: { $0.motif == "mainMountain" }) {
                 // The pine of 明月松间照 is the protagonist of a mountain retreat, not a sapling.
                 let lead = motif == .pine && currentScene == .retreat
                 maxHeight = min(maxHeight, main.bounds.cgRect.height * h * (lead ? 0.55 : 0.28))
             }
         case .traveler, .horse:
-            maxHeight = min(maxHeight, art.width * (motif == .horse ? 0.065 : 0.052))
+            let treeHeight = elements.filter { ["oldTree", "bareTree", "willow", "blossom", "layeredTree"].contains($0.motif) }.map { $0.bounds.cgRect.height }.min()
+            let personHeight = min(art.width * 0.14, treeHeight.map { $0 * h / 5 } ?? art.width * 0.10)
+            maxHeight = min(maxHeight, personHeight * (motif == .horse ? 1.18 : 1))
         case .bamboo:
             maxHeight = min(maxHeight, art.height * 0.34)
             if let main = elements.first(where: { $0.motif == "mainMountain" }) {
@@ -363,6 +499,15 @@ private final class PaintingStage {
         return s.heights[first...last].filter(\.isFinite).max()
     }
 
+    private func supportedBankX(_ desired: Double) -> Double {
+        guard let s = bankSurface else { return desired }
+        let i = min(s.heights.count - 1, max(0, Int(((desired - s.x0) / s.step).rounded())))
+        if s.heights[i].isFinite { return desired }
+        guard let nearest = s.heights.indices.filter({ s.heights[$0].isFinite })
+            .min(by: { abs($0 - i) < abs($1 - i) }) else { return desired }
+        return s.x0 + Double(nearest) * s.step
+    }
+
     /// Place a building at the main mountain's foot, `along` its width, sized against the
     /// mountain (丈山尺树寸马分人), standing on the bank directly beneath.
     private func placeAtFoot(_ motif: Motif, along: Double, height: Double, aspect: Double) {
@@ -371,20 +516,34 @@ private final class PaintingStage {
         let bh = peak.height * height, bw = bh * aspect
         guard let surface = bankSurface else { return }
         let bankEnd = surface.x0 + surface.step * Double(surface.heights.count - 1)
-        let cx = min(max(peak.minX + peak.width * along, surface.x0 + bw * 0.5), bankEnd - bw * 0.5)
-        guard let foot = bankFoot(cx - bw * 0.4, cx + bw * 0.4) else { return }
-        pinned = true
-        add(motif, CGRect(x: cx - bw / 2, y: foot - bh, width: bw, height: bh))
-        pinned = false
+        let cx = supportedBankX(min(max(peak.minX + peak.width * along, surface.x0 + bw * 0.5), bankEnd - bw * 0.5))
+        // A broad mountain can fit low in a narrow recommendation band. The preferred
+        // horizontal position may then stand on an upper bank shoulder; seek a lower
+        // existing footing instead of moving the bank or lifting the house off the ground.
+        let alternatives = surface.heights.indices.map { surface.x0 + Double($0) * surface.step }
+            .filter { $0 >= surface.x0 + bw / 2 && $0 <= bankEnd - bw / 2 }
+            .sorted { abs($0 - cx) < abs($1 - cx) }
+        let raw = engine.paintingAsset(motif)
+        let stems: [Double] = motif == .pavilion ? paintedTrees.values.compactMap { tree in
+            let points = tree.flatMap(\.p)
+            guard let top = points.map(\.y).min(), let bottom = points.map(\.y).max() else { return nil }
+            let foot = points.filter { $0.y > bottom - (bottom - top) * 0.12 }
+            return foot.isEmpty ? nil : foot.map(\.x).reduce(0, +) / Double(foot.count)
+        } : []
+        for x in [cx] + alternatives {
+            // A tree may cover an eave, but its trunk must not pass through the open hall.
+            guard stems.allSatisfy({ abs(x - $0) > bw * 0.58 }) else { continue }
+            guard let foot = bankFoot(x - bw * 0.4, x + bw * 0.4), foot >= peak.midY else { continue }
+            pinned = true
+            let landed = add(motif, CGRect(x: x - bw / 2, y: foot - bh, width: bw, height: bh), source: raw)
+            pinned = false
+            if landed { return }
+        }
     }
 
     /// Buildings and trees meet the actual bank silhouette, not independent percentage baselines.
     private func groundedSlot(_ motif: Motif, _ requested: CGRect) -> CGRect {
-        if motif == .window, currentScene == .moonNight,
-           let house = elements.first(where: { $0.motif == "house" })?.bounds.cgRect {
-            return CGRect(x: (house.minX + house.width * 0.17) * w,
-                y: (house.minY + house.height * 0.64) * h, width: house.width * w * 0.17, height: house.height * h * 0.22)
-        }
+        if motif == .window, currentScene == .moonNight, let frame = houseWindowFrame { return frame }
         let rooted: Set<Motif> = [.oldTree, .bareTree, .layeredTree, .pine, .bamboo, .willow,
             .blossom, .maple, .house, .hut, .pavilion, .pagoda, .templeGate, .cityGate, .terrace, .ruins, .fence, .traveler, .horse]
         guard rooted.contains(motif), let surface = bankSurface else { return requested }
@@ -402,7 +561,7 @@ private final class PaintingStage {
             desired = max(desired, previous.maxX * w + requested.width * 0.18)
         }
         let center = low <= high ? min(max(desired, low), high) : min(max(desired, surface.x0 + radius), endX - radius)
-        requested.origin.x = center - requested.width / 2
+        requested.origin.x = supportedBankX(center) - requested.width / 2
         let position = (requested.midX - surface.x0) / surface.step
         guard position >= 0, position <= Double(surface.heights.count - 1) else { return requested }
         let lo = Int(position), hi = min(lo + 1, surface.heights.count - 1)
@@ -513,7 +672,7 @@ private final class PaintingStage {
         // Two ranges, staggered: the far one higher, paler and to one side; the nearer one lower
         // and offset the other way. Each covers part of the width so the sky stays open.
         let side = engine.r() < 0.5
-        let ranges = currentScene == .historic || structure == .corner || structure == .high ? 1 : 2
+        let ranges = currentScene == .historic || structure == .corner || structure == .high ? 1 : (layoutVariant == 1 ? 3 : 2)
         for k in 0..<ranges {
             let raw = engine.paintingDistant(k)
             let width = 0.58 + engine.r() * 0.16
@@ -521,7 +680,7 @@ private final class PaintingStage {
             let box: CGRect
             if !main, structure == .deep || structure == .level {
                 // Keep both ranges above the far bank, higher/paler first, then lower/darker.
-                box = slot(x, 0.015 + Double(k) * 0.07, width, 0.15)
+                box = slot(x, 0.015 + Double(k) * 0.14 / Double(ranges), width, ranges == 3 ? 0.12 : 0.15)
             } else if structure == .deep {
                 box = slot(0.40 - Double(k) * 0.17, 0.02 + Double(k) * 0.19,
                            0.54 + Double(k) * 0.10, 0.30)
@@ -562,7 +721,7 @@ private final class PaintingStage {
             peakBox.origin.y += headroom
             peakBox.size.height -= headroom
         }
-        if main, let object = fitted(engine.paintingMountain(form: structure == .deep ? .clustered : .folded, terraced: currentScene == .historic), to: peakBox) {
+        if main, let object = fitted(engine.paintingMountain(form: [PaintingMountainProfile.Form.folded, .clustered, .folded, .clustered][layoutVariant], terraced: currentScene == .historic), to: peakBox) {
             // 山腰云锁: the lower third of the main peak dissolves into cloud instead of
             // standing on the bank like a monument.
             let r = object.bounds
@@ -659,27 +818,174 @@ private final class PaintingStage {
             width: r.width / w, height: r.height / h)))
     }
 
-    /// The bridge and its channel share a coordinate frame: the feet straddle the water.
+    /// Crows gather beside the tree; perched feet are pinned to painted branch points.
+    private func treeCrows() {
+        guard let tree = elements.first(where: { ["oldTree", "bareTree"].contains($0.motif) })?.bounds.cgRect else { return }
+        let b = CGRect(x: tree.minX * w, y: tree.minY * h, width: tree.width * w, height: tree.height * h)
+        let treeMotif: Motif = paintedTrees[.oldTree] == nil ? .bareTree : .oldTree
+        let candidates = treePerches[treeMotif] ?? []
+        let perches = engine.r() < 0.5 ? [0.23] : [0.23, 0.77]
+        for fraction in perches {
+            let target = ZXArt.P(b.minX + b.width * fraction, b.minY + b.height * 0.38)
+            func distance(_ point: ZXArt.P) -> Double {
+                let dx = point.x - target.x, dy = point.y - target.y
+                return dx * dx + dy * dy
+            }
+            guard let branch = candidates.min(by: { distance($0) < distance($1) }) else { continue }
+            let scale = b.height * 0.036 / 17
+            let bird = engine.paintingPerchedCrow().map { poly -> ZXArt.SSPoly in
+                var p = poly; p.p = p.p.map { .init(branch.x + $0.x * scale, branch.y + $0.y * scale) }
+                p.wid *= scale; return p
+            }
+            parts.append(.near(bird))
+        }
+        add(.crow, CGRect(x: max(1, b.minX - b.width * 0.2), y: b.minY - b.height * 0.12,
+            width: b.width * 0.9, height: b.height * 0.15),
+            source: engine.paintingBird(swallow: false, count: 2 + Int(engine.r() * 2)))
+    }
+
+    private func journeyPersonHeight() -> Double {
+        guard let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect else { return art.width * 0.08 }
+        let tree = elements.first(where: { ["oldTree", "bareTree"].contains($0.motif) })?.bounds.cgRect.height
+        let treeHeight = (tree ?? 0.16) * h
+        var height = min(bank.width * w * 0.078, treeHeight * 0.20)
+        if let bridge = elements.first(where: { $0.motif == "bridge" })?.bounds.cgRect {
+            height = max(treeHeight / 7.9, min(height, bridge.width * w / 4.8))
+        }
+        return height
+    }
+
+    /// A shared scale and a rein connect the traveler and horse; their feet follow the same road.
+    private func journey() {
+        guard let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect else { return }
+        let b = CGRect(x: bank.minX * w, y: bank.minY * h, width: bank.width * w, height: bank.height * h)
+        let personH = journeyPersonHeight()
+        let horseH = personH * 1.18
+        let x = b.minX + b.width * 0.65
+        let pose = Int(engine.r() * 2) // Keep the accepted standing/walking drawing and shared scale.
+        let horse = engine.paintingHorse(pose: pose, facingLeft: false, donkey: donkey)
+        let person = engine.paintingPerson(pose: 0, facingLeft: false)
+        let horseW = personH * 1.7, personW = personH * 0.75
+        guard let crest = bankFoot(x, x + horseW + personW) else { return }
+        let foot = min(b.maxY - 2, max(crest + 3, b.minY + b.height * 0.78))
+        // The road passes through the near face, rather than putting the pair on a distant rim.
+        let right = x + horseW + personW + personH * 0.30
+        let farX = b.minX + b.width * 0.88
+        let farY = bankFoot(farX - 1, farX + 1) ?? (b.minY + b.height * 0.5)
+        let center = engine.inkCurve([.init(farX, farY + 1),
+            .init(right + personH * 0.15, foot - personH * 0.35), .init(right, foot),
+            .init(x - personH * 0.25, foot),
+            .init(b.minX + b.width * 0.47, min(b.maxY + b.height * 0.12, footer - personH * 0.34 - 2))])
+        let upper = center.enumerated().map { i, p in
+            let t = Double(i) / Double(center.count - 1)
+            return ZXArt.P(p.x, p.y - personH * (0.035 + 0.32 * pow(t, 1.3)))
+        }
+        let lower = center.enumerated().map { i, p in
+            let t = Double(i) / Double(center.count - 1)
+            return ZXArt.P(p.x, p.y + personH * (0.035 + 0.28 * pow(t, 1.3)))
+        }
+        var road = [engine.poly(upper + lower.reversed(), fil: .white, str: nil)]
+        for edge in [upper, lower] {
+            road += engine.inkLine(Array(edge.prefix(13)), width: 1.0, tone: 0.52, dry: 0.42)
+            road += engine.inkLine(Array(edge.suffix(10)), width: 1.3, tone: 0.54, dry: 0.45)
+        }
+        // A narrow earthen lip outside the road binds it to the slope without filling the road.
+        let lip = upper.enumerated().map { i, p in
+            ZXArt.P(p.x + 0.5, p.y - 0.8 - Double(i) / Double(upper.count) * 1.8)
+        }
+        road.append(engine.poly(upper + lip.reversed(), fil: .gray(0, 0.045), str: nil))
+        parts.append(.near(road))
+        let roadPoints = upper + lower
+        let roadBox = CGRect(x: roadPoints.map(\.x).min()!, y: roadPoints.map(\.y).min()!,
+            width: roadPoints.map(\.x).max()! - roadPoints.map(\.x).min()!,
+            height: roadPoints.map(\.y).max()! - roadPoints.map(\.y).min()!)
+        elements.append(.init(motif: "path", bounds: .init(x: roadBox.minX / w, y: roadBox.minY / h,
+            width: roadBox.width / w, height: roadBox.height / h)))
+        placed.insert(.path)
+        pinned = true
+        let horsePlaced = add(.horse, CGRect(x: x, y: foot - horseH, width: horseW, height: horseH), source: horse)
+        let personPlaced = add(.traveler, CGRect(x: x + horseW + personH * 0.24, y: foot - personH,
+            width: personW, height: personH), source: person)
+        pinned = false
+        guard horsePlaced, personPlaced,
+              let hb = elements.last(where: { $0.motif == "horse" })?.bounds.cgRect,
+              let pb = elements.last(where: { $0.motif == "traveler" })?.bounds.cgRect else { return }
+        func anchor(_ raw: ZXArt.SSCanv, _ b: CGRect, _ p: ZXArt.P) -> ZXArt.P {
+            let points = raw.flatMap(\.p), x0 = points.map(\.x).min()!, x1 = points.map(\.x).max()!
+            let y0 = points.map(\.y).min()!
+            let scale = b.width * w / (x1 - x0)
+            return .init(b.minX * w + (p.x - x0) * scale, b.minY * h + (p.y - y0) * scale)
+        }
+        let muzzle = anchor(horse, hb, .init(99, pose == 1 ? 28 : 43))
+        let hand = anchor(person, pb, .init(54, 24))
+        let rein = engine.inkCurve([muzzle, .init((muzzle.x + hand.x) / 2, max(muzzle.y, hand.y) + personH * 0.22), hand])
+        parts.append(.near(engine.inkLine(rein, width: 0.32, tone: 0.58, dry: 0.4)))
+    }
+
+    /// Place water, bridge and reflection without independently fitting their bounding boxes.
     private func crossing(river: Bool) {
         guard let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect else { return }
         let b = CGRect(x: bank.minX * w, y: bank.minY * h, width: bank.width * w, height: bank.height * h)
-        let width = min(b.width * 0.36, art.width * 0.46)
-        let box = CGRect(x: b.minX + b.width * 0.12, y: b.minY + b.height * 0.10,
-                         width: width, height: b.height * 0.88)
-        let channel = PaintingWaterChannel(width: width, height: box.height, phase: 0.35, broad: true)
-        let raw = waterEngine.paintingChannel(width: width, height: box.height, river: true, phase: 0.35)
-        layWater(raw, in: box, motif: river ? "riverChannel" : "stream")
-        if !river { placed.insert(.stream) }
-        let left = channel.point(0.55, across: -1), right = channel.point(0.55, across: 1)
-        let bridgeW = (right.x - left.x) * 1.65, bridgeH = bridgeW * 0.43
-        pinned = true
-        add(.bridge, CGRect(x: box.minX + (left.x + right.x) / 2 - bridgeW / 2,
-            y: box.minY + left.y - bridgeH, width: bridgeW, height: bridgeH))
-        pinned = false
-        let ripples = CGRect(x: box.minX + left.x, y: box.minY + left.y + 2,
-                             width: right.x - left.x, height: max(4, box.height * 0.20))
-        layWater(waterEngine.paintingSurface(.pond, width: ripples.width, height: ripples.height),
-                 in: ripples, motif: "bridgeReflection")
+        let width = b.width * 0.40
+        // Only a portrait inscription sits above the bank. In wide layouts the verse
+        // is beside it; using verse.maxY there reversed the stream's vertical extent.
+        let waterTop = bandTop == nil ? art.minY : verse.maxY + 4
+        // The stream comes out of a gap between the stones (水口); it never climbs over the crest.
+        let startY = max(b.minY + b.height * 0.18, waterTop)
+        let box = CGRect(x: b.minX + b.width * (river ? [0.20, 0.38, 0.28, 0.46][layoutVariant] : 0.025), y: startY,
+                         width: width, height: min(b.maxY - startY + b.height * 0.12, footer - startY - 2))
+        let phase = waterEngine.r() * 1.6 - 0.8
+        let channel = PaintingWaterChannel(width: width, height: box.height, phase: phase, broad: true)
+        func place(_ raw: ZXArt.SSCanv, x: Double, y: Double, scale: Double = 1, motif: String) {
+            let canvas = raw.map { poly -> ZXArt.SSPoly in
+                var p = poly; p.p = p.p.map { .init(x + $0.x * scale, y + $0.y * scale) }
+                p.wid *= scale; return p
+            }
+            let points = canvas.flatMap(\.p)
+            guard let x0 = points.map(\.x).min(), let x1 = points.map(\.x).max(),
+                  let y0 = points.map(\.y).min(), let y1 = points.map(\.y).max() else { return }
+            parts.append(.near(canvas))
+            if motif != "bridge" { engine.noted(.water, canvas) }
+            elements.append(.init(motif: motif, bounds: .init(x: x0 / w, y: y0 / h, width: (x1 - x0) / w, height: (y1 - y0) / h)))
+        }
+        let bridge = engine.paintingBridgePlan()
+        // Move a crossing upstream if its reflected arch would enter the page's caption band.
+        let reflectionDepth = bridge.kind == .arch ? max(24, bridge.rise + 2) : 24
+        func spanScale(_ t: Double) -> Double {
+            (channel.point(t, across: 1).x - channel.point(t, across: -1).x) * 1.16 / bridge.width
+        }
+        var crossingT = 0.64
+        while crossingT > 0.32, box.minY + box.height * crossingT + reflectionDepth * spanScale(crossingT) > footer - 1 {
+            crossingT -= 0.04
+        }
+        let left = channel.point(crossingT, across: -1), right = channel.point(crossingT, across: 1)
+        let scale = spanScale(crossingT)
+        var waterY = box.minY
+        if river {
+            let houseX = b.minX + b.width * 0.83
+            if let houseFoot = bankFoot(houseX - b.width * 0.069, houseX + b.width * 0.069) {
+                let deckY = bridge.kind == .arch ? 54.0 : 42.0
+                let aligned = houseFoot + (60 - deckY) * scale - left.y
+                waterY = max(waterTop, min(waterY, aligned))
+            }
+        }
+        place(waterEngine.paintingChannel(channel), x: box.minX, y: waterY, motif: river ? "riverChannel" : "stream")
+        placed.insert(.stream)
+        let x = box.minX + (left.x + right.x) / 2 - bridge.width * scale / 2
+        let y = waterY + left.y - 60 * scale
+        place(engine.paintingBridge(bridge), x: x, y: y, scale: scale, motif: "bridge")
+        placed.insert(.bridge)
+        place(engine.paintingBridgeReflection(bridge), x: x, y: y, scale: scale, motif: "bridgeReflection")
+        // The bridge ends disappear into short bank contours, without separate round stone piles.
+        let landing = bridge.kind == .arch ? 54.0 : 42.0
+        var joins: ZXArt.SSCanv = []
+        for (end, side) in [(0.0, -1.0), (bridge.width, 1.0)] {
+            joins += engine.inkLine([.init(end - side * 2, landing + 1), .init(end + side * 8, landing + 1),
+                                    .init(end + side * 18, landing - 3)], width: 1.0, tone: 0.48, dry: 0.6)
+        }
+        parts.append(.near(joins.map { poly in
+            var p = poly; p.p = p.p.map { .init(x + $0.x * scale, y + $0.y * scale) }; p.wid *= scale; return p
+        }))
     }
 
     /// Search actual sky above the main and guest ridges, not their rectangular bounding boxes.
@@ -735,7 +1041,7 @@ private final class PaintingStage {
         guard let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect else {
             return slot(0.27, 0.67, 0.30, 0.30)
         }
-        let obstacles = elements.filter { ["pine", "bamboo", "hut"].contains($0.motif) }
+        let obstacles = elements.filter { ["pine", "bamboo", "hut", "pavilion"].contains($0.motif) }
             .map { $0.bounds.cgRect }.sorted { $0.minX < $1.minX }
         var gaps: [(Double, Double)] = [], cursor = bank.minX + 0.002
         for obstacle in obstacles {
@@ -748,8 +1054,55 @@ private final class PaintingStage {
             ?? (bank.minX + bank.width * 0.35, bank.minX + bank.width * 0.55)
         let near = elements.first(where: { $0.motif == "nearBank" })?.bounds.cgRect ?? bank
         let bottom = max(bank.maxY, near.maxY) * h
-        return CGRect(x: gap.0 * w, y: bank.minY * h, width: (gap.1 - gap.0) * w,
-            height: max(12, bottom - bank.minY * h))
+        let mid = (gap.0 + gap.1) * w / 2
+        let sourceY = currentScene == .retreat
+            ? max(bank.minY * h, (bankFoot(mid - 2, mid + 2) ?? (bank.minY * h)) - (bottom - bank.minY * h) * 0.18)
+            : bank.minY * h
+        return CGRect(x: gap.0 * w, y: sourceY, width: (gap.1 - gap.0) * w,
+            height: max(12, bottom - sourceY))
+    }
+
+    /// Water falls through the main mountain, then a short tributary joins the existing creek.
+    /// Keep this new tributary behind the bank/tree layers; the accepted creek is unchanged.
+    private func mountainWaterfall() {
+        if streamInlet == nil { add(.stream, mountainStreamSlot()) }
+        guard let inlet = streamInlet else { return }
+        let mountain = elements.first { $0.motif == "mainMountain" }?.bounds.cgRect
+        let m = mountain.map { CGRect(x: $0.minX * w, y: $0.minY * h, width: $0.width * w, height: $0.height * h) } ?? art
+        let outlet = ZXArt.P(m.minX + m.width * 0.73, min(inlet.y - 8, m.minY + m.height * 0.78))
+        let fall = engine.paintingWaterfall(), points = fall.canvas.flatMap(\.p)
+        let x0 = points.map(\.x).min()!, x1 = points.map(\.x).max()!
+        let y0 = points.map(\.y).min()!, y1 = points.map(\.y).max()!
+        let scale = min(m.height * 0.48 / (y1 - y0), m.width * 0.42 / (x1 - x0))
+        let raw = fall.canvas.map { polygon in
+            var p = polygon; p.p = p.p.map { outlet + ($0 - fall.outlet) * scale }; p.wid *= scale; return p
+        }
+        let box = CGRect(x: outlet.x + (x0 - fall.outlet.x) * scale,
+            y: outlet.y + (y0 - fall.outlet.y) * scale, width: (x1 - x0) * scale, height: (y1 - y0) * scale)
+        pinned = true
+        let added = add(.waterfall, box, source: raw)
+        pinned = false
+        guard added else { return }
+        let layer = parts.removeLast()
+        // Connect both banks of the water gap, broadening slightly before the creek mouth.
+        let center = engine.inkCurve([outlet, outlet + ZXArt.P(5, (inlet.y - outlet.y) * 0.45),
+            ZXArt.P(inlet.x - 8, inlet.y - 7), inlet])
+        let left = center.enumerated().map { i, p -> ZXArt.P in
+            let t = Double(i) / Double(center.count - 1)
+            return p - ZXArt.P(10 * scale * (1 - t) + 1.3 * t, 0)
+        }
+        let right = center.enumerated().map { i, p -> ZXArt.P in
+            let t = Double(i) / Double(center.count - 1)
+            return p + ZXArt.P(11 * scale * (1 - t) + 1.3 * t, 0)
+        }
+        var runoff = [engine.poly(left + right.reversed(), fil: .white, str: nil)]
+        for edge in [left, right] { runoff += engine.inkLine(edge, width: 0.65, tone: 0.42, dry: 0.48) }
+        parts.insert(.near(runoff), at: terrainLayerEnd)
+        parts.insert(layer, at: terrainLayerEnd)
+        celestialLayers = celestialLayers.map { ($0.layer >= terrainLayerEnd ? $0.layer + 2 : $0.layer, $0.motif) }
+        let xs = (left + right).map(\.x), ys = (left + right).map(\.y)
+        elements.append(.init(motif: "waterfallRunoff", bounds: .init(x: xs.min()! / w, y: ys.min()! / h,
+            width: (xs.max()! - xs.min()!) / w, height: (ys.max()! - ys.min()!) / h)))
     }
 
     private func waterDetails() {
@@ -771,9 +1124,8 @@ private final class PaintingStage {
               let light = elements.first(where: { ["moon", "crescent", "sunrise", "sunset"].contains($0.motif) })?.bounds.cgRect else { return }
         let x = light.midX * w - foreground.width * 0.07, width = foreground.width * 0.14
         var top = foreground.minY + foreground.height * 0.26
-        if let bank = elements.first(where: { $0.motif == "nearBank" })?.bounds.cgRect,
-           x < bank.maxX * w, x + width > bank.minX * w {
-            top = max(top, bank.maxY * h + 1)
+        for bank in elements.filter({ ["nearBank", "groundBank"].contains($0.motif) }).map({ $0.bounds.cgRect }) {
+            if x < bank.maxX * w, x + width > bank.minX * w { top = max(top, bank.maxY * h + 1) }
         }
         let height = min(foreground.height * 0.60, foreground.maxY - top)
         guard height >= 6 else { return }
@@ -799,7 +1151,7 @@ private final class PaintingStage {
             let bottom = min(foreground.maxY, h - pad)
             let width = (w - 2 * pad) * (narrow ? 0.5 : 1)
             let x = verse.minX > w / 2 || narrow ? pad : w - pad - width
-            box = CGRect(x: x, y: top, width: width, height: max(20, min(bottom - top, h * 0.13)))
+            box = CGRect(x: x, y: top, width: width, height: max(20, min(bottom - top, h * [0.17, 0.21, 0.14, 0.19][layoutVariant])))
             groundInBand = true
         }
         if scene == .historic {
@@ -807,20 +1159,34 @@ private final class PaintingStage {
                          width: box.width, height: box.height * 0.35)
         }
         if prepareOnly {
-            preparedGround = fitted(engine.paintingBank(style: [.retreat, .temple].contains(scene) ? .cliff : (scene == .historic || structure == .corner ? .headland : .shoal)), to: box)
-            if groundInBand, var ground = preparedGround {
-                // Terrain fills the whole lower band. Fitting it like a tree would narrow a
-                // steep bank into a floating island; only its horizontal ground plane expands.
-                let scaleX = box.width / ground.bounds.width
-                let x0 = ground.bounds.minX
-                ground.canv = ground.canv.map { poly in
-                    var p = poly
-                    p.p = poly.p.map { .init(box.minX + ($0.x - x0) * scaleX, $0.y) }
-                    return p
+            let style: ShanShuiEngine.BankStyle = [.retreat, .temple].contains(scene) ? .cliff
+                : (scene == .historic || structure == .corner ? .headland : .shoal)
+            if !narrow, scene != .historic {
+                // Two staggered reaches occupy the lower band, leaving a real water/earth gap.
+                // Fit each bank uniformly; stretching one paper silhouette made a pale platform.
+                var canvas: ZXArt.SSCanv = []
+                var bounds = CGRect.null
+                for side in 0..<2 {
+                    let leftWidth = [0.61, 0.43, 0.54, 0.48][layoutVariant]
+                    let rightWidth = [0.28, 0.47, 0.36, 0.43][layoutVariant]
+                    let depth = [0.12, 0.38, 0.06, 0.27][layoutVariant]
+                    let reach = CGRect(x: side == 0 ? box.minX : box.maxX - box.width * rightWidth,
+                        y: box.minY + box.height * (side == 0 ? 0 : depth),
+                        width: box.width * (side == 0 ? leftWidth : rightWidth),
+                        height: box.height * (side == 0 ? 0.84 : 1 - depth))
+                    if var ground = fitted(engine.paintingBank(style: style), to: reach) {
+                        let dx = side == 0 ? box.minX - ground.bounds.minX : box.maxX - ground.bounds.maxX
+                        ground.canv = ground.canv.map { poly in
+                            var p = poly; p.p = p.p.map { .init($0.x + dx, $0.y) }; return p
+                        }
+                        ground.bounds = ground.bounds.offsetBy(dx: dx, dy: 0)
+                        canvas += ground.canv
+                        bounds = bounds.union(ground.bounds)
+                    }
                 }
-                ground.bounds.origin.x = box.minX
-                ground.bounds.size.width = box.width
-                preparedGround = ground
+                preparedGround = bounds.isNull ? nil : (canvas, bounds)
+            } else {
+                preparedGround = fitted(engine.paintingBank(style: style), to: box)
             }
             if let object = preparedGround, scene != .historic || historicGroundNeeded { recordBank(object) }
             return
@@ -901,15 +1267,22 @@ private final class PaintingStage {
             elements.append(.init(motif: "farShore", bounds: .init(x: shore.bounds.minX / w, y: shore.bounds.minY / h,
                 width: shore.bounds.width / w, height: shore.bounds.height / h)))
         }
+        terrainLayerEnd = parts.count
         ground(for: scene)
         switch scene {
         case .retreat:
-            include(.pine, slot(0.01, 0.20, 0.77, 0.64))
+            include(.pine, leadTreeSlot())
             include(.bamboo, slot(0.70, 0.55, 0.28, 0.29))
             if chosen.contains(.hut) { placeAtFoot(.hut, along: 0.72, height: 0.10, aspect: 1.7) }
+            if chosen.contains(.pavilion) {
+                placeAtFoot(.pavilion, along: [0.36, 0.68, 0.30, 0.62][layoutVariant], height: 0.20, aspect: 1.16)
+            }
             include(.stream, mountainStreamSlot())
         case .fishing:
-            if chosen.contains(.angler) { add(.angler, slot(0.39, 0.58, 0.55, 0.14)) }
+            if chosen.contains(.angler) {
+                add(.angler, slot([0.08, 0.40, 0.18, 0.32][layoutVariant],
+                    [0.48, 0.61, 0.36, 0.55][layoutVariant], [0.82, 0.58, 0.72, 0.64][layoutVariant], 0.20))
+            }
             else if chosen.contains(.sail) { add(.sail, slot(0.16, 0.47, 0.7, 0.29)) }
             else { include(.boat, slot(0.14, 0.62, 0.75, 0.15)) }
             // Reeds grow at the water's edge of the near bank, not floating below it.
@@ -921,18 +1294,29 @@ private final class PaintingStage {
                                    y: b.maxY - reedH, width: b.width * 0.35, height: reedH))
             } else { include(.reeds, slot(0.03, 0.15, 0.27, 0.8, front: true)) }
         case .waterTown:
-            include(.house, slot(0.53, 0.60, 0.43, 0.19))
-            if chosen.contains(.house) { add(.house, slot(0.68, 0.61, 0.26, 0.12), repeatable: true) }
-            include(.willow, slot(0.0, 0.14, 0.69, 0.64))
             if chosen.contains(.bridge) { crossing(river: true) }
+            if chosen.contains(.house), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
+                let width = bank.width * w * 0.23, height = bank.width * w * 0.10
+                // Stand on a stone of the far reach. A raised back stone can lift the house into
+                // the verse, so try a few places along the reach before giving up the pairing.
+                pinned = true
+                for fraction in [0.83, 0.89, 0.77, 0.71] {
+                    let x = supportedBankX((bank.minX + bank.width * fraction) * w)
+                    if let foot = bankFoot(x - width * 0.3, x + width * 0.3),
+                       add(.house, CGRect(x: x - width / 2, y: foot - height, width: width, height: height)) { break }
+                }
+                pinned = false
+            }
+            include(.pavilion, slot(0.62, 0.54, 0.32, 0.25))
+            include(.willow, slot(0.0, 0.20, 0.62, 0.55))
             include(.mooredBoat, slot(0.78, 0.55, 0.20, 0.17, front: true))
         case .farewell:
             include(.pavilion, slot(0.33, 0.60, 0.29, 0.16))
             include(.willow, slot(0.01, 0.13, 0.70, 0.64))
             if chosen.contains(.traveler), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
-                let size = art.width * 0.043
-                for fraction in [0.53, 0.57] {
-                    let x = (bank.minX + bank.width * fraction) * w
+                let size = min(art.width * 0.043, (elements.first { $0.motif == "willow" }?.bounds.cgRect.height ?? 1) * h * 0.22)
+                for fraction in [0.68, 0.74] {
+                    let x = supportedBankX((bank.minX + bank.width * fraction) * w)
                     if let foot = bankFoot(x - size * 0.2, x + size * 0.2) {
                         pinned = true
                         add(.traveler, CGRect(x: x - size * 0.3, y: foot - size, width: size * 0.6, height: size), repeatable: true)
@@ -943,10 +1327,11 @@ private final class PaintingStage {
             include(.path, slot(0.05, 0, 0.28, 0.8, front: true))
             include(.mooredBoat, slot(0.77, 0.55, 0.22, 0.17, front: true))
         case .village:
-            add(.layeredTree, slot(0.01, 0.20, 0.46, 0.53))
-            include(.house, slot(0.39, 0.56, 0.44, 0.18))
-            if chosen.contains(.house) { add(.house, slot(0.67, 0.59, 0.30, 0.13), repeatable: true) }
-            if chosen.contains(.cookingSmoke), let house = elements.first(where: { $0.motif == "house" })?.bounds.cgRect {
+            add(chosen.contains(.pine) ? .pine : .layeredTree, slot(0.01, 0.20, 0.46, 0.53))
+            include(chosen.contains(.hut) ? .hut : .house, slot(0.39, 0.56, 0.44, 0.18))
+            // One complete dwelling: variable bay counts already supply the village scale.
+            // A second independently grounded house could interleave its roof with the first.
+            if chosen.contains(.cookingSmoke), let house = elements.first(where: { ["house", "hut"].contains($0.motif) })?.bounds.cgRect {
                 let smokeHeight = house.height * h * 1.8
                 add(.cookingSmoke, CGRect(x: (house.minX + house.width * 0.5) * w,
                     y: (house.minY + house.height * 0.15) * h - smokeHeight,
@@ -954,7 +1339,7 @@ private final class PaintingStage {
             }
             include(.fields, slot(0.05, 0.0, 0.9, 0.92, front: true))
             // A low fence runs in front of the cottage's left side, lower than its eaves.
-            if chosen.contains(.fence), let house = elements.first(where: { $0.motif == "house" })?.bounds.cgRect {
+            if chosen.contains(.fence), let house = elements.first(where: { ["house", "hut"].contains($0.motif) })?.bounds.cgRect {
                 let hb = CGRect(x: house.minX * w, y: house.minY * h, width: house.width * w, height: house.height * h)
                 let fh = hb.height * 0.42, fw = hb.width * 1.1
                 pinned = true
@@ -963,11 +1348,12 @@ private final class PaintingStage {
             }
             include(.path, slot(0.65, 0.62, 0.24, 0.34))
         case .spring:
-            include(.blossom, slot(0.0, 0.12, 0.76, 0.70))
+            include(.blossom, leadTreeSlot())
             include(.layeredTree, slot(0.65, 0.34, 0.32, 0.47))
             include(.path, slot(0.2, 0.02, 0.48, 0.9, front: true))
         case .lotusPond:
-            include(.lotus, slot(0.0, 0.05, 0.56, 0.90, front: true))
+            include(.lotus, slot([0.0, 0.38, 0.14, 0.30][layoutVariant], 0.05,
+                [0.58, 0.60, 0.72, 0.64][layoutVariant], 0.90, front: true))
             include(.willow, slot(0.61, 0.03, 0.37, 0.59))
             if chosen.contains(.stream), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
                 // A spring entering a pond opens into shallow ripples at the bank, not a
@@ -978,28 +1364,74 @@ private final class PaintingStage {
                     in: inlet, motif: "stream")
                 placed.insert(.stream)
             }
-            // 早有蜻蜓立上头: the dragonfly perches on the bud's tip (bud sits ~55% across the asset).
-            if chosen.contains(.dragonfly), let lotus = elements.first(where: { $0.motif == "lotus" })?.bounds.cgRect {
-                let size = lotus.width * w * 0.16
-                add(.dragonfly, CGRect(x: (lotus.minX + lotus.width * 0.55) * w - size / 2,
-                    y: lotus.minY * h - size * 0.45, width: size, height: size * 0.5))
+            // The flower/bud supplies its own tip; the leaf arrangement may vary freely.
+            if chosen.contains(.dragonfly), let tip = lotusFlowerTip,
+               let lotus = elements.first(where: { $0.motif == "lotus" })?.bounds.cgRect {
+                let size = lotus.width * w * 0.12
+                add(.dragonfly, CGRect(x: tip.x - size / 2, y: tip.y - size * 0.48,
+                    width: size, height: size * 0.5))
             }
         case .autumnTravel:
-            include(.bareTree, slot(0.0, 0.08, 0.76, 0.72))
-            // The vine hangs from the old tree's crown; it never floats on its own.
-            if chosen.contains(.vine), let tree = elements.first(where: { $0.motif == "bareTree" })?.bounds.cgRect {
-                add(.vine, CGRect(x: (tree.minX + tree.width * 0.12) * w, y: (tree.minY + tree.height * 0.06) * h,
-                    width: tree.width * w * 0.76, height: tree.height * h * 0.55))
-            }
-            include(.crow, slot(0.12, 0.23, 0.13, 0.08))
-            include(.path, slot(0.05, 0, 0.52, 0.95, front: true))
-            // Rider and horse share one ground plane and one scale (马与人同高): a small pair on the road.
-            include(.traveler, slot(0.50, 0.30, 0.045, 0.16, front: true))
-            include(.horse, slot(0.555, 0.33, 0.10, 0.13, front: true))
             if chosen.contains(.bridge) { crossing(river: false) }
-            else { include(.stream, mountainStreamSlot()) }
+            add(.oldTree, leadTreeSlot())
+            placed.insert(.bareTree) // The autumn fallback is this old tree, not a second sapling.
+            if chosen.contains(.vine), let vine = treeVines[.oldTree] ?? treeVines[.bareTree],
+               let x0 = vine.flatMap(\.p).map(\.x).min(), let x1 = vine.flatMap(\.p).map(\.x).max(),
+               let y0 = vine.flatMap(\.p).map(\.y).min(), let y1 = vine.flatMap(\.p).map(\.y).max() {
+                add(.vine, CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0), source: vine)
+            }
+            if chosen.contains(.crow) { treeCrows() }
+            if chosen.contains(.house), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
+                let personH = journeyPersonHeight()
+                let raw = engine.paintingHouse()
+                let points = raw.flatMap(\.p)
+                let front = raw[1].p
+                let eaveHeight = front.map(\.y).max()! - front.map(\.y).min()!
+                let scale = personH * 1.5 / eaveHeight
+                let height = (points.map(\.y).max()! - points.map(\.y).min()!) * scale
+                let width = (points.map(\.x).max()! - points.map(\.x).min()!) * scale
+                let bridge = elements.first(where: { $0.motif == "bridge" })?.bounds.cgRect
+                let leftReach = [0.61, 0.43, 0.54, 0.48][layoutVariant]
+                let limit = (bank.minX + bank.width * leftReach) * w - width * 0.52
+                let desired = max(bank.minX * w + width * 0.52, min(limit,
+                    (bridge?.maxX ?? (bank.minX + bank.width * 0.26)) * w + width * 0.58))
+                // Keep the accepted house/person scale. Move the dwelling along the existing
+                // bank instead of burying the old tree's root behind its facade.
+                let root = treeRoots[.oldTree]
+                let treeWidth = elements.first(where: { $0.motif == "oldTree" })?.bounds.cgRect.width ?? 0
+                let clearance = width * 0.52 + treeWidth * w * 0.025
+                var alternatives: [Double] = []
+                if let surface = bankSurface {
+                    let low = bank.minX * w + width * 0.52
+                    let high = bank.maxX * w - width * 0.52
+                    for i in surface.heights.indices where surface.heights[i].isFinite {
+                        let x = surface.x0 + Double(i) * surface.step
+                        if x > low, x < high { alternatives.append(x) }
+                    }
+                    alternatives.sort { abs($0 - desired) < abs($1 - desired) }
+                }
+                let originalFoot = bankFoot(desired - width * 0.36, desired + width * 0.36)
+                for x in [desired] + alternatives {
+                    guard root.map({ abs(x - $0.x) >= clearance }) ?? true else { continue }
+                    guard let foot = bankFoot(x - width * 0.36, x + width * 0.36) else { continue }
+                    // Do not descend onto the nearer road merely to clear the tree.
+                    if let originalFoot, foot > originalFoot + height * 0.25 { continue }
+                    pinned = true
+                    let landed = add(.house, CGRect(x: x - width / 2, y: foot - height, width: width, height: height), source: raw)
+                    pinned = false
+                    if landed { break }
+                }
+            }
+            // The accepted pair now belongs to the nearer bend of its own bounded road.
+            if chosen.contains(.horse), chosen.contains(.traveler) { journey() }
+            else {
+                include(.path, slot(0.05, 0, 0.52, 0.95, front: true))
+                include(.traveler, slot(0.50, 0.30, 0.045, 0.16, front: true))
+                include(.horse, slot(0.555, 0.33, 0.10, 0.13, front: true))
+            }
+            if !chosen.contains(.bridge) { include(.stream, mountainStreamSlot()) }
         case .winterForest:
-            include(.oldTree, slot(0.01, 0.18, 0.62, 0.64))
+            include(.oldTree, leadTreeSlot())
             include(.bareTree, slot(0.59, 0.22, 0.36, 0.56))
             if chosen.contains(.bareTree) { add(.bareTree, slot(0.40, 0.27, 0.20, 0.43), repeatable: true) }
             include(.house, slot(0.61, 0.73, 0.28, 0.10))
@@ -1008,7 +1440,7 @@ private final class PaintingStage {
             if chosen.contains(.snow), let bank = elements.first(where: { $0.motif == "groundBank" }) {
                 elements.append(.init(motif: Motif.snow.rawValue, bounds: bank.bounds))
             }
-            placed.insert(.snow)
+            if chosen.contains(.snow) { add(.snow, slot(0.04, 0.12, 0.90, 0.52)) }
         case .moonNight:
             add(.house, slot(0.23, 0.55, 0.65, 0.26))
             include(.window, slot(0.43, 0.67, 0.14, 0.14))
@@ -1023,19 +1455,37 @@ private final class PaintingStage {
             // The wall stands on the ground beneath the verse; the willow grows behind it, its trunk
             // hidden by the wall, its crown heaped above into the open column (杨柳堆烟).
             let band = lowerBand(columnFrom: 0.45)
-            let wallBox = CGRect(x: band.minX, y: band.minY + band.height * 0.10, width: band.width * 0.94,
-                                 height: band.height * 0.86)
+            let wallBox = CGRect(x: band.minX + band.width * [0.0, 0.12, 0.26, 0.05][layoutVariant],
+                y: band.minY + band.height * [0.02, 0.15, 0.06, 0.23][layoutVariant],
+                width: band.width * [0.94, 0.76, 0.68, 0.86][layoutVariant],
+                height: band.height * [0.90, 0.72, 0.86, 0.60][layoutVariant])
             if let wall = fitted(engine.paintingCourtyard(), to: wallBox) {
                 // Root the willow just behind the wall's near end, so the wall hides its trunk.
-                let willowW = art.width * 0.62
+                let willowW = art.width * [0.62, 0.78, 0.86, 0.56][layoutVariant]
                 let rootY = wall.bounds.minY + wall.bounds.height * 0.67
-                let x = min(max(art.minX, wall.bounds.minX + wall.bounds.width * 0.18 - willowW / 2), art.maxX - willowW)
+                let x = min(max(art.minX, wall.bounds.minX + wall.bounds.width * [0.18, 0.62, 0.34, 0.77][layoutVariant] - willowW / 2), art.maxX - willowW)
                 // Its root is behind the wall: size the whole tree from that ground plane,
                 // so the normal small near-tree multiplier does not hide the crown as well.
                 pinned = true
                 include(.willow, CGRect(x: x, y: art.minY, width: willowW, height: rootY - art.minY))
                 pinned = false
                 let r = wall.bounds
+                if chosen.contains(.pavilion) {
+                    // The pavilion stands inside the court. Draw it before the near wall so
+                    // masonry hides its feet, not its roof; use the actual wall's ground plane.
+                    let width = min(art.width * 0.42, r.width * 0.32)
+                    let height = width / 1.16
+                    let low = max(r.minX, art.minX) + width / 2
+                    let high = min(r.maxX, art.maxX) - width / 2
+                    let stem = (paintedTrees[.willow] ?? []).flatMap(\.p)
+                        .filter { $0.y > rootY - r.height * 0.10 }
+                    let stemX = stem.isEmpty ? x + willowW / 2 : stem.map(\.x).reduce(0, +) / Double(stem.count)
+                    let center = high >= low ? ([low, high].max { abs($0 - stemX) < abs($1 - stemX) } ?? low) : r.midX
+                    let base = r.minY + r.height * 0.28
+                    pinned = true
+                    add(.pavilion, CGRect(x: center - width / 2, y: base - height, width: width, height: height))
+                    pinned = false
+                }
                 parts.append(.init(canv: wall.canv, near: true,
                     fade: .init(top: r.minY + r.height * 0.76, bottom: r.maxY, seed: engine.inkSeed())))
                 elements.append(.init(motif: Motif.courtyard.rawValue, bounds: .init(x: r.minX / w, y: r.minY / h,
@@ -1052,10 +1502,9 @@ private final class PaintingStage {
                 let left = ledge.minX + ledge.width * 0.12, right = ledge.maxX - ledge.width * 0.12
                 let depth = max(0.8, ledge.width * 0.08)
                 if chosen.contains(.terrace) {
-                    let rim = engine.inkLine([.init(left, ledge.minY), .init(right, ledge.minY)],
-                        width: 0.8, tone: 0.6, dry: 0.55)
-                        + engine.inkLine([.init(left + 1, ledge.minY + depth), .init(right - 1, ledge.minY + depth)],
-                            width: 0.5, tone: 0.32, dry: 0.65)
+                    let rim = engine.paintingTerrace(width: right - left, height: depth).map { p in
+                        var q = p; q.p = p.p.map { ZXArt.P($0.x + left, $0.y + ledge.minY) }; return q
+                    }
                     parts.append(.init(canv: rim))
                     engine.noted(.building(.pavilion), rim)
                     elements.append(.init(motif: "terrace", bounds: .init(x: left / w, y: ledge.minY / h,
@@ -1063,7 +1512,8 @@ private final class PaintingStage {
                     placed.insert(.terrace)
                 }
                 if chosen.contains(.traveler) {
-                    let height = min(art.height * 0.028, ledge.width * 0.65)
+                    let mountainHeight = elements.first(where: { $0.motif == "mainMountain" })!.bounds.cgRect.height * h
+                    let height = min(min(art.height * 0.028, ledge.width * 0.65), mountainHeight * 0.04)
                     let box = CGRect(x: ledge.midX - height * 0.25, y: ledge.minY - height,
                                      width: height * 0.5, height: height)
                     if let person = fitted(engine.paintingAsset(.traveler), to: box) {
@@ -1082,7 +1532,7 @@ private final class PaintingStage {
             // long river and the near dunes run the full width; the sun sits on the horizon and
             // the smoke rises from it on the other side.
             let full = lowerBand(columnFrom: 0.45)
-            let horizon = full.minY
+            let horizon = full.minY + full.height * [0.0, 0.12, 0.24, 0.06][layoutVariant]
             if let far = fitted(engine.paintingDunes(far: true), to: CGRect(x: full.minX, y: horizon,
                 width: full.width, height: full.height * 0.10)) {
                 parts.append(.near(far.canv))
@@ -1094,20 +1544,20 @@ private final class PaintingStage {
                     width: full.width, height: full.height * 0.16), motif: "stream")
                 placed.insert(.stream)
             }
-            if let near = fitted(engine.paintingDunes(), to: CGRect(x: full.minX, y: horizon + full.height * 0.28,
-                width: full.width, height: full.height * 0.72)) {
+            if let near = fitted(engine.paintingDunes(), to: CGRect(x: full.minX + full.width * [0.0, 0.22, 0.08, 0.0][layoutVariant], y: horizon + full.height * 0.28,
+                width: full.width * [1.0, 0.72, 0.90, 0.78][layoutVariant], height: full.maxY - (horizon + full.height * 0.28))) {
                 parts.append(.near(near.canv))
                 elements.append(.init(motif: Motif.dunes.rawValue, bounds: .init(x: near.bounds.minX / w,
                     y: near.bounds.minY / h, width: near.bounds.width / w, height: near.bounds.height / h)))
             }
             placed.insert(.dunes)
             let sunSize = min(w, h) * 0.085
-            let sunX = verse.isNull || verse.minX > w / 2 ? art.minX + art.width * 0.55 : art.maxX - art.width * 0.55
+            let sunX = art.minX + art.width * [0.75, 0.20, 0.60, 0.35][layoutVariant]
             if chosen.contains(.sunset) {
                 add(.sunset, CGRect(x: sunX - sunSize / 2, y: horizon - sunSize * 1.05, width: sunSize, height: sunSize))
             }
             if chosen.contains(.beaconSmoke) {
-                let smokeX = verse.isNull || verse.minX > w / 2 ? art.minX + art.width * 0.15 : art.maxX - art.width * 0.15
+                let smokeX = art.minX + art.width * [0.12, 0.75, 0.15, 0.82][layoutVariant]
                 let smokeTop = max(art.minY, horizon - h * 0.32)
                 add(.beaconSmoke, CGRect(x: smokeX - w * 0.04, y: smokeTop, width: w * 0.08, height: horizon - smokeTop))
             }
@@ -1116,13 +1566,13 @@ private final class PaintingStage {
             // broken path of light beneath; bare water in between; rhythmic near waves across the
             // full width below the verse, and a dark reef in the near corner.
             let pad = min(w, h) * 0.045
-            let horizon = art.minY + art.height * 0.36
+            let horizon = art.minY + art.height * [0.24, 0.40, 0.32, 0.48][layoutVariant]
             parts.append(.near(engine.inkLine([ZXArt.P(art.minX, horizon), ZXArt.P(art.minX + art.width * 0.45, horizon + 0.3),
                 ZXArt.P(art.maxX, horizon - 0.2)], width: 0.7, tone: 0.28, dry: 0.5)))
             let lightMotif: Motif? = chosen.contains(.moon) ? .moon : (chosen.contains(.sunrise) ? .sunrise : nil)
             if let light = lightMotif {
                 let size = art.width * 0.16
-                let x = art.minX + art.width * 0.42
+                let x = art.minX + art.width * [0.28, 0.68, 0.48, 0.77][layoutVariant]
                 add(light, CGRect(x: x - size / 2, y: horizon - size * 0.92, width: size, height: size))
                 let path = CGRect(x: x - art.width * 0.07, y: horizon + 2, width: art.width * 0.14,
                                   height: max(6, lowerBand(columnFrom: 0.62).minY - horizon - 4))
@@ -1139,7 +1589,7 @@ private final class PaintingStage {
                 width: near.width / w, height: near.height / h)))
             placed.insert(.waves)
             if chosen.contains(.reef) {
-                let reefBox = CGRect(x: verse.isNull || verse.minX > w / 2 ? near.maxX - near.width * 0.30 : near.minX,
+                let reefBox = CGRect(x: near.minX + near.width * [0.70, 0.03, 0.50, 0.26][layoutVariant],
                                      y: near.minY + near.height * 0.45, width: near.width * 0.30, height: near.height * 0.55)
                 if let rock = fitted(engine.paintingRock(width: 120, height: 55, tone: 1.3), to: reefBox) {
                     parts.append(.near(rock.canv)); placed.insert(.reef)
@@ -1157,9 +1607,15 @@ private final class PaintingStage {
             case .sunset where chosen.contains(.moon) || chosen.contains(.crescent): continue
             case .moon, .crescent, .sunrise, .sunset: add(motif, celestialSlot(motif))
             case .stars: add(motif, slot(0.05, 0.0, 0.85, 0.18))
-            case .cookingSmoke: add(motif, slot(0.56, 0.25, 0.15, 0.24))
+            case .boat, .angler, .mooredBoat, .sail: placeBoatOnWater(motif)
+            case .cookingSmoke: roofSmoke()
             case .beaconSmoke: add(motif, slot(0.28, 0.22, 0.06, 0.4))
-            case .egret: add(motif, slot(0.72, 0.60, 0.06, 0.08))
+            case .egret:
+                if let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
+                    let size = min(art.width * 0.09, bank.width * w * 0.12)
+                    add(motif, CGRect(x: bank.maxX * w - size, y: bank.maxY * h - size * 1.6,
+                        width: size, height: size * 1.6))
+                }
             case .butterfly:
                 // A pair of butterflies near the blossoms, at the scale of a petal cluster.
                 if let tree = elements.first(where: { ["blossom", "willow", "layeredTree"].contains($0.motif) })?.bounds.cgRect {
@@ -1168,12 +1624,15 @@ private final class PaintingStage {
                         width: size, height: size * 0.8))
                 } else { add(motif, slot(0.48, 0.32, 0.04, 0.03)) }
             case .crow, .swallow, .dragonfly: add(motif, slot(0.30, 0.18, 0.07, 0.04))
-            case .waterfall: add(motif, slot(0.15, 0.34, 0.18, 0.45))
-            case .stream: add(motif, slot(0.60, 0.02, 0.22, 0.88, front: true))
+            case .waterfall: mountainWaterfall()
+            case .stream:
+                if currentScene == .fishing, let river = elements.first(where: { $0.motif == "riverWater" }) {
+                    elements.append(.init(motif: "stream", bounds: river.bounds)); placed.insert(.stream)
+                } else { add(motif, slot(0.60, 0.02, 0.22, 0.88, front: true)) }
             case .mist, .afterRain: add(motif, slot(0.02, 0.42, 0.96, 0.10))
-            case .rain: break
+            case .rain: add(motif, slot(0.04, 0.10, 0.90, 0.55))
             case .vine: continue // only ever hangs from a tree crown
-            case .snow: continue // left as paper; the weather layer paints falling snow
+            case .snow: add(motif, slot(0.04, 0.12, 0.90, 0.52))
             case .path: add(motif, slot(0.1, 0.1, 0.4, 0.8, front: true))
             case .reeds, .grass: add(motif, slot(0.03, 0.1, 0.20, 0.8, front: true))
             case .bridge: crossing(river: false)
@@ -1182,6 +1641,94 @@ private final class PaintingStage {
             default: add(motif, slot(0.01, 0.23, 0.48, 0.59))
             }
         }
+        completeSelection(options.canonicalMotifs)
         waterDetails()
+    }
+
+    private func placeBoatOnWater(_ motif: Motif) {
+        if let stream = elements.first(where: { $0.motif == "stream" })?.bounds.cgRect, currentScene == .retreat {
+            let width = min(art.width * 0.32, stream.width * w * 0.9)
+            let height = motif == .sail ? width * 0.85 : width * 0.40
+            add(motif, CGRect(x: stream.midX * w - width / 2, y: stream.maxY * h - height,
+                width: width, height: height))
+        } else {
+            if !elements.contains(where: { ["riverWater", "lakeWater", "pondWater", "waves"].contains($0.motif) }) { water() }
+            let band = lowerBand()
+            let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect
+            let width = min(art.width * 0.40, band.width * 0.22)
+            let height = motif == .sail ? width * 0.85 : width * 0.40
+            var bottom = min(footer - 3, (bank?.maxY ?? 0.8) * h + height * 0.50)
+            var left = band.minX + band.width * 0.65
+            if let pavilion = elements.first(where: { $0.motif == "pavilion" })?.bounds.cgRect {
+                // A boat belongs to the open water below the pavilion's rocky footing.
+                bottom = min(footer - 3, max(bottom, pavilion.maxY * h + height * 1.45))
+                left = min(band.maxX - width, max(band.minX, pavilion.maxX * w + width * 0.18))
+            }
+            add(motif, CGRect(x: left, y: bottom - height, width: width, height: height))
+        }
+    }
+
+    private func roofSmoke() {
+        if !elements.contains(where: { ["house", "hut"].contains($0.motif) }) {
+            add(.hut, slot(0.35, 0.55, 0.4, 0.20))
+        }
+        guard let home = elements.first(where: { ["house", "hut"].contains($0.motif) })?.bounds.cgRect else { return }
+        let height = min(home.height * h * 1.8, art.height * 0.25)
+        add(.cookingSmoke, CGRect(x: (home.midX - home.width * 0.08) * w,
+            y: (home.minY + home.height * 0.16) * h - height,
+            width: home.width * w * 0.25, height: height))
+    }
+
+    /// Explicit dependencies and graceful fitting: attached motifs use their host, then independent
+    /// objects try alternate grounded slots and finally a modest size reduction. Never mark a failed
+    /// placement as painted. Composite boats and water channels expose their real component bounds.
+    private func completeSelection(_ motifs: [Motif]) {
+        for motif in motifs {
+            if elements.contains(where: { $0.motif == motif.rawValue }) { continue }
+            let alias: [String]
+            switch motif {
+            case .boat: alias = ["angler", "mooredBoat", "sail"]
+            case .stream: alias = ["riverChannel"]
+            case .bareTree where currentScene == .autumnTravel: alias = ["oldTree"]
+            default: alias = []
+            }
+            if let host = elements.first(where: { alias.contains($0.motif) }) {
+                elements.append(.init(motif: motif.rawValue, bounds: host.bounds))
+                placed.insert(motif)
+                continue
+            }
+            if motif == .cookingSmoke { roofSmoke(); continue }
+            if motif == .vine {
+                if treeVines.isEmpty { add(.oldTree, slot(0, 0.12, 0.65, 0.70)) }
+                if let vine = treeVines[.oldTree] ?? treeVines[.bareTree],
+                   let x0 = vine.flatMap(\.p).map(\.x).min(), let x1 = vine.flatMap(\.p).map(\.x).max(),
+                   let y0 = vine.flatMap(\.p).map(\.y).min(), let y1 = vine.flatMap(\.p).map(\.y).max() {
+                    pinned = true
+                    add(.vine, CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0), source: vine)
+                    pinned = false
+                }
+                continue
+            }
+            if [.boat, .angler, .mooredBoat, .sail].contains(motif) { placeBoatOnWater(motif); continue }
+            if motif == .waterfall { mountainWaterfall(); continue }
+            if motif == .bridge { crossing(river: false); continue }
+            // Conflicting sky states have already been resolved in the recipe.
+            if [.moon, .crescent, .sunrise, .sunset].contains(motif) {
+                for factor in [1.0, 0.8, 0.6] {
+                    let box = celestialSlot(motif)
+                    if add(motif, CGRect(x: box.minX, y: box.minY, width: box.width * factor, height: box.height * factor)) { break }
+                }
+                continue
+            }
+            placed.remove(motif)
+            for factor in [1.0, 0.82, 0.65] {
+                var done = false
+                for x in [0.48, 0.06, 0.68] {
+                    let box = slot(x, 0.38, 0.30 * factor, 0.40 * factor)
+                    if add(motif, box) { done = true; break }
+                }
+                if done { break }
+            }
+        }
     }
 }

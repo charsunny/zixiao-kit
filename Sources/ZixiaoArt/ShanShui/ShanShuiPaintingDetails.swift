@@ -2,30 +2,58 @@
 import Foundation
 
 extension ShanShuiEngine {
+    /// Straight joinery: vertical mullions, square lattice, or ice-crack tracery. No skewed
+    /// wall slab is carried with the window, so the same frame can be set into a house or court.
     func paintingWindow(embedded: Bool = false) -> ZXArt.SSCanv {
-        if embedded {
-            // A recess in the existing wall plane, without another wall slab or projecting roof.
-            let frame = [P(0, 0), P(48, 10.56), P(48, 63.56), P(0, 53), P(0, 0)]
-            var c = [poly(frame, fil: .gray(0, 0.11), str: nil)]
-            c += inkLine(frame, width: 1.5, tone: 0.58, dry: 0.48)
-            for x in [16.0, 32] {
-                c += inkLine([P(x, x * 0.22 + 2), P(x, x * 0.22 + 51)], width: 0.8, tone: 0.48, dry: 0.5)
+        let form = Int(r() * 4096) % 3
+        let w = [44.0, 56, 62][form], h = 52.0
+        let frame = [P(0, 0), P(w, 0), P(w, h), P(0, h), P(0, 0)]
+        var c = [poly(frame, fil: .white, str: nil), poly(frame, fil: .gray(0, embedded ? 0.045 : 0.065), str: nil)]
+        c += inkEdges(frame, width: 1.8, tone: 0.72, dry: 0.30)
+        c += inkEdges([P(3, 3), P(w - 3, 3), P(w - 3, h - 3), P(3, h - 3), P(3, 3)],
+                      width: 0.7, tone: 0.48, dry: 0.35)
+        if form < 2 {
+            let spacing = form == 0 ? 8.0 : 12.0
+            for x in stride(from: 10.0, to: w - 5, by: spacing) {
+                c += inkLine([P(x, 4), P(x, h - 4)], width: 0.8, tone: 0.61, dry: 0.3)
             }
-            for y in [18.0, 36] {
-                c += inkLine([P(2, y), P(46, y + 44 * 0.22)], width: 0.7, tone: 0.42, dry: 0.5)
+            for y in (form == 0 ? [37.0] : [16.0, 28, 40]) {
+                c += inkLine([P(4, y), P(w - 4, y)], width: 0.8, tone: 0.56, dry: 0.3)
             }
-            return c
+        } else {
+            let a = P(19, 17), b = P(41, 13), d = P(35, 34), e = P(15, 37)
+            for line in [[P(4, 9), a, b, P(48, 4)], [P(4, 28), a, e, P(10, 48)],
+                         [a, d, b, P(58, 24)], [e, d, P(49, 48)], [d, P(58, 39)]] {
+                c += inkEdges(line, width: 0.85, tone: 0.58, dry: 0.32)
+            }
         }
-        let wall = [P(0, 7), P(100, 24), P(100, 118), P(0, 118)]
-        var c = [poly(wall, fil: .white, str: nil), poly(wall, fil: .gray(0, 0.06), str: nil)]
-        c += inkEdges([P(0, 0), P(104, 18)], width: 7, tone: 0.68, dry: 0.43)
-        c += inkEdges([P(20, 31), P(76, 40), P(76, 100), P(20, 91), P(20, 31)], width: 2.6, tone: 0.72)
-        let opening = [P(25, 37), P(71, 44), P(71, 94), P(25, 86)]
-        c.append(poly(opening, fil: .gray(0, 0.11), str: nil))
-        for x in [39.0, 55] { c += inkEdges([P(x, 39 + (x - 25) * 0.15), P(x, 88 + (x - 25) * 0.15)], width: 1.1, tone: 0.62) }
-        for y in [58.0, 76] { c += inkEdges([P(26, y), P(71, y + 7)], width: 0.9, tone: 0.52) }
-        c += inkEdges([P(13, 96), P(80, 107)], width: 2.5, tone: 0.75)
+        c += inkLine([P(-2, h + 2), P(w + 2, h + 2)], width: 1.6, tone: 0.66, dry: 0.33)
         return c
+    }
+
+    /// Bamboo blind: horizontal slats bound by two tapes, with a rolled lower edge.
+    /// Pull cords keep the full hanging extent even when most of the blind is rolled up.
+    func paintingCurtain(width: Double = 54, height: Double = 77) -> ZXArt.SSCanv {
+        let form = Int(r() * 4096) % 5
+        let w = 54.0, drop = [15.0, 28, 41, 54, 67][form]
+        let blind = [P(0, 0), P(w, 0), P(w, drop), P(0, drop)]
+        var c = [poly(blind, fil: .white, str: nil)]
+        for y in stride(from: 3.0, through: drop - 1, by: 3) {
+            c += inkLine([P(1, y), P(w - 1, y)], width: 0.7, tone: 0.34 + r() * 0.12, dry: 0.43)
+        }
+        for x in [13.0, 41] {
+            c += inkLine([P(x, 0), P(x, drop)], width: 1.1, tone: 0.53, dry: 0.32)
+        }
+        c += inkEdges([P(0, drop), P(0, 0), P(w, 0), P(w, drop)], width: 0.9, tone: 0.55, dry: 0.35)
+        let roll = [P(0, drop), P(w, drop), P(w, drop + 4), P(0, drop + 4), P(0, drop)]
+        c += inkEdges(roll, width: 1.4, tone: 0.65, dry: 0.3)
+        c += inkLine([P(-3, -2), P(w + 3, -2)], width: 2, tone: 0.73)
+        c += inkLine([P(w - 6, 1), P(w - 6, 75)], width: 0.55, tone: 0.48, dry: 0.4)
+        c += inkLine([P(w - 8, 75), P(w - 4, 75)], width: 1.1, tone: 0.6)
+        return c.map { p in
+            var q = p; q.p = p.p.map { P($0.x * width / 54, $0.y * height / 77) }
+            q.wid *= min(width / 54, height / 77); return q
+        }
     }
 
     /// Paddy fields as the farmer sees them across the slope: curved bund lines (田埂) that follow
@@ -54,81 +82,44 @@ extension ShanShuiEngine {
         return c
     }
 
-    /// Dunes. `far`: one pale, nearly level line of ridges at the horizon. Near: two or three
-    /// large crescent dunes whose crests run diagonally, a gentle sunlit windward slope and a
-    /// steep lee face in darker wash, overlapping in depth.
+    /// Long sand crests: paper on the windward face, a dry veil below the lee edge.
     func paintingDunes(far: Bool = false) -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
-        if far {
-            let phase = r() * 6
-            let crest = (0...90).map { i -> P in
-                let t = Double(i) / 90
-                return P(t * 300, 20 - 6 * pow(abs(sin(t * .pi * 2.3 + phase)), 1.5) - 2 * n(t * 6, 1))
+        let count = far ? 2 + Int(r() * 2) : 2 + Int(r() * 65536) % 3
+        for k in 0..<count {
+            let depth = Double(k) / Double(max(1, count - 1))
+            let x0 = -20 - depth * 18 + r() * 22, span = 300 + r() * 75
+            let base = (far ? 8.0 : 22.0) + Double(k) * (far ? 7 : 29)
+            let rise = far ? 5 + r() * 5 : 17 + r() * 18
+            let bias = 0.28 + r() * 0.40
+            let crest = inkCurve([P(x0, base + rise * 0.30), P(x0 + span * bias, base - rise),
+                P(x0 + span * (bias + (1 - bias) * 0.5), base - rise * 0.32), P(x0 + span, base + rise * 0.12)], steps: 20)
+            if far {
+                c += inkLine(crest, width: 0.65, tone: 0.18 + depth * 0.04, dry: 0.48)
+                continue
             }
-            let base = crest.enumerated().map { i, p in P(p.x, p.y + 3 + 6 * pow(sin(Double(i) / 90 * .pi), 0.5)) }
-            c.append(poly(crest + base.reversed(), fil: .gray(0, 0.07), str: nil))
-            c += inkLine(crest, width: 0.5, tone: 0.16, dry: 0.55)
-            return c
-        }
-        let dunes = 2 + Int(r() * 2)
-        for k in 0..<dunes {
-            let depth = Double(k) / Double(max(1, dunes - 1))        // 0 far … 1 near
-            let base = 40 + depth * 70, height = 18 + depth * 26
-            let x0 = -40 + r() * 50 - depth * 40, x1 = x0 + 280 + r() * 90
-            let peakX = x0 + (x1 - x0) * (0.55 + r() * 0.2)
-            // Windward slope: long and gentle; lee: short and steep.
-            let windward = (0...30).map { i -> P in
-                let t = Double(i) / 30
-                return P(x0 + (peakX - x0) * t, base - height * pow(t, 1.6))
-            }
-            let lee = (1...12).map { i -> P in
-                let t = Double(i) / 12
-                return P(peakX + (x1 - peakX) * t, base - height * (1 - pow(t, 0.7)))
-            }
-            let phase = r() * 6
-            let crest = (windward + lee).enumerated().map { i, p -> P in
-                let t = Double(i) / Double(windward.count + lee.count - 1)
-                let wave = sin(t * 11 + phase) * 2.5 + (n(t * 7, depth + 4) - 0.5) * 5
-                return P(p.x, p.y + wave * sin(t * .pi))
-            }
-            let floor = crest.enumerated().map { i, p in
-                P(p.x, p.y + (base + 14 - p.y) * pow(sin(Double(i) / Double(crest.count - 1) * .pi), 0.35))
-            }
-            c.append(poly(crest + floor.reversed(), fil: .white, str: nil))
-            // Sand is mostly paper: a faint body, a little more tone just under the crest.
-            c.append(poly(crest + floor.reversed(), fil: .gray(0, 0.025 + depth * 0.02), str: nil))
-            // Dry side-brush sweeps break up the lee face. Each starts below a different
-            // portion of the ridge and lifts at a different depth, with paper between groups.
-            for _ in 0..<(22 + Int(depth * 14)) {
-                let index = 12 + Int(r() * Double(crest.count - 15))
-                let p = crest[index], foot = floor[index]
-                let reach = max(0, foot.y - p.y) * (0.15 + r() * 0.55)
-                let lean = -reach * (0.6 + r() * 0.8)
-                let line = (0...12).map { i -> P in
-                    let t = Double(i) / 12
-                    return P(p.x + lean * t, p.y + 1 + reach * (0.5 * t + 0.5 * t * t))
+            // Open the foot into paper: only the crest is outlined, never a closed lens.
+            for band in 0..<14 {
+                func edge(_ t: Double) -> [P] {
+                    crest.enumerated().map { i, p in
+                        let u = Double(i) / Double(crest.count - 1)
+                        return p + P(-rise * 0.25 * t, rise * 0.90 * t * pow(sin(u * .pi), 0.5))
+                    }
                 }
-                c += inkLine(line, width: 1 + r() * 2.8, tone: 0.04 + depth * 0.08 + r() * 0.03, dry: 0.82)
+                let t = Double(band) / 14
+                c.append(poly(edge(t) + edge(Double(band + 1) / 14).reversed(),
+                    fil: .gray(0, (0.06 + depth * 0.025) * pow(1 - t, 1.8)), str: nil))
             }
-            var start = 2
-            while start < crest.count - 3 {
-                let length = 2 + Int(r() * 5)
-                c += inkLine(Array(crest[start...min(start + length, crest.count - 1)]),
-                    width: 0.55 + depth * 0.45, tone: 0.13 + depth * 0.12, dry: 0.72)
-                start += length + 2 + Int(r() * 6)
-            }
-            // Ripples on the windward slope, parallel to the crest.
-            for j in 0..<(3 + Int(depth * 5)) {
-                let t = 0.2 + r() * 0.6, i = Int(t * 30)
-                let p = windward[i], dy = 4 + Double(j % 3) * 3
-                c += inkLine([P(p.x - 8, p.y + dy + 2), P(p.x + 6, p.y + dy)], width: 0.45, tone: 0.10 + depth * 0.06, dry: 0.6)
+            c += inkLine(crest, width: 0.8 + depth * 0.35, tone: 0.25 + depth * 0.13, dry: 0.38)
+            for _ in 0..<(4 + Int(r() * 4)) {
+                let start = 8 + Int(r() * 27), length = 9 + Int(r() * 12), offset = 3 + r() * rise * 0.35
+                let sweep = Array(crest[start..<min(crest.count, start + length)]).map { $0 + P(-offset * 0.7, offset) }
+                c += inkLine(sweep, width: 3 + r() * 5, tone: 0.14 + depth * 0.08, dry: 0.78)
             }
         }
         return c
     }
 
-    /// Beacon smoke rises straight in still desert air (孤烟直) and only spreads at the very top;
-    /// village smoke (炊烟) wavers. Both are pale washes, never hard lines.
     func paintingSmoke(beacon: Bool) -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
         if beacon {

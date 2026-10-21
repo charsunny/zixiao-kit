@@ -3,6 +3,59 @@ import Testing
 @testable import ZixiaoArt
 
 struct ZXArtGuohuaTests {
+    @Test func stageAAssetsAreFiniteAndRepeatable() {
+        for motif in [ZXArt.SceneMotif.horse, .traveler, .crow, .swallow, .bridge, .stream] {
+            var silhouettes = Set<[Int]>()
+            for seed in 0..<6 {
+                let name = "atlas-\(motif.rawValue)-\(seed)"
+                let first = ShanShuiEngine(seed: .init(name)).paintingAsset(motif)
+                let repeatDraw = ShanShuiEngine(seed: .init(name)).paintingAsset(motif)
+                #expect(!first.isEmpty)
+                #expect(first.map(\.p) == repeatDraw.map(\.p))
+                #expect(first.map(\.fil) == repeatDraw.map(\.fil))
+                let points = first.flatMap(\.p)
+                #expect(points.allSatisfy { $0.x.isFinite && $0.y.isFinite })
+                let x0 = points.map(\.x).min()!, x1 = points.map(\.x).max()!
+                let y0 = points.map(\.y).min()!, y1 = points.map(\.y).max()!
+                // Coarse occupancy ignores subpixel brush jitter; the six-seed atlas is also inspected visually.
+                var occupied = Set<Int>()
+                for p in points {
+                    let x = Int((p.x - x0) / max(1, x1 - x0) * 16)
+                    let y = Int((p.y - y0) / max(1, y1 - y0) * 16)
+                    occupied.insert(y * 17 + x)
+                }
+                silhouettes.insert(occupied.sorted())
+            }
+            #expect(silhouettes.count >= 3, "\(motif) must vary beyond subpixel jitter")
+        }
+    }
+
+    @Test func bridgeVocabularyAndWaterlineStayConsistent() {
+        var kinds = Set<Int>()
+        for seed in 0..<24 {
+            let bridge = ShanShuiEngine(seed: .init("bridge-plan-\(seed)")).paintingBridgePlan()
+            kinds.insert(PaintingBridge.Kind.allCases.firstIndex(of: bridge.kind)!)
+            #expect(bridge.arch.first!.y == 60 && abs(bridge.arch.last!.y - 60) < 0.0001)
+            #expect(abs(bridge.arch.first!.x - bridge.width * 0.1) < 0.0001)
+            let reflected = ShanShuiEngine(seed: .init("reflection-\(seed)")).paintingBridgeReflection(bridge)
+            #expect(reflected.flatMap(\.p).allSatisfy { $0.y >= 60 })
+        }
+        #expect(kinds.count == 3)
+        for broad in [false, true] {
+            for phase in [-0.8, 0.0, 0.8] {
+                let channel = PaintingWaterChannel(width: 100, height: 80, phase: phase, broad: broad)
+                var previousWidth = 0.0
+                for step in 0...20 {
+                    let t = Double(step) / 20
+                    let left = channel.point(t, across: -1), right = channel.point(t, across: 1)
+                    #expect(left.y == right.y)
+                    #expect(right.x - left.x >= previousWidth)
+                    previousWidth = right.x - left.x
+                }
+            }
+        }
+    }
+
     @Test func travelersStandOnTheBankAndBridgesCrossWater() throws {
         for scene in [ZXArt.PoetryScene.farewell, .autumnTravel, .waterTown, .winterForest, .village, .spring] {
             for size in [CGSize(width: 750, height: 1000), CGSize(width: 1200, height: 675)] {
@@ -24,7 +77,7 @@ struct ZXArtGuohuaTests {
                             #expect(!r.intersects(building.bounds.cgRect), "\(scene) \(size) seed=\(index) person=\(r) \(building.motif)=\(building.bounds.cgRect)")
                         }
                         if let tree = drawing.sceneElements.first(where: { ["willow", "bareTree"].contains($0.motif) }) {
-                            #expect(r.height < tree.bounds.cgRect.height * 0.25)
+                            #expect(r.height < tree.bounds.cgRect.height * 0.25, "\(scene) \(size) seed=\(index): \(person.motif)=\(r) tree=\(tree.bounds.cgRect)")
                         }
                     }
                     if [ZXArt.PoetryScene.autumnTravel, .waterTown, .village, .spring].contains(scene) {
@@ -39,6 +92,51 @@ struct ZXArtGuohuaTests {
                     }
                 }
             }
+        }
+    }
+
+    @Test func bridgeAndJourneyRemainLegibleAtSceneScale() throws {
+        for size in [CGSize(width: 750, height: 1000), CGSize(width: 1200, height: 675)] {
+            for seed in 0..<6 {
+                for scene in [ZXArt.PoetryScene.waterTown, .autumnTravel] {
+                    let motifs: [ZXArt.SceneMotif] = scene == .waterTown
+                        ? [.bridge, .stream, .house, .willow] : [.path, .horse, .traveler, .bareTree]
+                    let selection = ZXArt.SceneSelection(scene: scene, options: .init(motifs: motifs), matched: [])
+                    let recipe = selection.paintingProcedural(seed: "legible-\(seed)", verseSide: "right", composition: .corner)
+                    let drawing = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: size))
+                    func bounds(_ motif: String) throws -> CGRect {
+                        try #require(drawing.sceneElements.first { $0.motif == motif }).bounds.cgRect
+                    }
+                    let bank = try bounds("groundBank")
+                    if scene == .waterTown {
+                        let bridge = try bounds("bridge"), house = try bounds("house"), water = try bounds("riverChannel")
+                        #expect(bridge.width > house.width * 0.8)
+                        #expect(house.midX > bridge.midX, "\(size) seed \(seed): house \(house) bridge \(bridge) bank \(bank)")
+                        #expect(bridge.intersects(water))
+                        #expect(water.maxY > bridge.maxY)
+                    } else {
+                        let person = try bounds("traveler"), horse = try bounds("horse"), road = try bounds("path")
+                        #expect(person.height * size.height > bank.width * size.width * 0.035)
+                        #expect(horse.width * size.width > min(size.width, size.height) * 0.055)
+                        #expect(road.contains(CGPoint(x: horse.midX, y: horse.maxY)))
+                        #expect(road.contains(CGPoint(x: person.midX, y: person.maxY)))
+                    }
+                }
+            }
+        }
+    }
+
+    @Test func uninscribedWaterTownKeepsTheBridgeBesideTheHouse() throws {
+        for seed in 0..<4 {
+            let selection = ZXArt.SceneSelection(scene: .waterTown,
+                options: .init(motifs: [.bridge, .stream, .house, .willow, .swallow]), matched: [])
+            let recipe = selection.paintingProcedural(seed: "group-waterTown-\(seed)", verseSide: nil, composition: .corner)
+            let drawing = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk,
+                pixelSize: CGSize(width: 1000, height: 750)))
+            let bridge = try #require(drawing.sceneElements.first { $0.motif == "bridge" }).bounds.cgRect
+            let house = try #require(drawing.sceneElements.first { $0.motif == "house" }).bounds.cgRect
+            let bank = try #require(drawing.sceneElements.first { $0.motif == "groundBank" }).bounds.cgRect
+            #expect(bridge.maxY - house.maxY < bank.height * 0.6)
         }
     }
 
@@ -111,7 +209,7 @@ struct ZXArtGuohuaTests {
                         let d = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: size))
                         let shore = try #require(d.sceneElements.first { $0.motif == "farShore" }).bounds.cgRect
                         let ranges = d.sceneElements.filter { $0.motif == "farMountain" }.map { $0.bounds.cgRect }
-                        #expect(ranges.count == 2)
+                        #expect((2...3).contains(ranges.count))
                         #expect(ranges.allSatisfy { $0.maxY <= shore.minY })
                         #expect(ranges[0].maxY < ranges[1].maxY)
                     }

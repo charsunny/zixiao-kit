@@ -5,6 +5,7 @@
 //      ZXART_REVIEW_DIR=/tmp/zxart-review swift test --filter ZXArtSceneReviewTests
 
 import CoreGraphics
+import CoreText
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
@@ -79,7 +80,7 @@ final class ZXArtSceneReviewTests: XCTestCase {
             }
         }
         let drawing = ZXArt.Drawing(width: cell * 4, height: cell * Double(kinds.count),
-                                    background: ZXArt.Palette.paperInk.paper, layers: [.init(blend: .multiply, shapes: shapes)])
+                                    background: ZXArt.Palette.paperInk.paper, layers: [.init(shapes: shapes)])
         let image = try XCTUnwrap(ZXArt.render(drawing, pixelWidth: 800, pixelHeight: 1200))
         try write(image, to: URL(fileURLWithPath: dir).appendingPathComponent("trees.png"))
     }
@@ -109,6 +110,272 @@ final class ZXArtSceneReviewTests: XCTestCase {
         try write(image, to: URL(fileURLWithPath: dir).appendingPathComponent("banks.png"))
     }
 
+    /// 景物图谱: 每种景物单独画六个种子, 按同一比例排成一行, 看意象准不准、种子之间有没有变化。
+    /// 每页 10 行, 左栏写景物名; 格内按原始尺寸统一缩放 (scale), 大小关系保留。
+    func testElementAtlasSheets() throws {
+        guard let dir = ProcessInfo.processInfo.environment["ZXART_REVIEW_DIR"] else {
+            throw XCTSkip("设 ZXART_REVIEW_DIR 才出审图样张")
+        }
+        typealias Make = (ShanShuiEngine) -> ZXArt.SSCanv
+        var entries: [(String, Make)] = ZXArt.SceneMotif.allCases.map { motif in
+            (motif.rawValue, { engine in
+                switch motif {
+                case .stream: return engine.paintingChannel(width: 260, height: 120)
+                case .window: return engine.paintingWindow(embedded: true)
+                default: return engine.paintingAsset(motif)
+                }
+            })
+        }
+        entries.append(("crow.perched", { $0.paintingPerchedCrow() }))
+        for style in [ShanShuiEngine.BankStyle.shoal, .cliff, .headland] {
+            entries.append(("slope.\(style)", { $0.paintingSlope(style) }))
+        }
+        for form in PaintingMountainProfile.Form.allCases {
+            entries.append(("massif.\(form)", { $0.paintingMountain(form: form) }))
+        }
+        entries += [("massif.terraced", { $0.paintingMountain(form: .folded, terraced: true) }),
+                    ("farShore", { $0.paintingFarShore() }),
+                    ("distant.0", { $0.paintingDistant(0) }), ("distant.1", { $0.paintingDistant(1) }),
+                    ("rock", { $0.paintingRock() }), ("dunes.far", { $0.paintingDunes(far: true) }),
+                    ("longRiver", { $0.paintingLongRiver() }), ("riverRibbon", { $0.paintingRiverRibbon() }),
+                    ("channel.river", { $0.paintingChannel(width: 320, height: 120, river: true) }),
+                    ("stream.rocky", { $0.paintingRockyStream() }),
+                    ("reflection", { $0.paintingReflection(width: 200, height: 80) })]
+        for kind in PaintingWaterKind.allCases {
+            entries.append(("water.\(kind.rawValue)", { $0.paintingSurface(kind, width: 320, height: 140) }))
+        }
+        for stage in ShanShuiEngine.LotusStage.allCases {
+            entries.append(("lotus.\(stage.rawValue)", { $0.paintingLotusDrawing(stage: stage).canvas }))
+        }
+        entries.append(("horse.donkey", { $0.paintingHorse(donkey: true) }))
+        let label = 150.0, cell = CGSize(width: 190, height: 150), columns = 6, perPage = 10
+        let out = URL(fileURLWithPath: dir, isDirectory: true)
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        for page in stride(from: 0, to: entries.count, by: perPage) {
+            let rows = Array(entries[page..<min(entries.count, page + perPage)])
+            var shapes: [ZXArt.Shape] = []
+            var notes: [String] = []
+            for (row, entry) in rows.enumerated() {
+                let canvases = (0..<columns).map { entry.1(ShanShuiEngine(seed: .init("atlas-\(entry.0)-\($0)"))) }
+                let boxes = canvases.map { canv -> CGRect in
+                    let xs = canv.flatMap { $0.p.map(\.x) }, ys = canv.flatMap { $0.p.map(\.y) }
+                    guard let x0 = xs.min(), let x1 = xs.max(), let y0 = ys.min(), let y1 = ys.max() else { return .zero }
+                    return CGRect(x: x0, y: y0, width: max(1, x1 - x0), height: max(1, y1 - y0))
+                }
+                // One scale per row, so the seeds of one element keep their size differences.
+                let scale = min(1.6, boxes.map { min((cell.width - 16) / $0.width, (cell.height - 16) / $0.height) }.min() ?? 1)
+                notes.append(String(format: "%@  ×%.2f", entry.0, scale))
+                for (col, canv) in canvases.enumerated() {
+                    let box = boxes[col]
+                    let ox = label + Double(col) * cell.width + (cell.width - box.width * scale) / 2
+                    let oy = Double(row) * cell.height + cell.height - 8 - box.height * scale
+                    let placed = canv.map { poly -> ZXArt.SSPoly in
+                        var q = poly
+                        q.p = poly.p.map { ZXArt.P(($0.x - box.minX) * scale + ox, ($0.y - box.minY) * scale + oy) }
+                        q.wid *= scale
+                        return q
+                    }
+                    ZXArt.appendPaintingShapes(placed, motif: ZXArt.SceneMotif(rawValue: entry.0), palette: .paperInk, into: &shapes)
+                }
+            }
+            let size = CGSize(width: label + cell.width * Double(columns), height: cell.height * Double(rows.count))
+            let drawing = ZXArt.Drawing(width: size.width, height: size.height, background: ZXArt.Palette.paperInk.paper,
+                                        layers: [.init(shapes: shapes)])
+            let image = try XCTUnwrap(ZXArt.render(drawing, pixelWidth: Int(size.width), pixelHeight: Int(size.height)))
+            let ctx = try bitmap(size)
+            ctx.draw(image, in: CGRect(origin: .zero, size: size))
+            ctx.setStrokeColor(CGColor(red: 0.85, green: 0.25, blue: 0.2, alpha: 0.25))
+            ctx.setLineWidth(1)
+            for row in 1..<rows.count { ctx.stroke(CGRect(x: 0, y: Double(row) * cell.height, width: size.width, height: 0)) }
+            let font = CTFontCreateWithName("Menlo" as CFString, 13, nil)
+            for (row, note) in notes.enumerated() {
+                let text = NSAttributedString(string: note, attributes: [
+                    NSAttributedString.Key(kCTFontAttributeName as String): font,
+                    NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(red: 0.7, green: 0.15, blue: 0.1, alpha: 1)])
+                ctx.textPosition = CGPoint(x: 8, y: size.height - Double(row) * cell.height - 22)
+                CTLineDraw(CTLineCreateWithAttributedString(text), ctx)
+            }
+            try write(try XCTUnwrap(ctx.makeImage()),
+                      to: out.appendingPathComponent(String(format: "elements-%02d.png", page / perPage + 1)))
+        }
+    }
+
+    /// Seven groups rendered by the production stage: the crop changes framing, never proportions.
+    func testGroupReviewSheet() throws {
+        guard let dir = ProcessInfo.processInfo.environment["ZXART_REVIEW_DIR"] else {
+            throw XCTSkip("设 ZXART_REVIEW_DIR 才出审图样张")
+        }
+        let groups: [(String, ZXArt.PoetryScene, [ZXArt.SceneMotif])] = [
+            ("小桥流水人家", .waterTown, [.bridge, .stream, .house, .willow, .swallow]),
+            ("古道西风瘦马", .autumnTravel, [.path, .traveler, .horse]),
+            ("枯藤老树昏鸦", .autumnTravel, [.oldTree, .vine, .crow]),
+            ("渔舟", .fishing, [.angler, .reeds]),
+            ("山居", .village, [.hut, .fence, .cookingSmoke, .pine]),
+            ("长亭送别", .farewell, [.pavilion, .willow, .traveler, .path]),
+            ("山寺", .temple, [.templeGate, .pagoda, .bamboo]),
+            ("粉墙轩窗", .courtyard, [.courtyard, .window, .curtain, .willow]),
+            ("故垒城楼", .historic, [.ruins, .cityGate]),
+            ("扁舟竹篷", .fishing, [.boat, .reeds]),
+            ("江上风帆", .fishing, [.sail, .reeds]),
+            ("岸边系舟", .waterTown, [.mooredBoat, .house, .bridge, .stream]),
+            ("疏梅花径", .spring, [.blossom, .grass, .path]),
+            ("荷塘清趣", .lotusPond, [.lotus, .dragonfly, .willow]),
+            ("寒林古木", .winterForest, [.oldTree, .bareTree]),
+            ("松竹山居", .retreat, [.pine, .bamboo, .hut, .stream]),
+            ("飞泉出涧", .retreat, [.waterfall, .stream, .pine])
+        ]
+        let cell = CGSize(width: 400, height: 260)
+        let paper = ZXArt.Palette.paperInk.paper
+        // The renderer writes sRGB bytes directly. A DeviceRGB CGColor converts to a
+        // slightly different paper when composited into this sRGB sheet.
+        let paperColor = try XCTUnwrap(CGColor(colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+            components: [paper.red, paper.green, paper.blue, 1]))
+        var images: [CGImage] = []
+        for (title, scene, motifs) in groups {
+            for seed in 0..<4 {
+                let selection = ZXArt.SceneSelection(scene: scene, options: .init(motifs: motifs), matched: [])
+                let recipe = selection.paintingProcedural(seed: "group-\(scene.rawValue)-\(seed)",
+                    verseSide: nil, composition: .corner)
+                let size = CGSize(width: 1000, height: 750)
+                var drawing = try XCTUnwrap(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: size))
+                // One sheet of paper, rather than seven rows of separately textured paper tiles.
+                drawing.paper = nil
+                let image = try XCTUnwrap(ZXArt.render(drawing, pixelWidth: 1000, pixelHeight: 750))
+                var focus = drawing.sceneElements.filter { motifs.map(\.rawValue).contains($0.motif) }
+                    .reduce(CGRect.null) { $0.union($1.bounds.cgRect) }
+                if let bank = drawing.sceneElements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
+                    // Show the local slope down to its foot, without including an unrelated bank across the sheet.
+                    focus.size.height = max(focus.maxY, bank.maxY) - focus.minY
+                }
+                let crop = CGRect(x: focus.minX * size.width, y: focus.minY * size.height,
+                                  width: focus.width * size.width, height: focus.height * size.height)
+                    .insetBy(dx: -24, dy: -24).intersection(CGRect(origin: .zero, size: size))
+                let detail = try XCTUnwrap(image.cropping(to: crop.integral))
+                let ctx = try bitmap(cell)
+                ctx.setFillColor(paperColor)
+                ctx.fill(CGRect(origin: .zero, size: cell))
+                let scale = min((cell.width - 12) / Double(detail.width), (cell.height - 34) / Double(detail.height))
+                let width = Double(detail.width) * scale, height = Double(detail.height) * scale
+                ctx.draw(detail, in: CGRect(x: (cell.width - width) / 2, y: 8, width: width, height: height))
+                let label = NSAttributedString(string: "\(title) · \(seed + 1)", attributes: [
+                    NSAttributedString.Key(kCTFontAttributeName as String): CTFontCreateWithName("PingFangSC-Regular" as CFString, 15, nil),
+                    NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 0.3, alpha: 1)])
+                ctx.textPosition = CGPoint(x: 10, y: cell.height - 22)
+                CTLineDraw(CTLineCreateWithAttributedString(label), ctx)
+                images.append(try XCTUnwrap(ctx.makeImage()))
+            }
+        }
+        try write(try contactSheet(Array(images.prefix(28)), columns: 4, cell: cell, background: paperColor),
+                  to: URL(fileURLWithPath: dir).appendingPathComponent("groups.png"))
+        try write(try contactSheet(Array(images.dropFirst(28).prefix(20)), columns: 4, cell: cell, background: paperColor),
+                  to: URL(fileURLWithPath: dir).appendingPathComponent("groups-objects.png"))
+        try write(try contactSheet(Array(images.dropFirst(48)), columns: 4, cell: cell, background: paperColor),
+                  to: URL(fileURLWithPath: dir).appendingPathComponent("groups-plants.png"))
+    }
+
+    /// The fifteen representative poems contain no swallow: review it explicitly at scene scale.
+    func testSwallowSceneReview() throws {
+        guard let dir = ProcessInfo.processInfo.environment["ZXART_REVIEW_DIR"] else {
+            throw XCTSkip("设 ZXART_REVIEW_DIR 才出审图样张")
+        }
+        let selection = ZXArt.SceneSelection(scene: .waterTown,
+            options: .init(motifs: [.bridge, .stream, .house, .willow, .swallow]), matched: [])
+        for (format, size) in [("portrait", CGSize(width: 750, height: 1000)), ("wide", CGSize(width: 1200, height: 675))] {
+            let recipe = selection.paintingProcedural(seed: "review-swallows", verseSide: "right", columns: 2, chars: 7)
+            let image = try XCTUnwrap(ZXArt.render(procedural: recipe, palette: .paperInk, pixelSize: size))
+            try write(try framedWithVerse(image, procedural: recipe, size: size, palette: .paperInk),
+                      to: URL(fileURLWithPath: dir).appendingPathComponent("swallows-\(format)-light.png"))
+        }
+    }
+
+    static let pavilionSamples: [(String, ZXArt.PoetryScene, [ZXArt.SceneMotif])] = [
+        ("pavilion-water", .waterTown, [.pavilion, .willow, .boat]),
+        ("pavilion-mountain", .retreat, [.pavilion, .pine, .stream]),
+        ("pavilion-courtyard", .courtyard, [.pavilion, .courtyard, .willow, .window])
+    ]
+
+    /// Buildings and sails that none of the representative poems explicitly request.
+    func testBuildingObjectSceneReview() throws {
+        guard let dir = ProcessInfo.processInfo.environment["ZXART_REVIEW_DIR"] else {
+            throw XCTSkip("设 ZXART_REVIEW_DIR 才出审图样张")
+        }
+        let samples: [(String, ZXArt.PoetryScene, [ZXArt.SceneMotif])] = [
+            ("objects-historic", .historic, [.cityGate, .ruins, .terrace, .traveler]),
+            ("objects-sail", .fishing, [.sail, .reeds]),
+            ("plants-waterfall", .retreat, [.waterfall, .stream, .pine])
+        ] + Self.pavilionSamples
+        for (name, scene, motifs) in samples {
+            let selection = ZXArt.SceneSelection(scene: scene, options: .init(motifs: motifs), matched: [])
+            for (format, size) in [("portrait", CGSize(width: 750, height: 1000)), ("wide", CGSize(width: 1200, height: 675))] {
+                let recipe = selection.paintingProcedural(seed: "review-\(name)", verseSide: "right", columns: 2, chars: 7)
+                let image = try XCTUnwrap(ZXArt.render(procedural: recipe, palette: .paperInk, pixelSize: size))
+                try write(try framedWithVerse(image, procedural: recipe, size: size, palette: .paperInk),
+                          to: URL(fileURLWithPath: dir).appendingPathComponent("\(name)-\(format)-light.png"))
+            }
+        }
+        // Six whole compositions per context expose occlusion and grounding, not only roof shapes.
+        for (name, scene, motifs) in Self.pavilionSamples {
+            var images: [CGImage] = []
+            for seed in 0..<6 {
+                let selection = ZXArt.SceneSelection(scene: scene, options: .init(motifs: motifs), matched: [])
+                let recipe = selection.paintingProcedural(seed: "\(name)-\(seed)", verseSide: nil, composition: .corner)
+                images.append(try XCTUnwrap(ZXArt.render(procedural: recipe, palette: .paperInk,
+                    pixelSize: CGSize(width: 700, height: 525))))
+            }
+            try write(try contactSheet(images, columns: 3, cell: CGSize(width: 400, height: 300)),
+                to: URL(fileURLWithPath: dir).appendingPathComponent("groups-\(name).png"))
+        }
+        // Text-selected forms need scene evidence as well as isolated atlas rows.
+        let semanticSamples = [
+            ("lotus-spent", "秋池", "秋阴不散霜飞晚，留得残荷听雨声。"),
+            ("lotus-flowering", "晓出净慈寺送林子方", "接天莲叶无穷碧，映日荷花别样红。"),
+            ("sky-crescent", "雨霖铃", "今宵酒醒何处，杨柳岸，晓风残月。"),
+            ("sky-stars", "旅夜书怀", "星垂平野阔，月涌大江流。"),
+            ("objects-donkey", "山行", "古道秋风，行人牵驴过小桥，古木临流水。")
+        ]
+        for (name, title, text) in semanticSamples {
+            let selection = ZXArt.poetryScene(text: text, title: title)
+            for (format, size) in [("portrait", CGSize(width: 750, height: 1000)), ("wide", CGSize(width: 1200, height: 675))] {
+                let recipe = selection.paintingProcedural(seed: "review-" + name, verseSide: "right", columns: 2, chars: 7)
+                let image = try XCTUnwrap(ZXArt.render(procedural: recipe, palette: .paperInk, pixelSize: size))
+                try write(try framedWithVerse(image, procedural: recipe, size: size, palette: .paperInk),
+                    to: URL(fileURLWithPath: dir).appendingPathComponent("\(name)-\(format)-light.png"))
+            }
+        }
+        // The narrow recommendation page exposed a house above the widened mountain's
+        // lower half. Keep the exact regression seed and presentation visible for review.
+        let recommendation = ZXArt.SceneSelection(scene: .retreat,
+            options: .init(motifs: ZXArt.defaultMotifs(for: .retreat)), matched: [])
+            .paintingProcedural(seed: "presentation-山居林泉", purpose: .recommendation, composition: .corner)
+        let narrow = CGSize(width: 393, height: 852)
+        let image = try XCTUnwrap(ZXArt.render(procedural: recommendation, palette: .paperInk, pixelSize: narrow))
+        try write(try framedWithVerse(image, procedural: recommendation, size: narrow, palette: .paperInk),
+            to: URL(fileURLWithPath: dir).appendingPathComponent("plants-retreat-recommendation-light.png"))
+    }
+
+    /// 种子谱: 每类场景取四个种子的竖幅浅色, 看同一首诗换种子后构图是否真的变化。
+    func testSeedVarietySheet() throws {
+        guard let dir = ProcessInfo.processInfo.environment["ZXART_REVIEW_DIR"] else {
+            throw XCTSkip("设 ZXART_REVIEW_DIR 才出审图样张")
+        }
+        let size = CGSize(width: 375, height: 500)
+        var images: [CGImage] = []
+        for poem in Self.poems {
+            let selection = ZXArt.poetryScene(text: poem.text, title: poem.title)
+            for k in 0..<4 {
+                let procedural = selection.paintingProcedural(seed: "variety-\(k)-\(poem.id)",
+                                                              verseSide: "right", columns: 2, chars: 7)
+                images.append(try XCTUnwrap(ZXArt.render(procedural: procedural, palette: .paperInk, pixelSize: size)))
+            }
+        }
+        // 15 rows × 4 seeds, split in three pages of five scenes so each page stays legible.
+        for page in 0..<3 {
+            let slice = Array(images[(page * 20)..<min(images.count, page * 20 + 20)])
+            try write(try contactSheet(slice, columns: 4, cell: CGSize(width: 300, height: 400)),
+                      to: URL(fileURLWithPath: dir).appendingPathComponent("variety-\(page + 1).png"))
+        }
+    }
+
     /// 在画上用淡线框出诗句框。
     private func framedWithVerse(_ image: CGImage, procedural: ZXArt.Procedural, size: CGSize,
                                  palette: ZXArt.Palette) throws -> CGImage {
@@ -123,11 +390,11 @@ final class ZXArtSceneReviewTests: XCTestCase {
         return try XCTUnwrap(ctx.makeImage())
     }
 
-    private func contactSheet(_ images: [CGImage], columns: Int, cell: CGSize) throws -> CGImage {
+    private func contactSheet(_ images: [CGImage], columns: Int, cell: CGSize, background: CGColor? = nil) throws -> CGImage {
         let rows = (images.count + columns - 1) / columns
         let size = CGSize(width: cell.width * Double(columns), height: cell.height * Double(rows))
         let ctx = try bitmap(size)
-        ctx.setFillColor(CGColor(gray: 1, alpha: 1))
+        ctx.setFillColor(background ?? CGColor(gray: 1, alpha: 1))
         ctx.fill(CGRect(origin: .zero, size: size))
         ctx.interpolationQuality = .high
         for (i, image) in images.enumerated() {

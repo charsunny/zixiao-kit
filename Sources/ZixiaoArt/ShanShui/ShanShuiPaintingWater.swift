@@ -25,59 +25,45 @@ struct PaintingWaterChannel {
 
 extension ShanShuiEngine {
     func paintingChannel(width: Double, height: Double, river: Bool = false, phase: Double? = nil) -> ZXArt.SSCanv {
-        let channel = PaintingWaterChannel(width: width, height: height, phase: phase ?? r() * 1.2, broad: river)
+        paintingChannel(PaintingWaterChannel(width: width, height: height, phase: phase ?? r() * .pi * 2, broad: river))
+    }
+
+    func paintingChannel(_ channel: PaintingWaterChannel) -> ZXArt.SSCanv {
+        let width = channel.width, height = channel.height
         let left = channel.left, right = channel.right
-        // The unpainted water cuts through the rock bed rather than becoming another rock contour.
         var c = [poly(left + right.reversed(), fil: .white, str: nil)]
-        for bank in [left, right] {
-            // Broken banks: short runs with real gaps, so the water is felt, not fenced.
-            var start = Int(r() * 4)
-            while start < 36 {
-                let length = river ? 7 : 3 + Int(r() * 4)
-                let segment = Array(bank[start...min(start + length, 40)])
-                if river { c += inkLine(segment, width: 2.8, tone: 0.08, dry: 0.35) }
-                c += inkLine(segment, width: river ? 0.9 : 0.8 + r() * 0.5, tone: river ? 0.38 : 0.26 + r() * 0.14, dry: 0.45)
-                start += length + (river ? 2 : 2 + Int(r() * 4))
+        for (bank, side) in [(left, -1.0), (right, 1.0)] {
+            // Pale earth lies OUTSIDE the water; its edge touches the bank contour.
+            let outer = bank.enumerated().map { i, p in
+                P(p.x + side * width * (0.008 + Double(i) / 40 * 0.032), p.y + height * 0.015)
+            }
+            c.append(poly(bank + outer.reversed(), fil: .gray(0, 0.075), str: nil))
+            var start = 0
+            while start < 38 {
+                let length = 4 + Int(r() * 5)
+                c += inkLine(Array(bank[start...min(start + length, 40)]), width: 0.95 + r() * 0.55,
+                    tone: 0.45 + r() * 0.14, dry: 0.42)
+                start += length + 2 + Int(r() * 3)
             }
         }
-        if !river {
-            // A mountain stream: a few current lines bending with the channel, no cross-hatching.
-            for lane in [-0.35, 0.25] {
-                for start in [0.10, 0.40, 0.68] {
-                    let points = (0...7).map { channel.point(start + Double($0) * 0.02, across: lane + 0.1 * sin(Double($0))) }
-                    c += inkLine(points, width: 0.55, tone: 0.20, dry: 0.55)
-                }
-            }
-            for (t, side) in [(0.30, -1.0), (0.58, 1.0), (0.84, -1.0)] {
-                let p = channel.point(t, across: side * 0.9)
-                let size = width * (0.03 + t * 0.03)
-                c += inkBlot(p.x + side * size * 0.6, p.y, radius: size, squash: 0.55, angle: 0, tone: 0.32)
-                c += inkBlot(p.x + side * size * 0.5, p.y - size * 0.4, radius: size * 0.25, squash: 0.5, tone: 0.6)
-            }
-            return c
+        // 远水无波: a few short, broken ripples gather near us. Evenly stacked full-width lines
+        // read as steps climbing the bank, so the far half of the channel stays bare paper.
+        for _ in 0..<(3 + Int(r() * 3)) {
+            let t = 0.48 + r() * 0.46
+            let lane = -0.70 + r() * 0.85
+            let a = channel.point(t, across: lane), b = channel.point(t, across: min(0.85, lane + 0.25 + r() * 0.30))
+            c += inkLine([a, P((a.x + b.x) / 2, a.y + min(0.8, height * 0.009)), b],
+                         width: 0.75 + t * 0.4, tone: 0.35 + t * 0.12, dry: 0.40)
         }
-        // Longitudinal currents bend with the channel. Short transverse marks signal shallow riffles.
-        for lane in river ? [0.08] : [-0.55, 0.08, 0.55] {
-            for start in [0.14, 0.46, 0.74] {
-                let points = (0...9).map { channel.point(start + Double($0) * 0.017, across: lane) }
-                c += inkLine(points, width: 0.65, tone: river ? 0.12 : 0.30, dry: 0.55)
-            }
-        }
-        for i in 0..<10 {
-            let t = 0.18 + Double(i) * 0.075
-            let a = channel.point(t, across: i % 2 == 0 ? -0.7 : -0.1)
-            let b = channel.point(t, across: i % 2 == 0 ? 0.1 : 0.7)
-            c += inkLine([a, P((a.x + b.x) / 2, a.y + 1.1), b], width: 0.65, tone: 0.22, dry: 0.6)
-        }
-        if !river {
-            // A few stones sit outside the flow, with the current breaking around their toes.
-            for (t, side) in [(0.32, -1.0), (0.57, 1.0), (0.81, -1.0)] {
-                let p = channel.point(t, across: side)
-                let size = width * (0.055 + t * 0.035)
-                let stone = [P(p.x, p.y), P(p.x + side * size * 0.55, p.y - size * 0.7),
-                    P(p.x + side * size * 1.4, p.y - size * 0.6), P(p.x + side * size * 1.7, p.y + 1)]
+        if !channel.broad {
+            for t in [0.42, 0.76] where r() < 0.65 {
+                let side = r() < 0.5 ? -1.0 : 1.0
+                let p = channel.point(t, across: side), size = min(width * 0.045, height * 0.10)
+                let stone = [P(p.x - size, p.y), P(p.x - size * 0.5, p.y - size * 0.55),
+                             P(p.x + size * 0.6, p.y - size * 0.4), P(p.x + size, p.y)]
                 c.append(poly(stone, fil: .white, str: nil))
-                c += inkEdges(stone, width: 0.9, tone: 0.40)
+                c += inkLine(stone, width: 0.9, tone: 0.55, dry: 0.5)
+                c += inkLine([P(p.x - size * 1.2, p.y + 1), P(p.x + size * 1.4, p.y + 1)], width: 0.55, tone: 0.30)
             }
         }
         return c
@@ -188,22 +174,25 @@ extension ShanShuiEngine {
 
     func paintingRiverRibbon() -> ZXArt.SSCanv {
         let width = 340.0, height = 65.0
+        let phase = r() * 5, bend = 0.08 + r() * 0.14, opening = 18 + r() * 16
         let middle = (0...40).map { i -> P in
             let t = Double(i) / 40
-            return P(width * t, height * (0.40 + 0.14 * sin(t * .pi * 2 + 0.3)))
+            return P(width * t, height * (0.48 + bend * sin(t * .pi * 1.5 + phase)))
         }
-        let far = middle.enumerated().map { i, p in P(p.x, p.y - 11 * pow(1 - Double(i) / 40, 0.7)) }
-        let near = middle.enumerated().map { i, p in P(p.x, p.y + 18 * pow(1 - Double(i) / 40, 0.7)) }
+        let far = middle.enumerated().map { i, p in P(p.x, p.y - opening * 0.42 * pow(1 - Double(i) / 40, 0.7)) }
+        let near = middle.enumerated().map { i, p in P(p.x, p.y + opening * 0.58 * pow(1 - Double(i) / 40, 0.7)) }
         var c = [poly(far + near.reversed(), fil: .white, str: nil)]
-        for bank in [far, near] {
-            c += inkLine(bank, width: 3, tone: 0.06, dry: 0.4)
-            c += inkLine(bank, width: 0.8, tone: 0.32, dry: 0.55)
-        }
-        for start in stride(from: 2, to: 34, by: 5) {
-            for offset in [-3.0, 4] {
-                c += inkLine(Array(middle[start...start + 4]).map { P($0.x, $0.y + offset) },
-                    width: 0.65, tone: 0.22, dry: 0.6)
+        for (bank, side) in [(far, -1.0), (near, 1.0)] {
+            let outer = bank.map { P($0.x, $0.y + side * 2) }
+            c.append(poly(bank + outer.reversed(), fil: .gray(0, 0.055), str: nil))
+            for start in stride(from: 0, to: 36, by: 7) {
+                c += inkLine(Array(bank[start...start + 4]), width: 0.8, tone: 0.32, dry: 0.6)
             }
+        }
+        for start in stride(from: 2, to: 32, by: 5) {
+            let p = middle[start], length = 12 + r() * 20
+            c += inkLine([P(p.x, p.y - 1), P(p.x + length * 0.5, p.y), P(p.x + length, p.y - 0.3)],
+                         width: 0.65, tone: 0.27, dry: 0.6)
         }
         return c
     }
