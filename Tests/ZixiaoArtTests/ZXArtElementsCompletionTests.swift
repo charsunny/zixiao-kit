@@ -19,7 +19,9 @@ struct ZXArtElementsCompletionTests {
                 }
                 let person = try box("traveler"), horse = try box("horse"), tree = try box("oldTree")
                 let door = try box("houseDoor"), eaves = try box("houseEaves"), bridge = try box("bridge")
-                #expect((3...8).contains(tree.height / person.height), "tree/person \(index) \(size)")
+                // A foreground old tree rises through the scroll; the bridge and travelers remain
+                // in the middle distance. Their shared scale must not grow with its crown.
+                #expect((3...18).contains(tree.height / person.height), "tree/person \(index) \(size)")
                 #expect((0.7...1.4).contains(door.height / person.height), "door/person \(index) \(size): \(door.height / person.height)")
                 #expect((1.3...1.8).contains(eaves.height / person.height), "eaves/person \(index) \(size): \(eaves.height / person.height)")
                 // Head position changes with gait; the withers sit about 65% up the complete horse.

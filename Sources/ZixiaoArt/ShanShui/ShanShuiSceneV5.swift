@@ -92,6 +92,7 @@ private final class PaintingStage {
     let foreground: CGRect
     /// Lowest y the painting may use (recommendation pages keep a reading strip at the bottom).
     let footer: Double
+    let contentTop: Double
     let purpose: ZXArt.ScenePurpose
     let composition: ZXArt.SceneComposition
     let seed: String
@@ -144,6 +145,7 @@ private final class PaintingStage {
         engine.anchorLog = []
         let pad = min(width, height) * 0.045
         let top = max(pad, quietTop * height)
+        contentTop = top
         let footer = options.purpose == .recommendation ? height * 0.87 : height - pad
         self.footer = footer
         // Inscribed portrait: the verse sits in the sky on one side; the ground beneath it can run
@@ -651,6 +653,10 @@ private final class PaintingStage {
     }
 
     private func fitted(_ raw: ZXArt.SSCanv, to box: CGRect) -> (canv: ZXArt.SSCanv, bounds: CGRect)? {
+        // Refit whole objects into the reading-safe vertical span after grounding. A larger
+        // tree may otherwise be moved above the header by the bank's actual root position.
+        let top = max(box.minY, contentTop), bottom = min(box.maxY, footer)
+        let box = CGRect(x: box.minX, y: top, width: box.width, height: bottom - top)
         let points = raw.flatMap(\.p)
         guard box.width > 0, box.height > 0,
               let x0 = points.map(\.x).min(), let x1 = points.map(\.x).max(),
@@ -703,16 +709,18 @@ private final class PaintingStage {
             peakBox = CGRect(x: peakBox.minX, y: peakBox.minY, width: peakBox.width,
                              height: max(40, foot - peakBox.minY))
         }
-        if main, structure == .high {
-            let guestBox = CGRect(x: peakBox.minX + peakBox.width * 0.48,
-                y: peakBox.minY + peakBox.height * 0.28, width: peakBox.width * 0.51, height: peakBox.height * 0.62)
-            if let guest = fitted(engine.paintingMountain(form: .folded), to: guestBox) {
+        if main {
+            let deep = structure == .deep
+            let guestBox = CGRect(x: peakBox.minX + peakBox.width * (deep ? 0.34 : 0.48),
+                y: peakBox.minY + peakBox.height * (deep ? 0.02 : 0.28),
+                width: peakBox.width * (deep ? 0.65 : 0.51), height: peakBox.height * (deep ? 0.68 : 0.62))
+            if let guest = fitted(engine.paintingMountain(form: .folded, aspect: deep ? 1.55 : nil), to: guestBox) {
                 let r = guest.bounds
                 if let outline = guest.canv.first { mountainRidges.append(Array(outline.p.dropLast(2))) }
                 parts.append(.init(canv: engine.paintingInk(guest.canv, depth: .middle),
                     fade: .init(top: r.minY + r.height * 0.55, bottom: r.maxY, seed: engine.inkSeed())))
             }
-            peakBox.size.width *= 0.98
+            peakBox.size.width *= deep ? 0.86 : 0.98
         }
         if currentScene == .historic {
             // Reserve headroom for the summit figure inside the painting area, including the
@@ -855,7 +863,7 @@ private final class PaintingStage {
         let treeHeight = (tree ?? 0.16) * h
         var height = min(bank.width * w * 0.078, treeHeight * 0.20)
         if let bridge = elements.first(where: { $0.motif == "bridge" })?.bounds.cgRect {
-            height = max(treeHeight / 7.9, min(height, bridge.width * w / 4.8))
+            height = min(height, bridge.width * w / 4.8)
         }
         return height
     }
@@ -1485,8 +1493,10 @@ private final class PaintingStage {
                 let x = min(max(art.minX, wall.bounds.minX + wall.bounds.width * [0.18, 0.62, 0.34, 0.77][layoutVariant] - willowW / 2), art.maxX - willowW)
                 // A roof inside the court, partially hidden by the wall and willow, gives the
                 // gate somewhere to lead. Use the accepted dwelling drawing at a distant scale.
-                let rear = CGRect(x: art.minX + art.width * [0.48, 0.08, 0.46, 0.12][layoutVariant],
-                    y: wall.bounds.minY - art.width * 0.20, width: art.width * 0.40, height: art.width * 0.25)
+                let rearWidth = min(art.width * 0.40, wall.bounds.width * 0.44)
+                let rear = CGRect(x: wall.bounds.minX + wall.bounds.width * [0.48, 0.08, 0.46, 0.12][layoutVariant],
+                    y: wall.bounds.minY + wall.bounds.height * 0.30 - rearWidth * 0.7,
+                    width: rearWidth, height: rearWidth * 0.7)
                 if let roof = fitted(engine.paintingHouse(), to: rear) {
                     parts.append(.init(canv: engine.paintingInk(roof.canv, depth: .middle)))
                     let b = roof.bounds
@@ -1627,7 +1637,7 @@ private final class PaintingStage {
         for box in boxes where box.height > 0 {
             let canvas = clipWater(raw, to: box)
             guard !canvas.isEmpty else { continue }
-            parts.append(.near(canvas))
+            parts.append(.near(canvas)); engine.noted(.water, canvas)
             elements.append(.init(motif: motif, bounds: .init(x: box.minX / w, y: box.minY / h,
                 width: box.width / w, height: box.height / h)))
         }
@@ -1635,7 +1645,7 @@ private final class PaintingStage {
 
     private func desert(_ chosen: Set<Motif>) {
         let band = lowerBand(columnFrom: 0.45)
-        let horizon = art.minY + art.height * [0.26, 0.42, 0.32, 0.52][layoutVariant]
+        let horizon = art.minY + art.height * [0.44, 0.60, 0.50, 0.68][layoutVariant]
         if let far = fitted(engine.paintingDunes(far: true), to: CGRect(x: art.minX, y: horizon,
             width: art.width, height: art.height * 0.045)) {
             parts.append(.near(far.canv))
@@ -1645,6 +1655,13 @@ private final class PaintingStage {
         }
         // Broad dry ridges flank a white river that opens toward us. Draw sand first, then
         // the existing channel reserves the reflected paper and defines both banks.
+        var sand: ZXArt.SSCanv = []
+        let upperBox = CGRect(x: art.minX, y: horizon + h * 0.015, width: art.width,
+            height: min(h * 0.16, footer - horizon))
+        if let dunes = fitted(engine.paintingDunes(), to: upperBox) {
+            sand += dunes.canv
+            parts.append(.near(engine.paintingInk(dunes.canv, depth: .middle)))
+        }
         for reach in 0..<2 {
             let left = reach == 0
             let width = band.width * (left ? [0.72, 0.50, 0.84, 0.56][layoutVariant] : 0.68)
@@ -1652,6 +1669,7 @@ private final class PaintingStage {
             let box = CGRect(x: left ? band.minX : band.maxX - width, y: top,
                 width: width, height: footer - top)
             if let dunes = fitted(engine.paintingDunes(), to: box) {
+                sand += dunes.canv
                 parts.append(.near(engine.paintingInk(dunes.canv, depth: .near)))
                 let b = dunes.bounds
                 elements.append(.init(motif: "dunes", bounds: .init(x: b.minX / w, y: b.minY / h,
@@ -1660,10 +1678,10 @@ private final class PaintingStage {
         }
         placed.insert(.dunes)
         if chosen.contains(.stream) {
-            let width = art.width * [0.92, 0.72, 0.84, 0.96][layoutVariant]
+            let width = art.width * [0.52, 0.64, 0.46, 0.58][layoutVariant]
             let river = waterEngine.paintingChannel(width: width, height: footer - horizon,
                 river: true, phase: [0.2, 2.4, 4.1, 5.2][layoutVariant]).map { poly in
-                var p = poly; p.p = p.p.map { .init($0.x + art.minX, $0.y + horizon) }; return p
+                var p = poly; p.p = p.p.map { .init($0.x + art.minX + art.width * 0.20, $0.y + horizon) }; return p
             }
             openPlane(river, top: horizon, motif: "stream")
             placed.insert(.stream)
@@ -1676,9 +1694,10 @@ private final class PaintingStage {
                 source: engine.sceneEllipse(40, 40, 24, 24, fill: ShanShuiEngine.C(171, 64, 51, 0.70), tone: 0))
         }
         if chosen.contains(.beaconSmoke) {
-            let width = art.width * 0.15
+            let width = art.width * 0.11
             let x = art.minX + art.width * [0.12, 0.78, 0.18, 0.80][layoutVariant]
-            let base = horizon + (band.minY - horizon) * [0.38, 0.72, 0.52, 0.25][layoutVariant]
+            let base = sand.flatMap(\.p).filter { abs($0.x - x) < width * 0.25 }.map(\.y).min()
+                ?? (horizon + h * 0.10)
             let box = CGRect(x: x - width / 2, y: base - width * 0.70, width: width, height: width * 0.70)
             if let tower = fitted(engine.paintingBeacon(), to: box) {
                 parts.append(.near(tower.canv))
@@ -1702,7 +1721,7 @@ private final class PaintingStage {
         if let light {
             let size = art.width * [0.42, 0.34, 0.48, 0.38][layoutVariant]
             let x = art.minX + art.width * [0.28, 0.68, 0.48, 0.72][layoutVariant]
-            add(light, CGRect(x: x - size / 2, y: horizon - size * 0.72, width: size, height: size))
+            add(light, CGRect(x: x - size / 2, y: horizon - size * 1.10, width: size, height: size))
             let path = CGRect(x: x - art.width * 0.14, y: horizon + 2, width: art.width * 0.28,
                 height: max(6, footer - horizon - 8))
             if let reflection = fitted(waterEngine.paintingReflection(width: path.width, height: path.height), to: path) {
