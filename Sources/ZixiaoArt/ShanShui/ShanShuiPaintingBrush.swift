@@ -303,7 +303,7 @@ struct PaintingMountainProfile {
         ridge = knots
         width = between(widths.lowerBound, widths.upperBound)
         let naturalHeight = between(heights.lowerBound, heights.upperBound)
-        height = aspect.map { width * $0 } ?? naturalHeight
+        if let aspect { height = width * aspect } else { height = naturalHeight }
         curvature = between(curves.lowerBound, curves.upperBound)
     }
 
