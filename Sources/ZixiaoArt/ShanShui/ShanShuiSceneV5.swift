@@ -699,7 +699,14 @@ private final class PaintingStage {
                     width: house.width * w * 0.3, height: smokeHeight))
             }
             include(.fields, slot(0.05, 0.0, 0.9, 0.92, front: true))
-            include(.fence, slot(0.10, 0.76, 0.66, 0.06))
+            // A low fence runs in front of the cottage's left side, lower than its eaves.
+            if chosen.contains(.fence), let house = elements.first(where: { $0.motif == "house" })?.bounds.cgRect {
+                let hb = CGRect(x: house.minX * w, y: house.minY * h, width: house.width * w, height: house.height * h)
+                let fh = hb.height * 0.42, fw = hb.width * 1.1
+                pinned = true
+                add(.fence, CGRect(x: hb.minX - fw * 0.85, y: hb.maxY + hb.height * 0.06 - fh, width: fw, height: fh))
+                pinned = false
+            }
             include(.path, slot(0.65, 0.62, 0.24, 0.34))
         case .spring:
             include(.blossom, slot(0.0, 0.12, 0.76, 0.70))
