@@ -222,7 +222,7 @@ extension ShanShuiEngine {
     /// Scene and atlas share the same strokes; a summit supplies its own width and shallow depth.
     func paintingTerrace(width w: Double = 120, height requestedHeight: Double? = nil) -> ZXArt.SSCanv {
         let form = Int(r() * 65_536) % 3
-        let h = requestedHeight ?? [15.0, 23, 31][form]
+        let h = requestedHeight ?? (14 + floor(r() * 6) * 3)
         let face = [P(w * 0.10, 0), P(w * 0.90, 0), P(w, h), P(0, h)]
         var c = [poly(face, fil: .white, str: nil), poly(face, fil: .gray(0, 0.075), str: nil)]
         c += inkEdges([face[3], face[0], face[1], face[2]], width: min(1.4, h * 0.14), tone: 0.66, dry: 0.4)
@@ -430,45 +430,6 @@ extension ShanShuiEngine {
                [P(47, 36), P(49, 43), P(53, 44)]]
         for foot in feet { c += inkLine(foot, width: 1.1, tone: tone, dry: 0.4) }
         if flip { c = c.map { var p = $0; p.p = p.p.map { P(88 - $0.x, $0.y) }; return p } }
-        return c
-    }
-
-    func paintingBoat(_ kind: ZXArt.SceneMotif) -> ZXArt.SSCanv {
-        let hull = inkCurve([P(0, 87), P(22, 94), P(86, 97), P(130, 85), P(103, 101), P(35, 106), P(8, 99), P(0, 87)])
-        var c = [poly(hull, fil: .gray(0, 0.48), str: nil)] // first shape is the hull anchor
-        c += inkLine([P(0, 87), P(36, 94), P(86, 94), P(130, 85)], width: 1.0, tone: 0.8)
-        if kind == .angler {
-            let person = paintingPerson(hat: true, pose: 3, facingLeft: false).map { p -> ZXArt.SSPoly in
-                var q = p; q.p = p.p.map { P($0.x * 0.75 + 10, $0.y * 0.75 + 64) }; q.wid *= 0.75; return q
-            }
-            c += person
-            for k in 0..<5 { // 蓑衣: a few dry slashes, never a detailed portrait.
-                c += inkLine([P(38 + Double(k) * 2, 70), P(34 + Double(k) * 3, 82)],
-                    width: 1.2, tone: 0.6, dry: 0.6)
-            }
-            c += inkLine([P(47, 76), P(85, 55), P(131, 47)], width: 1.0, tone: 0.8)
-            c += inkLine(inkCurve([P(131, 47), P(137, 69), P(137, 113)]), width: 0.5, tone: 0.4)
-        } else if kind == .sail {
-            c += inkLine([P(58, 91), P(57, 0)], width: 1.5, tone: 0.8)
-            let sail = inkCurve([P(57, 8), P(24, 62), P(14, 78), P(57, 68)])
-            c.append(poly(sail, fil: .white, str: nil))
-            c.append(poly(sail, fil: .gray(0, 0.09), str: nil))
-            c += inkLine(sail, width: 0.9, tone: 0.5)
-            for y in [28.0, 42, 56] { c += inkLine([P(57, y), P(57 - y * 0.5, y + 6)], width: 0.5, tone: 0.3) }
-        } else {
-            let awning = inkCurve([P(44, 93), P(48, 76), P(63, 69), P(87, 74), P(96, 92)])
-            c.append(poly(awning, fil: .white, str: nil))
-            c.append(poly(awning, fil: .gray(0, 0.13), str: nil))
-            c += inkLine(awning, width: 1.3, tone: 0.75)
-            // Curving bamboo ribs and a dark opening give the canopy volume at small scale.
-            for dx in [0.0, 9, 18, 27] {
-                c += inkLine(inkCurve([P(46 + dx, 92), P(48 + dx, 79), P(56 + dx, 73)]),
-                    width: 0.7, tone: 0.48, dry: 0.45)
-            }
-            let opening = inkCurve([P(79, 92), P(82, 80), P(88, 79), P(94, 92)])
-            c.append(poly(opening, fil: .gray(0, 0.58), str: nil))
-            c += inkLine(inkCurve([P(17, 93), P(8, 101), P(-10, 107)]), width: 1.3, tone: 0.7, dry: 0.45)
-        }
         return c
     }
 

@@ -202,6 +202,7 @@ private final class PaintingStage {
         let reserveWindow = motif == .house && currentScene == .moonNight && selectedMotifs.contains(.window)
         if let source { raw = source }
         else if reserveWindow { raw = engine.paintingHouse(reservingWindow: true) }
+        else if motif == .mooredBoat { raw = engine.paintingBoat(.mooredBoat, mooring: false) }
         else if motif == .stream {
             raw = currentScene == .desert ? waterEngine.paintingLongRiver()
                 : waterEngine.paintingChannel(width: box.width, height: box.height)
@@ -274,6 +275,9 @@ private final class PaintingStage {
             houseWindowFrame = CGRect(x: actual.minX + (12 - x0) * scale,
                 y: actual.minY + (44 - y0) * scale, width: 19 * scale, height: 15 * scale)
         }
+        if motif == .mooredBoat, let bow = object.canv.first?.p.first {
+            object.canv += mooring(from: bow, boat: actual)
+        }
         if trees.contains(motif) { paintedTrees[motif] = object.canv }
         if motif == .stream { engine.noted(.water, object.canv) }
         support(motif, bounds: actual, root: plantedRoot)
@@ -307,6 +311,37 @@ private final class PaintingStage {
         if let kind { engine.noted(kind, object.canv) }
         placed.insert(motif)
         return true
+    }
+
+    /// Tie the boat to this scene's bank, rather than fitting a floating post with the hull.
+    /// Keep boat metadata limited to the craft; record the rope and post separately for review.
+    private func mooring(from bow: ZXArt.P, boat: CGRect) -> ZXArt.SSCanv {
+        guard bankSurface != nil else { return [] }
+        let size = max(0.28, min(0.8, boat.width / 100))
+        let buildings = elements.filter { ["house", "hut", "pavilion", "templeGate"].contains($0.motif) }
+            .map { CGRect(x: $0.bounds.cgRect.minX * w, y: $0.bounds.cgRect.minY * h,
+                width: $0.bounds.cgRect.width * w, height: $0.bounds.cgRect.height * h) }
+        let desired = boat.minX - boat.width * 0.12
+        var candidates = [desired, desired - boat.width * 0.3, desired + boat.width * 0.3]
+        for building in buildings { candidates += [building.minX - 4, building.maxX + 4] }
+        for candidate in candidates.sorted(by: { abs($0 - desired) < abs($1 - desired) }) {
+            let x = supportedBankX(candidate)
+            guard let y = bankFoot(x - size, x + size) else { continue }
+            let foot = ZXArt.P(x, y)
+            let post = CGRect(x: x - 1.2 * size, y: y - 15 * size, width: 2.4 * size, height: 15 * size)
+            guard !post.intersects(verse), !buildings.contains(where: { $0.intersects(post.insetBy(dx: -1, dy: -1)) }) else { continue }
+            let knot = foot - ZXArt.P(0, 10 * size)
+            let sag = (bow + knot) * 0.5 + ZXArt.P(0, 4 * size)
+            let rope = CGRect(x: min(bow.x, knot.x), y: min(bow.y, knot.y), width: abs(bow.x - knot.x),
+                height: max(bow.y, knot.y, sag.y) - min(bow.y, knot.y)).insetBy(dx: -size, dy: -size)
+            guard !rope.intersects(verse) else { continue }
+            for (name, bounds) in [("mooringPost", post), ("mooringRope", rope)] {
+                elements.append(.init(motif: name, bounds: .init(x: bounds.minX / w, y: bounds.minY / h,
+                    width: bounds.width / w, height: bounds.height / h)))
+            }
+            return engine.paintingMooring(from: bow, postFoot: foot, size: size)
+        }
+        return []
     }
 
     /// Scale by the scene's common ground plane, rather than filling each independent placeholder.

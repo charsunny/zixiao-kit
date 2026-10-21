@@ -276,6 +276,26 @@ final class ZXArtSceneReviewTests: XCTestCase {
         }
     }
 
+    /// Buildings and sails that none of the representative poems explicitly request.
+    func testBuildingObjectSceneReview() throws {
+        guard let dir = ProcessInfo.processInfo.environment["ZXART_REVIEW_DIR"] else {
+            throw XCTSkip("设 ZXART_REVIEW_DIR 才出审图样张")
+        }
+        let samples: [(String, ZXArt.PoetryScene, [ZXArt.SceneMotif])] = [
+            ("objects-historic", .historic, [.cityGate, .ruins, .terrace, .traveler]),
+            ("objects-sail", .fishing, [.sail, .reeds])
+        ]
+        for (name, scene, motifs) in samples {
+            let selection = ZXArt.SceneSelection(scene: scene, options: .init(motifs: motifs), matched: [])
+            for (format, size) in [("portrait", CGSize(width: 750, height: 1000)), ("wide", CGSize(width: 1200, height: 675))] {
+                let recipe = selection.paintingProcedural(seed: "review-\(name)", verseSide: "right", columns: 2, chars: 7)
+                let image = try XCTUnwrap(ZXArt.render(procedural: recipe, palette: .paperInk, pixelSize: size))
+                try write(try framedWithVerse(image, procedural: recipe, size: size, palette: .paperInk),
+                          to: URL(fileURLWithPath: dir).appendingPathComponent("\(name)-\(format)-light.png"))
+            }
+        }
+    }
+
     /// 种子谱: 每类场景取四个种子的竖幅浅色, 看同一首诗换种子后构图是否真的变化。
     func testSeedVarietySheet() throws {
         guard let dir = ProcessInfo.processInfo.environment["ZXART_REVIEW_DIR"] else {
