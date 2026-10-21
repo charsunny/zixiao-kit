@@ -146,7 +146,7 @@ struct ZXArtGuohuaTests {
                 #expect(wall.insetBy(dx: wall.width * 0.12, dy: wall.height * 0.12).contains(window))
                 #expect(tree.maxY > wall.minY + wall.height * 0.55)
                 #expect(tree.maxY < wall.maxY)
-                #expect(tree.minY < wall.minY)
+                #expect(tree.minY < wall.minY - wall.height * 0.15)
             }
         }
     }

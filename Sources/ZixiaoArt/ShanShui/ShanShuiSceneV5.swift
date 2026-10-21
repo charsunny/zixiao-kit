@@ -555,6 +555,13 @@ private final class PaintingStage {
             }
             peakBox.size.width *= 0.94
         }
+        if currentScene == .historic {
+            // Reserve headroom for the summit figure inside the painting area, including the
+            // recommendation header. Fitting the mountain alone does not reserve this space.
+            let headroom = art.height * 0.04
+            peakBox.origin.y += headroom
+            peakBox.size.height -= headroom
+        }
         if main, let object = fitted(engine.paintingMountain(form: structure == .deep ? .clustered : .folded, terraced: currentScene == .historic), to: peakBox) {
             // 山腰云锁: the lower third of the main peak dissolves into cloud instead of
             // standing on the bank like a monument.
@@ -823,8 +830,14 @@ private final class PaintingStage {
             let box = CGRect(x: band.minX, y: band.minY + band.height * 0.20,
                              width: band.width * 0.90, height: band.height * 0.20)
             if let earth = fitted(waterEngine.paintingDistant(0), to: box) {
-                parts.append(.init(canv: engine.paintingInk(earth.canv, depth: .far),
-                    mist: .init(depth: earth.bounds.height, blur: 0.45, peak: 0.6,
+                // A low, broad trace of land below the cloud, not another tall floating peak.
+                let canvas = earth.canv.map { poly -> ZXArt.SSPoly in
+                    var p = poly
+                    p.p = poly.p.map { .init(box.minX + ($0.x - earth.bounds.minX) * box.width / earth.bounds.width, $0.y) }
+                    return p
+                }
+                parts.append(.init(canv: engine.paintingInk(canvas, depth: .middle),
+                    mist: .init(depth: earth.bounds.height, blur: 0.45, peak: 0.85,
                                 floorY: earth.bounds.maxY, floorDepth: earth.bounds.height * 0.9)))
             }
             if !historicGroundNeeded { return }
@@ -1017,7 +1030,11 @@ private final class PaintingStage {
                 let willowW = art.width * 0.62
                 let rootY = wall.bounds.minY + wall.bounds.height * 0.67
                 let x = min(max(art.minX, wall.bounds.minX + wall.bounds.width * 0.18 - willowW / 2), art.maxX - willowW)
+                // Its root is behind the wall: size the whole tree from that ground plane,
+                // so the normal small near-tree multiplier does not hide the crown as well.
+                pinned = true
                 include(.willow, CGRect(x: x, y: art.minY, width: willowW, height: rootY - art.minY))
+                pinned = false
                 let r = wall.bounds
                 parts.append(.init(canv: wall.canv, near: true,
                     fade: .init(top: r.minY + r.height * 0.76, bottom: r.maxY, seed: engine.inkSeed())))
