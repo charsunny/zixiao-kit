@@ -305,6 +305,15 @@ final class ZXArtSceneReviewTests: XCTestCase {
                           to: URL(fileURLWithPath: dir).appendingPathComponent("\(name)-\(format)-light.png"))
             }
         }
+        // The narrow recommendation page exposed a house above the widened mountain's
+        // lower half. Keep the exact regression seed and presentation visible for review.
+        let recommendation = ZXArt.SceneSelection(scene: .retreat,
+            options: .init(motifs: ZXArt.defaultMotifs(for: .retreat)), matched: [])
+            .paintingProcedural(seed: "presentation-山居林泉", purpose: .recommendation, composition: .corner)
+        let narrow = CGSize(width: 393, height: 852)
+        let image = try XCTUnwrap(ZXArt.render(procedural: recommendation, palette: .paperInk, pixelSize: narrow))
+        try write(try framedWithVerse(image, procedural: recommendation, size: narrow, palette: .paperInk),
+            to: URL(fileURLWithPath: dir).appendingPathComponent("plants-retreat-recommendation-light.png"))
     }
 
     /// 种子谱: 每类场景取四个种子的竖幅浅色, 看同一首诗换种子后构图是否真的变化。

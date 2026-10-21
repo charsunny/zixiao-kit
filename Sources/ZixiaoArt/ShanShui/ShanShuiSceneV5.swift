@@ -467,10 +467,20 @@ private final class PaintingStage {
         guard let surface = bankSurface else { return }
         let bankEnd = surface.x0 + surface.step * Double(surface.heights.count - 1)
         let cx = supportedBankX(min(max(peak.minX + peak.width * along, surface.x0 + bw * 0.5), bankEnd - bw * 0.5))
-        guard let foot = bankFoot(cx - bw * 0.4, cx + bw * 0.4) else { return }
-        pinned = true
-        add(motif, CGRect(x: cx - bw / 2, y: foot - bh, width: bw, height: bh))
-        pinned = false
+        // A broad mountain can fit low in a narrow recommendation band. The preferred
+        // horizontal position may then stand on an upper bank shoulder; seek a lower
+        // existing footing instead of moving the bank or lifting the house off the ground.
+        let alternatives = surface.heights.indices.map { surface.x0 + Double($0) * surface.step }
+            .filter { $0 >= surface.x0 + bw / 2 && $0 <= bankEnd - bw / 2 }
+            .sorted { abs($0 - cx) < abs($1 - cx) }
+        let raw = engine.paintingAsset(motif)
+        for x in [cx] + alternatives {
+            guard let foot = bankFoot(x - bw * 0.4, x + bw * 0.4), foot >= peak.midY else { continue }
+            pinned = true
+            let landed = add(motif, CGRect(x: x - bw / 2, y: foot - bh, width: bw, height: bh), source: raw)
+            pinned = false
+            if landed { return }
+        }
     }
 
     /// Buildings and trees meet the actual bank silhouette, not independent percentage baselines.
