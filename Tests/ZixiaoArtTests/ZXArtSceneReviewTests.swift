@@ -201,7 +201,7 @@ final class ZXArtSceneReviewTests: XCTestCase {
             throw XCTSkip("设 ZXART_REVIEW_DIR 才出审图样张")
         }
         let groups: [(String, ZXArt.PoetryScene, [ZXArt.SceneMotif])] = [
-            ("小桥流水人家", .waterTown, [.bridge, .stream, .house, .willow]),
+            ("小桥流水人家", .waterTown, [.bridge, .stream, .house, .willow, .swallow]),
             ("古道西风瘦马", .autumnTravel, [.path, .traveler, .horse]),
             ("枯藤老树昏鸦", .autumnTravel, [.oldTree, .vine, .crow]),
             ("渔舟", .fishing, [.angler, .reeds]),
@@ -241,6 +241,21 @@ final class ZXArtSceneReviewTests: XCTestCase {
         }
         try write(try contactSheet(images, columns: 4, cell: cell),
                   to: URL(fileURLWithPath: dir).appendingPathComponent("groups.png"))
+    }
+
+    /// The fifteen representative poems contain no swallow: review it explicitly at scene scale.
+    func testSwallowSceneReview() throws {
+        guard let dir = ProcessInfo.processInfo.environment["ZXART_REVIEW_DIR"] else {
+            throw XCTSkip("设 ZXART_REVIEW_DIR 才出审图样张")
+        }
+        let selection = ZXArt.SceneSelection(scene: .waterTown,
+            options: .init(motifs: [.bridge, .stream, .house, .willow, .swallow]), matched: [])
+        for (format, size) in [("portrait", CGSize(width: 750, height: 1000)), ("wide", CGSize(width: 1200, height: 675))] {
+            let recipe = selection.paintingProcedural(seed: "review-swallows", verseSide: "right", columns: 2, chars: 7)
+            let image = try XCTUnwrap(ZXArt.render(procedural: recipe, palette: .paperInk, pixelSize: size))
+            try write(try framedWithVerse(image, procedural: recipe, size: size, palette: .paperInk),
+                      to: URL(fileURLWithPath: dir).appendingPathComponent("swallows-\(format)-light.png"))
+        }
     }
 
     /// 种子谱: 每类场景取四个种子的竖幅浅色, 看同一首诗换种子后构图是否真的变化。
