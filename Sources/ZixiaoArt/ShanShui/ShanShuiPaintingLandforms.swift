@@ -105,6 +105,16 @@ extension ShanShuiEngine {
         return c
     }
 
+    func paintingRootMoss(_ root: P) -> ZXArt.SSCanv {
+        var c: ZXArt.SSCanv = []
+        for k in 0..<(3 + Int(r() * 5)) {
+            let p = root + P(-7 + Double(k) * 2.7, 1 + r() * 1.5)
+            c += slopeStroke([p, p + P(2.5 + r(), -0.4)], width: 1.6, tone: 0.88,
+                pressures: [0.4, 1, 0.9, 0.5, 0.1], dry: 0.25)
+        }
+        return c
+    }
+
     /// Pressure belongs to the long gesture, not to each short polygon edge.
     private func slopeStroke(_ points: [P], width: Double, tone: Double,
                              pressures: [Double], dry: Double = 0.42) -> ZXArt.SSCanv {
