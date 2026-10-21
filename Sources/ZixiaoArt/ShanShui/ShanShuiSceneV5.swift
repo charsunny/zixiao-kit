@@ -1085,13 +1085,15 @@ private final class PaintingStage {
             if chosen.contains(.bridge) { crossing(river: true) }
             if chosen.contains(.house), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
                 let width = bank.width * w * 0.23, height = bank.width * w * 0.10
-                // Stand on the nearest stone of the far reach; its stones need not cover every column.
-                let x = supportedBankX((bank.minX + bank.width * 0.83) * w)
-                if let foot = bankFoot(x - width * 0.3, x + width * 0.3) {
-                    pinned = true
-                    add(.house, CGRect(x: x - width / 2, y: foot - height, width: width, height: height))
-                    pinned = false
+                // Stand on a stone of the far reach. A raised back stone can lift the house into
+                // the verse, so try a few places along the reach before giving up the pairing.
+                pinned = true
+                for fraction in [0.83, 0.89, 0.77, 0.71] {
+                    let x = supportedBankX((bank.minX + bank.width * fraction) * w)
+                    if let foot = bankFoot(x - width * 0.3, x + width * 0.3),
+                       add(.house, CGRect(x: x - width / 2, y: foot - height, width: width, height: height)) { break }
                 }
+                pinned = false
             }
             include(.willow, slot(0.0, 0.20, 0.62, 0.55))
             include(.mooredBoat, slot(0.78, 0.55, 0.20, 0.17, front: true))
