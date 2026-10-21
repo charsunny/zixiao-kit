@@ -698,6 +698,21 @@ private final class PaintingStage {
         let person = engine.paintingPerson(pose: 0, facingLeft: false)
         let horseW = personH * 1.7, personW = personH * 0.75
         guard let foot = bankFoot(x, x + horseW + personW) else { return }
+        // Continue the ancient path along the bearing shelf, so the pair stands on its bend.
+        if let path = elements.first(where: { $0.motif == "path" })?.bounds.cgRect {
+            let entry = ZXArt.P(path.midX * w, path.minY * h + 1)
+            let turn = ZXArt.P(x - personH * 0.3, foot + 1)
+            let end = ZXArt.P(x + horseW + personW + personH * 0.5, foot + 1)
+            let edge = engine.inkCurve([entry, turn, end])
+            let lower = edge.enumerated().map { i, p in
+                ZXArt.P(p.x, p.y + personH * (0.05 + 0.20 * Double(i) / Double(edge.count - 1)))
+            }
+            var road = [engine.poly(edge + lower.reversed(), fil: .white, str: nil)]
+            for start in stride(from: 0, to: lower.count - 3, by: 5) {
+                road += engine.inkLine(Array(lower[start...start + 2]), width: 0.4, tone: 0.25, dry: 0.7)
+            }
+            parts.append(.near(road))
+        }
         pinned = true
         let horsePlaced = add(.horse, CGRect(x: x, y: foot - horseH, width: horseW, height: horseH), source: horse)
         let personPlaced = add(.traveler, CGRect(x: x + horseW + personH * 0.24, y: foot - personH,
