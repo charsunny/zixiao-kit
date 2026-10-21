@@ -210,6 +210,8 @@ final class ZXArtSceneReviewTests: XCTestCase {
             ("山寺", .temple, [.templeGate, .pagoda, .bamboo])
         ]
         let cell = CGSize(width: 400, height: 260)
+        let paper = ZXArt.Palette.paperInk.paper
+        let paperColor = CGColor(red: paper.red, green: paper.green, blue: paper.blue, alpha: 1)
         var images: [CGImage] = []
         for (title, scene, motifs) in groups {
             for seed in 0..<4 {
@@ -217,16 +219,22 @@ final class ZXArtSceneReviewTests: XCTestCase {
                 let recipe = selection.paintingProcedural(seed: "group-\(scene.rawValue)-\(seed)",
                     verseSide: nil, composition: .corner)
                 let size = CGSize(width: 1000, height: 750)
-                let drawing = try XCTUnwrap(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: size))
+                var drawing = try XCTUnwrap(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: size))
+                // One sheet of paper, rather than seven rows of separately textured paper tiles.
+                drawing.paper = nil
                 let image = try XCTUnwrap(ZXArt.render(drawing, pixelWidth: 1000, pixelHeight: 750))
-                let focus = drawing.sceneElements.filter { motifs.map(\.rawValue).contains($0.motif) || $0.motif == "groundBank" }
+                var focus = drawing.sceneElements.filter { motifs.map(\.rawValue).contains($0.motif) }
                     .reduce(CGRect.null) { $0.union($1.bounds.cgRect) }
+                if let bank = drawing.sceneElements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
+                    // Show the local slope down to its foot, without including an unrelated bank across the sheet.
+                    focus.size.height = max(focus.maxY, bank.maxY) - focus.minY
+                }
                 let crop = CGRect(x: focus.minX * size.width, y: focus.minY * size.height,
                                   width: focus.width * size.width, height: focus.height * size.height)
-                    .insetBy(dx: -16, dy: -16).intersection(CGRect(origin: .zero, size: size))
+                    .insetBy(dx: -24, dy: -24).intersection(CGRect(origin: .zero, size: size))
                 let detail = try XCTUnwrap(image.cropping(to: crop.integral))
                 let ctx = try bitmap(cell)
-                ctx.setFillColor(CGColor(red: 0.953, green: 0.937, blue: 0.898, alpha: 1))
+                ctx.setFillColor(paperColor)
                 ctx.fill(CGRect(origin: .zero, size: cell))
                 let scale = min((cell.width - 12) / Double(detail.width), (cell.height - 34) / Double(detail.height))
                 let width = Double(detail.width) * scale, height = Double(detail.height) * scale
@@ -239,7 +247,7 @@ final class ZXArtSceneReviewTests: XCTestCase {
                 images.append(try XCTUnwrap(ctx.makeImage()))
             }
         }
-        try write(try contactSheet(images, columns: 4, cell: cell),
+        try write(try contactSheet(images, columns: 4, cell: cell, background: paperColor),
                   to: URL(fileURLWithPath: dir).appendingPathComponent("groups.png"))
     }
 
@@ -295,11 +303,11 @@ final class ZXArtSceneReviewTests: XCTestCase {
         return try XCTUnwrap(ctx.makeImage())
     }
 
-    private func contactSheet(_ images: [CGImage], columns: Int, cell: CGSize) throws -> CGImage {
+    private func contactSheet(_ images: [CGImage], columns: Int, cell: CGSize, background: CGColor? = nil) throws -> CGImage {
         let rows = (images.count + columns - 1) / columns
         let size = CGSize(width: cell.width * Double(columns), height: cell.height * Double(rows))
         let ctx = try bitmap(size)
-        ctx.setFillColor(CGColor(gray: 1, alpha: 1))
+        ctx.setFillColor(background ?? CGColor(gray: 1, alpha: 1))
         ctx.fill(CGRect(origin: .zero, size: size))
         ctx.interpolationQuality = .high
         for (i, image) in images.enumerated() {
