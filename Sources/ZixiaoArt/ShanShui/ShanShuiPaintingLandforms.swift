@@ -108,8 +108,13 @@ extension ShanShuiEngine {
     /// Pressure belongs to the long gesture, not to each short polygon edge.
     private func slopeStroke(_ points: [P], width: Double, tone: Double,
                              pressures: [Double], dry: Double = 0.42) -> ZXArt.SSCanv {
-        let path = points.enumerated().map { index, p -> SIMD3<Double> in
-            let t = Double(index) / Double(max(1, points.count - 1)) * Double(pressures.count - 1)
+        // Even a two-point moss dab needs an interior loaded section between its lifted ends.
+        let samples = zip(points, points.dropFirst()).flatMap { a, b -> [P] in
+            let steps = max(4, Int(hypot(b.x - a.x, b.y - a.y) / 2))
+            return (0..<steps).map { a + (b - a) * (Double($0) / Double(steps)) }
+        } + [points.last!]
+        let path = samples.enumerated().map { index, p -> SIMD3<Double> in
+            let t = Double(index) / Double(max(1, samples.count - 1)) * Double(pressures.count - 1)
             let i = min(pressures.count - 2, Int(t)), f = t - Double(i)
             return SIMD3(p.x, p.y, pressures[i] * (1 - f) + pressures[i + 1] * f)
         }
