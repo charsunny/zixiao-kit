@@ -1488,7 +1488,7 @@ private final class PaintingStage {
                 y: band.minY + band.height * [0.02, 0.15, 0.06, 0.23][layoutVariant],
                 width: band.width * [0.64, 0.52, 0.70, 0.58][layoutVariant],
                 height: band.height * [0.76, 0.64, 0.80, 0.58][layoutVariant])
-            if layoutVariant == 1 || layoutVariant == 2 {
+            if layoutVariant != 0 {
                 // A distant court occupies the middle of the open column. Its smaller willow
                 // rises with the wall, instead of becoming another miniature at the page foot.
                 wallBox = CGRect(x: art.minX, y: art.minY + art.height * 0.44,
