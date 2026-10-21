@@ -453,7 +453,7 @@ private final class PaintingStage {
                 maxHeight = min(maxHeight, main.bounds.cgRect.height * h * (lead ? 0.55 : 0.28))
             }
         case .traveler, .horse:
-            let treeHeight = elements.first(where: { ["oldTree", "bareTree", "willow", "blossom", "layeredTree"].contains($0.motif) })?.bounds.cgRect.height
+            let treeHeight = elements.filter { ["oldTree", "bareTree", "willow", "blossom", "layeredTree"].contains($0.motif) }.map { $0.bounds.cgRect.height }.min()
             let personHeight = min(art.width * 0.14, treeHeight.map { $0 * h / 5 } ?? art.width * 0.10)
             maxHeight = min(maxHeight, personHeight * (motif == .horse ? 1.18 : 1))
         case .bamboo:
@@ -659,7 +659,7 @@ private final class PaintingStage {
             let box: CGRect
             if !main, structure == .deep || structure == .level {
                 // Keep both ranges above the far bank, higher/paler first, then lower/darker.
-                box = slot(x, 0.015 + Double(k) * 0.07, width, 0.15)
+                box = slot(x, 0.015 + Double(k) * 0.14 / Double(ranges), width, 0.15)
             } else if structure == .deep {
                 box = slot(0.40 - Double(k) * 0.17, 0.02 + Double(k) * 0.19,
                            0.54 + Double(k) * 0.10, 0.30)
@@ -823,12 +823,22 @@ private final class PaintingStage {
             source: engine.paintingBird(swallow: false, count: 2 + Int(engine.r() * 2)))
     }
 
+    private func journeyPersonHeight() -> Double {
+        guard let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect else { return art.width * 0.08 }
+        let tree = elements.first(where: { ["oldTree", "bareTree"].contains($0.motif) })?.bounds.cgRect.height
+        let treeHeight = (tree ?? 0.16) * h
+        var height = min(bank.width * w * 0.078, treeHeight * 0.20)
+        if let bridge = elements.first(where: { $0.motif == "bridge" })?.bounds.cgRect {
+            height = max(treeHeight / 7.7, min(height, bridge.width * w / 4.8))
+        }
+        return height
+    }
+
     /// A shared scale and a rein connect the traveler and horse; their feet follow the same road.
     private func journey() {
         guard let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect else { return }
         let b = CGRect(x: bank.minX * w, y: bank.minY * h, width: bank.width * w, height: bank.height * h)
-        let treeHeight = elements.first(where: { ["oldTree", "bareTree"].contains($0.motif) })?.bounds.cgRect.height
-        let personH = min(b.width * 0.078, treeHeight.map { $0 * h * 0.20 } ?? art.height * 0.14)
+        let personH = journeyPersonHeight()
         let horseH = personH * 1.18
         let x = b.minX + b.width * 0.65
         let pose = Int(engine.r() * 2) // Keep the accepted standing/walking drawing and shared scale.
@@ -901,7 +911,7 @@ private final class PaintingStage {
         let waterTop = bandTop == nil ? art.minY : verse.maxY + 4
         // The stream comes out of a gap between the stones (水口); it never climbs over the crest.
         let startY = max(b.minY + b.height * 0.18, waterTop)
-        let box = CGRect(x: b.minX + b.width * (river ? 0.36 : 0.025), y: startY,
+        let box = CGRect(x: b.minX + b.width * (river ? [0.20, 0.38, 0.28, 0.46][layoutVariant] : 0.025), y: startY,
                          width: width, height: min(b.maxY - startY + b.height * 0.12, footer - startY - 2))
         let phase = waterEngine.r() * 1.6 - 0.8
         let channel = PaintingWaterChannel(width: width, height: box.height, phase: phase, broad: true)
@@ -1093,9 +1103,8 @@ private final class PaintingStage {
               let light = elements.first(where: { ["moon", "crescent", "sunrise", "sunset"].contains($0.motif) })?.bounds.cgRect else { return }
         let x = light.midX * w - foreground.width * 0.07, width = foreground.width * 0.14
         var top = foreground.minY + foreground.height * 0.26
-        if let bank = elements.first(where: { $0.motif == "nearBank" })?.bounds.cgRect,
-           x < bank.maxX * w, x + width > bank.minX * w {
-            top = max(top, bank.maxY * h + 1)
+        for bank in elements.filter({ ["nearBank", "groundBank"].contains($0.motif) }).map({ $0.bounds.cgRect }) {
+            if x < bank.maxX * w, x + width > bank.minX * w { top = max(top, bank.maxY * h + 1) }
         }
         let height = min(foreground.height * 0.60, foreground.maxY - top)
         guard height >= 6 else { return }
@@ -1246,7 +1255,10 @@ private final class PaintingStage {
             if chosen.contains(.hut) { placeAtFoot(.hut, along: 0.72, height: 0.10, aspect: 1.7) }
             include(.stream, mountainStreamSlot())
         case .fishing:
-            if chosen.contains(.angler) { add(.angler, slot(0.39, 0.58, 0.55, 0.14)) }
+            if chosen.contains(.angler) {
+                add(.angler, slot([0.08, 0.40, 0.18, 0.32][layoutVariant],
+                    [0.48, 0.61, 0.36, 0.55][layoutVariant], [0.82, 0.58, 0.72, 0.64][layoutVariant], 0.20))
+            }
             else if chosen.contains(.sail) { add(.sail, slot(0.16, 0.47, 0.7, 0.29)) }
             else { include(.boat, slot(0.14, 0.62, 0.75, 0.15)) }
             // Reeds grow at the water's edge of the near bank, not floating below it.
@@ -1315,7 +1327,8 @@ private final class PaintingStage {
             include(.layeredTree, slot(0.65, 0.34, 0.32, 0.47))
             include(.path, slot(0.2, 0.02, 0.48, 0.9, front: true))
         case .lotusPond:
-            include(.lotus, slot(0.0, 0.05, 0.56, 0.90, front: true))
+            include(.lotus, slot([0.0, 0.38, 0.14, 0.30][layoutVariant], 0.05,
+                [0.58, 0.60, 0.72, 0.64][layoutVariant], 0.90, front: true))
             include(.willow, slot(0.61, 0.03, 0.37, 0.59))
             if chosen.contains(.stream), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
                 // A spring entering a pond opens into shallow ripples at the bank, not a
@@ -1344,15 +1357,22 @@ private final class PaintingStage {
             }
             if chosen.contains(.crow) { treeCrows() }
             if chosen.contains(.house), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
-                let tree = elements.first(where: { $0.motif == "oldTree" })?.bounds.cgRect
-                let personH = min(bank.width * w * 0.078, (tree?.height ?? 0.16) * h * 0.20)
-                let height = personH * 2.3, width = height * 1.8
+                let personH = journeyPersonHeight()
+                let raw = engine.paintingHouse()
+                let points = raw.flatMap(\.p)
+                let front = raw[1].p
+                let eaveHeight = front.map(\.y).max()! - front.map(\.y).min()!
+                let scale = personH * 1.5 / eaveHeight
+                let height = (points.map(\.y).max()! - points.map(\.y).min()!) * scale
+                let width = (points.map(\.x).max()! - points.map(\.x).min()!) * scale
                 let bridge = elements.first(where: { $0.motif == "bridge" })?.bounds.cgRect
-                let desired = min((bank.minX + bank.width * 0.48) * w,
-                    (bridge?.maxX ?? (bank.minX + bank.width * 0.26)) * w + width * 0.58)
+                let leftReach = [0.61, 0.43, 0.54, 0.48][layoutVariant]
+                let limit = (bank.minX + bank.width * leftReach) * w - width * 0.52
+                let desired = max(bank.minX * w + width * 0.52, min(limit,
+                    (bridge?.maxX ?? (bank.minX + bank.width * 0.26)) * w + width * 0.58))
                 if let foot = bankFoot(desired - width * 0.36, desired + width * 0.36) {
                     pinned = true
-                    add(.house, CGRect(x: desired - width / 2, y: foot - height, width: width, height: height))
+                    add(.house, CGRect(x: desired - width / 2, y: foot - height, width: width, height: height), source: raw)
                     pinned = false
                 }
             }
@@ -1389,13 +1409,15 @@ private final class PaintingStage {
             // The wall stands on the ground beneath the verse; the willow grows behind it, its trunk
             // hidden by the wall, its crown heaped above into the open column (杨柳堆烟).
             let band = lowerBand(columnFrom: 0.45)
-            let wallBox = CGRect(x: band.minX, y: band.minY + band.height * 0.10, width: band.width * 0.94,
-                                 height: band.height * 0.86)
+            let wallBox = CGRect(x: band.minX + band.width * [0.0, 0.12, 0.26, 0.05][layoutVariant],
+                y: band.minY + band.height * [0.02, 0.15, 0.06, 0.23][layoutVariant],
+                width: band.width * [0.94, 0.76, 0.68, 0.86][layoutVariant],
+                height: band.height * [0.90, 0.72, 0.86, 0.60][layoutVariant])
             if let wall = fitted(engine.paintingCourtyard(), to: wallBox) {
                 // Root the willow just behind the wall's near end, so the wall hides its trunk.
-                let willowW = art.width * 0.62
+                let willowW = art.width * [0.62, 0.78, 0.86, 0.56][layoutVariant]
                 let rootY = wall.bounds.minY + wall.bounds.height * 0.67
-                let x = min(max(art.minX, wall.bounds.minX + wall.bounds.width * 0.18 - willowW / 2), art.maxX - willowW)
+                let x = min(max(art.minX, wall.bounds.minX + wall.bounds.width * [0.18, 0.62, 0.34, 0.77][layoutVariant] - willowW / 2), art.maxX - willowW)
                 // Its root is behind the wall: size the whole tree from that ground plane,
                 // so the normal small near-tree multiplier does not hide the crown as well.
                 pinned = true
@@ -1460,20 +1482,20 @@ private final class PaintingStage {
                     width: full.width, height: full.height * 0.16), motif: "stream")
                 placed.insert(.stream)
             }
-            if let near = fitted(engine.paintingDunes(), to: CGRect(x: full.minX, y: horizon + full.height * 0.28,
-                width: full.width, height: full.maxY - (horizon + full.height * 0.28))) {
+            if let near = fitted(engine.paintingDunes(), to: CGRect(x: full.minX + full.width * [0.0, 0.22, 0.08, 0.0][layoutVariant], y: horizon + full.height * 0.28,
+                width: full.width * [1.0, 0.72, 0.90, 0.78][layoutVariant], height: full.maxY - (horizon + full.height * 0.28))) {
                 parts.append(.near(near.canv))
                 elements.append(.init(motif: Motif.dunes.rawValue, bounds: .init(x: near.bounds.minX / w,
                     y: near.bounds.minY / h, width: near.bounds.width / w, height: near.bounds.height / h)))
             }
             placed.insert(.dunes)
             let sunSize = min(w, h) * 0.085
-            let sunX = verse.isNull || verse.minX > w / 2 ? art.minX + art.width * 0.55 : art.maxX - art.width * 0.55
+            let sunX = art.minX + art.width * [0.75, 0.20, 0.60, 0.35][layoutVariant]
             if chosen.contains(.sunset) {
                 add(.sunset, CGRect(x: sunX - sunSize / 2, y: horizon - sunSize * 1.05, width: sunSize, height: sunSize))
             }
             if chosen.contains(.beaconSmoke) {
-                let smokeX = verse.isNull || verse.minX > w / 2 ? art.minX + art.width * 0.15 : art.maxX - art.width * 0.15
+                let smokeX = art.minX + art.width * [0.12, 0.75, 0.15, 0.82][layoutVariant]
                 let smokeTop = max(art.minY, horizon - h * 0.32)
                 add(.beaconSmoke, CGRect(x: smokeX - w * 0.04, y: smokeTop, width: w * 0.08, height: horizon - smokeTop))
             }
@@ -1505,7 +1527,7 @@ private final class PaintingStage {
                 width: near.width / w, height: near.height / h)))
             placed.insert(.waves)
             if chosen.contains(.reef) {
-                let reefBox = CGRect(x: verse.isNull || verse.minX > w / 2 ? near.maxX - near.width * 0.30 : near.minX,
+                let reefBox = CGRect(x: near.minX + near.width * [0.70, 0.03, 0.50, 0.26][layoutVariant],
                                      y: near.minY + near.height * 0.45, width: near.width * 0.30, height: near.height * 0.55)
                 if let rock = fitted(engine.paintingRock(width: 120, height: 55, tone: 1.3), to: reefBox) {
                     parts.append(.near(rock.canv)); placed.insert(.reef)
@@ -1541,7 +1563,10 @@ private final class PaintingStage {
                 } else { add(motif, slot(0.48, 0.32, 0.04, 0.03)) }
             case .crow, .swallow, .dragonfly: add(motif, slot(0.30, 0.18, 0.07, 0.04))
             case .waterfall: mountainWaterfall()
-            case .stream: add(motif, slot(0.60, 0.02, 0.22, 0.88, front: true))
+            case .stream:
+                if currentScene == .fishing, let river = elements.first(where: { $0.motif == "riverWater" }) {
+                    elements.append(.init(motif: "stream", bounds: river.bounds)); placed.insert(.stream)
+                } else { add(motif, slot(0.60, 0.02, 0.22, 0.88, front: true)) }
             case .mist, .afterRain: add(motif, slot(0.02, 0.42, 0.96, 0.10))
             case .rain: add(motif, slot(0.04, 0.10, 0.90, 0.55))
             case .vine: continue // only ever hangs from a tree crown

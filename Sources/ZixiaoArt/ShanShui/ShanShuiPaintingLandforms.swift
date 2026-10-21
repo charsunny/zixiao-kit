@@ -418,7 +418,12 @@ extension ShanShuiEngine {
                     width: 2.0, tone: 0.72 + r() * 0.13, profile: .lens)
             }
         }
-        return c
+        // Long fibres have many collinear brush samples. Preserve their visible outline within
+        // 0.16 asset units (well below a screen pixel), while keeping the bearing silhouette exact.
+        return c.enumerated().map { index, polygon in
+            guard index > 0 else { return polygon }
+            var p = polygon; p.p = inkSimplified(p.p, tolerance: 0.16); return p
+        }
     }
 
     /// A path appears by reserved paper between broken banks, opening toward the viewer.

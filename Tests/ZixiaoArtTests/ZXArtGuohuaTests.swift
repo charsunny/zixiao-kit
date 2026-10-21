@@ -77,7 +77,7 @@ struct ZXArtGuohuaTests {
                             #expect(!r.intersects(building.bounds.cgRect), "\(scene) \(size) seed=\(index) person=\(r) \(building.motif)=\(building.bounds.cgRect)")
                         }
                         if let tree = drawing.sceneElements.first(where: { ["willow", "bareTree"].contains($0.motif) }) {
-                            #expect(r.height < tree.bounds.cgRect.height * 0.25)
+                            #expect(r.height < tree.bounds.cgRect.height * 0.25, "\(scene) \(size) seed=\(index): \(person.motif)=\(r) tree=\(tree.bounds.cgRect)")
                         }
                     }
                     if [ZXArt.PoetryScene.autumnTravel, .waterTown, .village, .spring].contains(scene) {
@@ -209,7 +209,7 @@ struct ZXArtGuohuaTests {
                         let d = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: size))
                         let shore = try #require(d.sceneElements.first { $0.motif == "farShore" }).bounds.cgRect
                         let ranges = d.sceneElements.filter { $0.motif == "farMountain" }.map { $0.bounds.cgRect }
-                        #expect(ranges.count == 2)
+                        #expect((2...3).contains(ranges.count))
                         #expect(ranges.allSatisfy { $0.maxY <= shore.minY })
                         #expect(ranges[0].maxY < ranges[1].maxY)
                     }

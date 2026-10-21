@@ -46,7 +46,7 @@ extension ShanShuiEngine {
 
     /// Error-bounded simplification in asset units (subpixel after placement).
     /// Pressure extrema and broken-hair endpoints survive; oversampled straight runs do not.
-    private func inkSimplified(_ points: [P], tolerance: Double = 0.08) -> [P] {
+    func inkSimplified(_ points: [P], tolerance: Double = 0.08) -> [P] {
         guard points.count > 3 else { return points }
         var keep = Set([0, points.count - 1]), work = [(0, points.count - 1)]
         while let (lo, hi) = work.popLast() {
