@@ -1,11 +1,21 @@
 // Outlined Chinese river craft for shanshui@5. The first polygon always describes the hull.
 import Foundation
 
+struct PaintingBoatForm: Hashable {
+    let hull: Int
+    let covered: Bool
+}
+
 extension ShanShuiEngine {
+    func paintingBoatForm(_ kind: ZXArt.SceneMotif) -> PaintingBoatForm {
+        let hull = Int(r() * 65_536) % 3
+        return .init(hull: hull, covered: kind == .mooredBoat ? r() < 0.5 : hull != 0)
+    }
+
     func paintingBoat(_ kind: ZXArt.SceneMotif, mooring: Bool = true) -> ZXArt.SSCanv {
-        let form = Int(r() * 65_536) % 3
+        let specification = paintingBoatForm(kind), form = specification.hull
         let w = [116.0, 146, 172][form], depth = [9.0, 13, 11][form]
-        let covered = kind == .mooredBoat ? r() < 0.65 : form != 0
+        let covered = specification.covered
         let rail = inkCurve([P(0, 85), P(w * 0.23, 93), P(w * 0.70, 94), P(w, 82)])
         let bottom = inkCurve([P(w, 82), P(w * 0.82, 96 + depth * 0.45),
                               P(w * 0.30, 95 + depth), P(w * 0.08, 96), P(0, 85)])

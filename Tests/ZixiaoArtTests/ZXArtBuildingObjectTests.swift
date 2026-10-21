@@ -32,6 +32,11 @@ struct ZXArtBuildingObjectTests {
     }
 
     @Test func boatHullsKeepPaperAndTheirAnchorContour() throws {
+        let mooredForms = (0..<6).map { index in
+            ShanShuiEngine(seed: .init("atlas-mooredBoat-\(index)")).paintingBoatForm(.mooredBoat)
+        }
+        #expect(Set(mooredForms).count >= 3)
+        #expect(Set(mooredForms.map(\.covered)) == Set([true, false]), "The atlas must show both open and covered moored boats")
         for motif in [ZXArt.SceneMotif.boat, .mooredBoat, .angler, .sail] {
             for index in 0..<6 {
                 let canv = ShanShuiEngine(seed: .init("atlas-\(motif.rawValue)-\(index)")).paintingAsset(motif)
