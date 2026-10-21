@@ -124,8 +124,8 @@ extension ShanShuiEngine {
         paintingSlope(style)
     }
 
-    func paintingMountain(form: PaintingMountainProfile.Form? = nil, terraced: Bool = false) -> ZXArt.SSCanv {
-        paintingMassif(PaintingMountainProfile(form: form, random: { self.r() }), terraced: terraced)
+    func paintingMountain(form: PaintingMountainProfile.Form? = nil, terraced: Bool = false, aspect: Double? = nil) -> ZXArt.SSCanv {
+        paintingMassif(PaintingMountainProfile(form: form, aspect: aspect, random: { self.r() }), terraced: terraced)
     }
 
     /// Cloud at the foot of a peak (山腰云锁), painted by leaving paper: stacked paper-coloured
@@ -248,7 +248,7 @@ struct PaintingMountainProfile {
 
     /// These are structural studies, not copies of specific paintings: a broad northern
     /// massif, a leaning crag, rounded southern hills, folded terraces and receding ridges.
-    init(form requested: Form? = nil, random: () -> Double) {
+    init(form requested: Form? = nil, aspect: Double? = nil, random: () -> Double) {
         let choice = min(Form.allCases.count - 1, Int(random() * Double(Form.allCases.count)))
         form = requested ?? Form(rawValue: choice)!
         func between(_ lo: Double, _ hi: Double) -> Double { lo + (hi - lo) * random() }
@@ -302,7 +302,8 @@ struct PaintingMountainProfile {
         if random() < 0.5 { knots = knots.reversed().map { .init(1 - $0.x, $0.y) } }
         ridge = knots
         width = between(widths.lowerBound, widths.upperBound)
-        height = between(heights.lowerBound, heights.upperBound)
+        let naturalHeight = between(heights.lowerBound, heights.upperBound)
+        height = aspect.map { width * $0 } ?? naturalHeight
         curvature = between(curves.lowerBound, curves.upperBound)
     }
 

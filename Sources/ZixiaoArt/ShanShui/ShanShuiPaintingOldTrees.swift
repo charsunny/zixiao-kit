@@ -42,16 +42,16 @@ extension ShanShuiEngine {
         }
         func terminals(_ tip: P, side: Double, pale: Double) -> ZXArt.SSCanv {
             var tips: ZXArt.SSCanv = []
-            let count = 3 + Int(r() * 3)
+            let count = 2 + Int(r() * 2)
             for j in 0..<count {
                 let spread = Double(j) / Double(count - 1)
                 let origin = tip
-                let reach = 3 + r() * 3.5 + spread * 2
+                let reach = 2.5 + r() * 2 + spread
                 let end: P
                 let bend: P
                 if form == 0 {
                     bend = origin + P(side * reach * (0.5 + spread * 0.5), -1.5 + spread)
-                    end = bend + P(-side * (0.5 + r() * 1.5), 3 + r() * 4)
+                    end = bend + P(-side * (0.5 + r() * 1.5), 2 + r() * 2)
                 } else {
                     bend = origin + P(side * (spread - 0.15) * reach, -reach * 0.55)
                     end = bend + P(side * (spread - 0.4) * 3, -2 - r() * 3)
@@ -76,7 +76,7 @@ extension ShanShuiEngine {
             var branch = branchStroke(limb, width: (old ? 6.5 : 3.8) * (1 - t * 0.55),
                 tone: foreground ? 0.77 : 0.61)
             perches.append(elbow)
-            let forks = sparse ? 2 : 3
+            let forks = sparse ? 1 : 2
             for j in 0..<forks {
                 let u = 0.40 + Double(j) * 0.23
                 let origin = limb[Int(u * Double(limb.count - 1))]

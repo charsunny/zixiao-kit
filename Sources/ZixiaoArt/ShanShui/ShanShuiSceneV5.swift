@@ -211,8 +211,8 @@ private final class PaintingStage {
 
     private func leadTreeSlot() -> CGRect {
         let xs = [0.0, 0.24, 0.10, 0.02]
-        let widths = [0.90, 0.70, 0.82, 0.96]
-        let heights = [0.82, 0.64, 0.90, 0.72]
+        let widths = [0.98, 0.72, 0.94, 0.86]
+        let heights = [0.94, 0.70, 0.90, 0.82]
         return slot(xs[layoutVariant], 0.06, widths[layoutVariant], heights[layoutVariant])
     }
 
@@ -459,7 +459,7 @@ private final class PaintingStage {
             if currentScene == .retreat, let ground = preparedGround {
                 maxWidth = min(maxWidth, ground.bounds.width * 0.38)
             }
-            maxHeight = min(maxHeight, min(art.height * (mountainScene ? 0.46 : 0.62), art.width * (mountainScene ? 0.95 : 1.05)))
+            maxHeight = min(maxHeight, min(art.height * (mountainScene ? 0.52 : 0.82), art.width * (mountainScene ? 1.05 : 1.75)))
             if let main = elements.first(where: { $0.motif == "mainMountain" }) {
                 // The pine of 明月松间照 is the protagonist of a mountain retreat, not a sapling.
                 let lead = motif == .pine && currentScene == .retreat
@@ -482,7 +482,7 @@ private final class PaintingStage {
         case .pine, .oldTree, .bareTree, .layeredTree, .willow, .blossom, .maple, .bamboo:
             let instance = elements.filter { $0.motif == motif.rawValue }.count
             // Near trees carry the darkest ink and lead the eye; keep them within 70–100% of the cap.
-            let scale = 0.4 + 0.6 * PaintingTreeScale.multiplier(seed: seed, motif: motif, instance: instance)
+            let scale = 0.72 + 0.28 * PaintingTreeScale.multiplier(seed: seed, motif: motif, instance: instance)
             maxWidth *= scale
             maxHeight *= scale
         default: break
@@ -685,7 +685,7 @@ private final class PaintingStage {
                 box = slot(0.40 - Double(k) * 0.17, 0.02 + Double(k) * 0.19,
                            0.54 + Double(k) * 0.10, 0.30)
             } else if structure == .corner {
-                box = slot(side ? 0.48 : 0.02, 0.26, 0.48, 0.12)
+                box = slot(side ? 0.28 : 0.02, 0.035 + Double(layoutVariant) * 0.025, 0.70, 0.15)
             } else { box = slot(x, 0.06 + Double(k) * 0.10, width, 0.24) }
             if let object = fitted(raw, to: box) {
                 // Crest stays legible; the body dissolves downward into mist.
@@ -697,7 +697,7 @@ private final class PaintingStage {
                     width: r.width / w, height: r.height / h)))
             }
         }
-        var peakBox = slot(0.02, 0.01, 0.95, 0.75)
+        var peakBox = slot(0.01, 0.01, 0.98, 0.88)
         if let ground = preparedGround {
             let foot = ground.bounds.minY + ground.bounds.height * 0.58
             peakBox = CGRect(x: peakBox.minX, y: peakBox.minY, width: peakBox.width,
@@ -712,7 +712,7 @@ private final class PaintingStage {
                 parts.append(.init(canv: engine.paintingInk(guest.canv, depth: .middle),
                     fade: .init(top: r.minY + r.height * 0.55, bottom: r.maxY, seed: engine.inkSeed())))
             }
-            peakBox.size.width *= 0.94
+            peakBox.size.width *= 0.98
         }
         if currentScene == .historic {
             // Reserve headroom for the summit figure inside the painting area, including the
@@ -721,7 +721,12 @@ private final class PaintingStage {
             peakBox.origin.y += headroom
             peakBox.size.height -= headroom
         }
-        if main, let object = fitted(engine.paintingMountain(form: [PaintingMountainProfile.Form.folded, .clustered, .folded, .clustered][layoutVariant], terraced: currentScene == .historic), to: peakBox) {
+        // Choose the mountain's proportions before drawing its ribs and texture. Uniform fitting
+        // of a broad atlas mountain was shrinking every portrait peak into the lower third.
+        let forms: [PaintingMountainProfile.Form] = [.monumental, .leaning, .folded, .clustered]
+        let aspect = h > w ? [1.60, 1.42, 1.60, 1.52][layoutVariant] : [1.15, 0.92, 1.30, 1.05][layoutVariant]
+        if main, let object = fitted(engine.paintingMountain(form: forms[layoutVariant], terraced: currentScene == .historic,
+            aspect: aspect), to: peakBox) {
             // 山腰云锁: the lower third of the main peak dissolves into cloud instead of
             // standing on the bank like a monument.
             let r = object.bounds
@@ -1166,10 +1171,19 @@ private final class PaintingStage {
                 // Fit each bank uniformly; stretching one paper silhouette made a pale platform.
                 var canvas: ZXArt.SSCanv = []
                 var bounds = CGRect.null
+                let split = scene == .waterTown || scene == .autumnTravel || selectedMotifs.contains(.bridge)
+                // A low overlapping reach joins the feet. Water scenes retain their real opening.
+                if !split {
+                    let joining = CGRect(x: box.minX, y: box.minY + box.height * 0.60,
+                        width: box.width, height: box.height * 0.40)
+                    if let earth = fitted(engine.paintingBank(style: .shoal), to: joining) {
+                        canvas += earth.canv; bounds = bounds.union(earth.bounds)
+                    }
+                }
                 for side in 0..<2 {
                     let leftWidth = [0.61, 0.43, 0.54, 0.48][layoutVariant]
-                    let rightWidth = [0.28, 0.47, 0.36, 0.43][layoutVariant]
-                    let depth = [0.12, 0.38, 0.06, 0.27][layoutVariant]
+                    let rightWidth = split ? [0.28, 0.47, 0.36, 0.43][layoutVariant] : [0.46, 0.55, 0.38, 0.50][layoutVariant]
+                    let depth = split ? [0.12, 0.38, 0.06, 0.27][layoutVariant] : [0.48, 0.18, 0.60, 0.35][layoutVariant]
                     let reach = CGRect(x: side == 0 ? box.minX : box.maxX - box.width * rightWidth,
                         y: box.minY + box.height * (side == 0 ? 0 : depth),
                         width: box.width * (side == 0 ? leftWidth : rightWidth),
@@ -1212,7 +1226,7 @@ private final class PaintingStage {
             // In the band beneath the verse the near ground dissolves downward into mist and water,
             // instead of ending in a hard edge like an island floating on the paper.
             let b = object.bounds
-            let canvas = scene == .historic ? engine.paintingInk(object.canv, depth: .far) : object.canv
+            let canvas = engine.paintingInk(object.canv, depth: scene == .historic ? .far : .near)
             parts.append(groundInBand
                 ? .init(canv: canvas, near: true, fade: .init(top: b.minY + b.height * 0.60,
                         bottom: b.maxY + b.height * 0.08, seed: engine.inkSeed()))
@@ -1308,11 +1322,11 @@ private final class PaintingStage {
                 pinned = false
             }
             include(.pavilion, slot(0.62, 0.54, 0.32, 0.25))
-            include(.willow, slot(0.0, 0.20, 0.62, 0.55))
+            include(.willow, leadTreeSlot())
             include(.mooredBoat, slot(0.78, 0.55, 0.20, 0.17, front: true))
         case .farewell:
             include(.pavilion, slot(0.33, 0.60, 0.29, 0.16))
-            include(.willow, slot(0.01, 0.13, 0.70, 0.64))
+            include(.willow, leadTreeSlot())
             if chosen.contains(.traveler), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
                 let size = min(art.width * 0.043, (elements.first { $0.motif == "willow" }?.bounds.cgRect.height ?? 1) * h * 0.22)
                 for fraction in [0.68, 0.74] {
@@ -1327,7 +1341,7 @@ private final class PaintingStage {
             include(.path, slot(0.05, 0, 0.28, 0.8, front: true))
             include(.mooredBoat, slot(0.77, 0.55, 0.22, 0.17, front: true))
         case .village:
-            add(chosen.contains(.pine) ? .pine : .layeredTree, slot(0.01, 0.20, 0.46, 0.53))
+            add(chosen.contains(.pine) ? .pine : .layeredTree, leadTreeSlot())
             include(chosen.contains(.hut) ? .hut : .house, slot(0.39, 0.56, 0.44, 0.18))
             // One complete dwelling: variable bay counts already supply the village scale.
             // A second independently grounded house could interleave its roof with the first.
@@ -1387,7 +1401,7 @@ private final class PaintingStage {
                 let points = raw.flatMap(\.p)
                 let front = raw[1].p
                 let eaveHeight = front.map(\.y).max()! - front.map(\.y).min()!
-                let scale = personH * 1.5 / eaveHeight
+                let scale = personH * 1.05 / eaveHeight
                 let height = (points.map(\.y).max()! - points.map(\.y).min()!) * scale
                 let width = (points.map(\.x).max()! - points.map(\.x).min()!) * scale
                 let bridge = elements.first(where: { $0.motif == "bridge" })?.bounds.cgRect
