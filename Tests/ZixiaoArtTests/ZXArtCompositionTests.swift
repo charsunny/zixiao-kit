@@ -12,7 +12,7 @@ struct ZXArtCompositionTests {
                     verseSide: "right", columns: 2, chars: 7), palette: .paperInk,
                     pixelSize: .init(width: 750, height: 1000)))
                 let landscape = d.sceneElements.filter {
-                    ["mainMountain", "farMountain", "farShore", "oldTree", "willow", "pine", "blossom", "layeredTree"].contains($0.motif)
+                    ["mainMountain", "guestMountain", "farMountain", "farShore", "oldTree", "willow", "pine", "blossom", "layeredTree"].contains($0.motif)
                 }
                 #expect(landscape.contains { $0.bounds.cgRect.minY <= 0.35 }, "\(seed): landscape must rise into upper left")
                 if selection.scene == .retreat || selection.scene == .temple {
@@ -28,8 +28,9 @@ struct ZXArtCompositionTests {
         for size in [CGSize(width: 750, height: 1000), CGSize(width: 1200, height: 675)] {
             for scene in [ZXArt.PoetryScene.courtyard, .desert, .ocean] {
                 for index in 0..<4 {
-                    let selection = ZXArt.SceneSelection(scene: scene,
-                        options: .init(motifs: ZXArt.defaultMotifs(for: scene)), matched: [])
+                    let poemID = scene == .courtyard ? "courtyard" : (scene == .desert ? "desert" : "ocean")
+                    let poem = try #require(ZXArtSceneReviewTests.poems.first { $0.id == poemID })
+                    let selection = ZXArt.poetryScene(text: poem.text, title: poem.title)
                     let d = try #require(ZXArt.drawing(procedural: selection.paintingProcedural(seed: "composition-\(index)"),
                         palette: .paperInk, pixelSize: size))
                     func box(_ name: String) throws -> CGRect {
@@ -50,6 +51,7 @@ struct ZXArtCompositionTests {
                         let moon = try box("moon"), reflection = try box("moonReflection"), reef = try box("reef")
                         #expect(moon.width > 0.12)
                         #expect(reflection.height > 0.20)
+                        #expect(moon.maxY < reflection.minY)
                         #expect(reef.width > 0.13)
                     default: break
                     }

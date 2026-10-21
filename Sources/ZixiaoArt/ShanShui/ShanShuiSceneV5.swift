@@ -212,8 +212,8 @@ private final class PaintingStage {
     }
 
     private func leadTreeSlot() -> CGRect {
-        let xs = [0.0, 0.24, 0.10, 0.02]
-        let widths = [0.98, 0.72, 0.94, 0.86]
+        let xs = [0.0, 0.40, 0.02, 0.02]
+        let widths = [0.98, 0.56, 0.80, 0.94]
         let heights = [0.94, 0.70, 0.90, 0.82]
         return slot(xs[layoutVariant], 0.06, widths[layoutVariant], heights[layoutVariant])
     }
@@ -691,7 +691,7 @@ private final class PaintingStage {
                 box = slot(0.40 - Double(k) * 0.17, 0.02 + Double(k) * 0.19,
                            0.54 + Double(k) * 0.10, 0.30)
             } else if structure == .corner {
-                box = slot(side ? 0.28 : 0.02, 0.035 + Double(layoutVariant) * 0.025, 0.70, 0.15)
+                box = slot(side ? 0.28 : 0.02, 0.0, 0.70, 0.08)
             } else { box = slot(x, 0.06 + Double(k) * 0.10, width, 0.24) }
             if let object = fitted(raw, to: box) {
                 // Crest stays legible; the body dissolves downward into mist.
@@ -716,6 +716,8 @@ private final class PaintingStage {
                 width: peakBox.width * (deep ? 0.65 : 0.51), height: peakBox.height * (deep ? 0.68 : 0.62))
             if let guest = fitted(engine.paintingMountain(form: .folded, aspect: deep ? 1.55 : nil), to: guestBox) {
                 let r = guest.bounds
+                elements.append(.init(motif: "guestMountain", bounds: .init(x: r.minX / w, y: r.minY / h,
+                    width: r.width / w, height: r.height / h)))
                 if let outline = guest.canv.first { mountainRidges.append(Array(outline.p.dropLast(2))) }
                 parts.append(.init(canv: engine.paintingInk(guest.canv, depth: .middle),
                     fade: .init(top: r.minY + r.height * 0.55, bottom: r.maxY, seed: engine.inkSeed())))
@@ -852,7 +854,7 @@ private final class PaintingStage {
             }
             parts.append(.near(bird))
         }
-        add(.crow, CGRect(x: max(1, b.minX - b.width * 0.2), y: b.minY - b.height * 0.12,
+        add(.crow, CGRect(x: max(1, b.minX - b.width * 0.2), y: max(contentTop, b.minY - b.height * 0.12),
             width: min(b.width * 0.5, min(w, h) * 0.11), height: min(b.height * 0.06, min(w, h) * 0.035)),
             source: engine.paintingBird(swallow: false, count: 2 + Int(engine.r() * 2)))
     }
@@ -1410,7 +1412,7 @@ private final class PaintingStage {
             if chosen.contains(.crow) { treeCrows() }
             if chosen.contains(.house), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
                 let personH = journeyPersonHeight()
-                let raw = engine.paintingHouse()
+                let raw = engine.paintingHouse(maxBays: 2)
                 let points = raw.flatMap(\.p)
                 let front = raw[1].p
                 let eaveHeight = front.map(\.y).max()! - front.map(\.y).min()!
@@ -1494,7 +1496,8 @@ private final class PaintingStage {
                 // A roof inside the court, partially hidden by the wall and willow, gives the
                 // gate somewhere to lead. Use the accepted dwelling drawing at a distant scale.
                 let rearWidth = min(art.width * 0.40, wall.bounds.width * 0.44)
-                let rear = CGRect(x: wall.bounds.minX + wall.bounds.width * [0.48, 0.08, 0.46, 0.12][layoutVariant],
+                let rearX = wall.bounds.minX + wall.bounds.width * [0.48, 0.08, 0.46, 0.12][layoutVariant]
+                let rear = CGRect(x: min(art.maxX - rearWidth, max(art.minX, rearX)),
                     y: wall.bounds.minY + wall.bounds.height * 0.30 - rearWidth * 0.7,
                     width: rearWidth, height: rearWidth * 0.7)
                 if let roof = fitted(engine.paintingHouse(), to: rear) {
@@ -1678,10 +1681,10 @@ private final class PaintingStage {
         }
         placed.insert(.dunes)
         if chosen.contains(.stream) {
-            let width = art.width * [0.52, 0.64, 0.46, 0.58][layoutVariant]
-            let river = waterEngine.paintingChannel(width: width, height: footer - horizon,
-                river: true, phase: [0.2, 2.4, 4.1, 5.2][layoutVariant]).map { poly in
-                var p = poly; p.p = p.p.map { .init($0.x + art.minX + art.width * 0.20, $0.y + horizon) }; return p
+            let channel = PaintingWaterChannel(width: art.width * 0.96, height: footer - horizon,
+                phase: [0.2, 2.4, 4.1, 5.2][layoutVariant], broad: true, bend: 0.32, opening: 0.45)
+            let river = waterEngine.paintingChannel(channel).map { poly in
+                var p = poly; p.p = p.p.map { .init($0.x + art.minX, $0.y + horizon) }; return p
             }
             openPlane(river, top: horizon, motif: "stream")
             placed.insert(.stream)

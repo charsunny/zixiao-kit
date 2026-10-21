@@ -214,7 +214,7 @@ struct ZXArtPaintingSceneTests {
                     #expect(CGRect(x: -0.001, y: -0.001, width: 1.002, height: 1.002).contains(rect))
                     if let verse = recipe.verseLayout(pixelSize: size) { #expect(!verse.rect.intersects(rect)) }
                     if purpose == .recommendation {
-                        #expect(rect.minY >= 0.219)
+                        #expect(rect.minY >= 0.219, "\(composition) \(size) \(element.motif): \(rect)")
                         #expect(rect.maxY <= 0.871)
                     }
                 }
