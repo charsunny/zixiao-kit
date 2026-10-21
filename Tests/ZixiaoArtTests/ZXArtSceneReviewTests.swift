@@ -80,7 +80,7 @@ final class ZXArtSceneReviewTests: XCTestCase {
             }
         }
         let drawing = ZXArt.Drawing(width: cell * 4, height: cell * Double(kinds.count),
-                                    background: ZXArt.Palette.paperInk.paper, layers: [.init(blend: .multiply, shapes: shapes)])
+                                    background: ZXArt.Palette.paperInk.paper, layers: [.init(shapes: shapes)])
         let image = try XCTUnwrap(ZXArt.render(drawing, pixelWidth: 800, pixelHeight: 1200))
         try write(image, to: URL(fileURLWithPath: dir).appendingPathComponent("trees.png"))
     }
@@ -158,7 +158,7 @@ final class ZXArtSceneReviewTests: XCTestCase {
                 }
                 // One scale per row, so the seeds of one element keep their size differences.
                 let scale = min(1.6, boxes.map { min((cell.width - 16) / $0.width, (cell.height - 16) / $0.height) }.min() ?? 1)
-                notes.append(String(format: "%@  ×%.2f", entry.0, scale))
+                notes.append(["rain", "snow"].contains(entry.0) ? "\(entry.0): overlay" : String(format: "%@  ×%.2f", entry.0, scale))
                 for (col, canv) in canvases.enumerated() {
                     let box = boxes[col]
                     let ox = label + Double(col) * cell.width + (cell.width - box.width * scale) / 2
@@ -169,12 +169,12 @@ final class ZXArtSceneReviewTests: XCTestCase {
                         q.wid *= scale
                         return q
                     }
-                    ZXArt.appendShapes(placed, palette: .paperInk, into: &shapes)
+                    ZXArt.appendPaintingShapes(placed, motif: ZXArt.SceneMotif(rawValue: entry.0), palette: .paperInk, into: &shapes)
                 }
             }
             let size = CGSize(width: label + cell.width * Double(columns), height: cell.height * Double(rows.count))
             let drawing = ZXArt.Drawing(width: size.width, height: size.height, background: ZXArt.Palette.paperInk.paper,
-                                        layers: [.init(blend: .multiply, shapes: shapes)])
+                                        layers: [.init(shapes: shapes)])
             let image = try XCTUnwrap(ZXArt.render(drawing, pixelWidth: Int(size.width), pixelHeight: Int(size.height)))
             let ctx = try bitmap(size)
             ctx.draw(image, in: CGRect(origin: .zero, size: size))
@@ -192,6 +192,54 @@ final class ZXArtSceneReviewTests: XCTestCase {
             try write(try XCTUnwrap(ctx.makeImage()),
                       to: out.appendingPathComponent(String(format: "elements-%02d.png", page / perPage + 1)))
         }
+    }
+
+    /// Seven groups rendered by the production stage: the crop changes framing, never proportions.
+    func testGroupReviewSheet() throws {
+        guard let dir = ProcessInfo.processInfo.environment["ZXART_REVIEW_DIR"] else {
+            throw XCTSkip("设 ZXART_REVIEW_DIR 才出审图样张")
+        }
+        let groups: [(String, ZXArt.PoetryScene, [ZXArt.SceneMotif])] = [
+            ("小桥流水人家", .waterTown, [.bridge, .stream, .house, .willow]),
+            ("古道西风瘦马", .autumnTravel, [.path, .traveler, .horse]),
+            ("枯藤老树昏鸦", .autumnTravel, [.oldTree, .vine, .crow]),
+            ("渔舟", .fishing, [.angler, .reeds]),
+            ("山居", .village, [.hut, .fence, .cookingSmoke, .pine]),
+            ("长亭送别", .farewell, [.pavilion, .willow, .traveler, .path]),
+            ("山寺", .temple, [.templeGate, .pagoda, .bamboo])
+        ]
+        let cell = CGSize(width: 400, height: 260)
+        var images: [CGImage] = []
+        for (title, scene, motifs) in groups {
+            for seed in 0..<4 {
+                let selection = ZXArt.SceneSelection(scene: scene, options: .init(motifs: motifs), matched: [])
+                let recipe = selection.paintingProcedural(seed: "group-\(scene.rawValue)-\(seed)",
+                    verseSide: nil, composition: .corner)
+                let size = CGSize(width: 1000, height: 750)
+                let drawing = try XCTUnwrap(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: size))
+                let image = try XCTUnwrap(ZXArt.render(drawing, pixelWidth: 1000, pixelHeight: 750))
+                let focus = drawing.sceneElements.filter { motifs.map(\.rawValue).contains($0.motif) || $0.motif == "groundBank" }
+                    .reduce(CGRect.null) { $0.union($1.bounds.cgRect) }
+                let crop = CGRect(x: focus.minX * size.width, y: focus.minY * size.height,
+                                  width: focus.width * size.width, height: focus.height * size.height)
+                    .insetBy(dx: -16, dy: -16).intersection(CGRect(origin: .zero, size: size))
+                let detail = try XCTUnwrap(image.cropping(to: crop.integral))
+                let ctx = try bitmap(cell)
+                ctx.setFillColor(CGColor(red: 0.953, green: 0.937, blue: 0.898, alpha: 1))
+                ctx.fill(CGRect(origin: .zero, size: cell))
+                let scale = min((cell.width - 12) / Double(detail.width), (cell.height - 34) / Double(detail.height))
+                let width = Double(detail.width) * scale, height = Double(detail.height) * scale
+                ctx.draw(detail, in: CGRect(x: (cell.width - width) / 2, y: 8, width: width, height: height))
+                let label = NSAttributedString(string: "\(title) · \(seed + 1)", attributes: [
+                    NSAttributedString.Key(kCTFontAttributeName as String): CTFontCreateWithName("PingFangSC-Regular" as CFString, 15, nil),
+                    NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 0.3, alpha: 1)])
+                ctx.textPosition = CGPoint(x: 10, y: cell.height - 22)
+                CTLineDraw(CTLineCreateWithAttributedString(label), ctx)
+                images.append(try XCTUnwrap(ctx.makeImage()))
+            }
+        }
+        try write(try contactSheet(images, columns: 4, cell: cell),
+                  to: URL(fileURLWithPath: dir).appendingPathComponent("groups.png"))
     }
 
     /// 种子谱: 每类场景取四个种子的竖幅浅色, 看同一首诗换种子后构图是否真的变化。

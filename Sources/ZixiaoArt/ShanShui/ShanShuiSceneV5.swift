@@ -17,17 +17,8 @@ extension ZXArt {
             var nearSpans: [ShapeSpan] = []
             for (index, part) in stage.parts.enumerated() {
                 var shapes: [Shape] = []
-                ZXArt.appendShapes(part.canv, palette: palette, into: &shapes)
-                if let record = stage.celestialLayers.first(where: { $0.layer == index }) {
-                    for i in shapes.indices {
-                        if record.motif == .sunset || record.motif == .sunrise {
-                            shapes[i].fill = ZXHex(red: 0.67, green: 0.25, blue: 0.20).opacity(palette.isDark ? 0.40 : 0.26)
-                        } else if record.motif == .moon, palette.isDark, let fill = shapes[i].fill {
-                            // On dark paper the moon is the light: a bright disc, a faint halo.
-                            shapes[i].fill = palette.ink.opacity(fill.alpha > 0.9 ? 0.52 : 0.05)
-                        }
-                    }
-                }
+                let motif = stage.celestialLayers.first(where: { $0.layer == index })?.motif
+                ZXArt.appendPaintingShapes(part.canv, motif: motif, palette: palette, into: &shapes)
                 func appendLayer(_ layer: Layer) {
                     guard !layer.shapes.isEmpty else { return }
                     if part.near { nearSpans.append(.init(layer: layers.count, range: 0..<layer.shapes.count)) }
@@ -381,7 +372,7 @@ private final class PaintingStage {
     /// Buildings and trees meet the actual bank silhouette, not independent percentage baselines.
     private func groundedSlot(_ motif: Motif, _ requested: CGRect) -> CGRect {
         if motif == .window, currentScene == .moonNight,
-           let house = elements.first(where: { $0.motif == "house" })?.bounds.cgRect {
+           let house = elements.first(where: { ["house", "hut"].contains($0.motif) })?.bounds.cgRect {
             return CGRect(x: (house.minX + house.width * 0.17) * w,
                 y: (house.minY + house.height * 0.64) * h, width: house.width * w * 0.17, height: house.height * h * 0.22)
         }
@@ -943,10 +934,10 @@ private final class PaintingStage {
             include(.path, slot(0.05, 0, 0.28, 0.8, front: true))
             include(.mooredBoat, slot(0.77, 0.55, 0.22, 0.17, front: true))
         case .village:
-            add(.layeredTree, slot(0.01, 0.20, 0.46, 0.53))
-            include(.house, slot(0.39, 0.56, 0.44, 0.18))
+            add(chosen.contains(.pine) ? .pine : .layeredTree, slot(0.01, 0.20, 0.46, 0.53))
+            include(chosen.contains(.hut) ? .hut : .house, slot(0.39, 0.56, 0.44, 0.18))
             if chosen.contains(.house) { add(.house, slot(0.67, 0.59, 0.30, 0.13), repeatable: true) }
-            if chosen.contains(.cookingSmoke), let house = elements.first(where: { $0.motif == "house" })?.bounds.cgRect {
+            if chosen.contains(.cookingSmoke), let house = elements.first(where: { ["house", "hut"].contains($0.motif) })?.bounds.cgRect {
                 let smokeHeight = house.height * h * 1.8
                 add(.cookingSmoke, CGRect(x: (house.minX + house.width * 0.5) * w,
                     y: (house.minY + house.height * 0.15) * h - smokeHeight,
@@ -954,7 +945,7 @@ private final class PaintingStage {
             }
             include(.fields, slot(0.05, 0.0, 0.9, 0.92, front: true))
             // A low fence runs in front of the cottage's left side, lower than its eaves.
-            if chosen.contains(.fence), let house = elements.first(where: { $0.motif == "house" })?.bounds.cgRect {
+            if chosen.contains(.fence), let house = elements.first(where: { ["house", "hut"].contains($0.motif) })?.bounds.cgRect {
                 let hb = CGRect(x: house.minX * w, y: house.minY * h, width: house.width * w, height: house.height * h)
                 let fh = hb.height * 0.42, fw = hb.width * 1.1
                 pinned = true
@@ -985,9 +976,9 @@ private final class PaintingStage {
                     y: lotus.minY * h - size * 0.45, width: size, height: size * 0.5))
             }
         case .autumnTravel:
-            include(.bareTree, slot(0.0, 0.08, 0.76, 0.72))
+            include(chosen.contains(.oldTree) ? .oldTree : .bareTree, slot(0.0, 0.08, 0.76, 0.72))
             // The vine hangs from the old tree's crown; it never floats on its own.
-            if chosen.contains(.vine), let tree = elements.first(where: { $0.motif == "bareTree" })?.bounds.cgRect {
+            if chosen.contains(.vine), let tree = elements.first(where: { ["oldTree", "bareTree"].contains($0.motif) })?.bounds.cgRect {
                 add(.vine, CGRect(x: (tree.minX + tree.width * 0.12) * w, y: (tree.minY + tree.height * 0.06) * h,
                     width: tree.width * w * 0.76, height: tree.height * h * 0.55))
             }

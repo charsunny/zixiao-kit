@@ -19,7 +19,8 @@ extension ShanShuiEngine {
         case .dunes: return paintingDunes()
         case .beaconSmoke, .cookingSmoke: return paintingSmoke(beacon: motif == .beaconSmoke)
         case .reeds, .grass: return paintingReeds()
-        case .moon: return paintingMoon()
+        case .moon, .crescent, .sunrise, .sunset, .stars, .waterfall, .rain, .snow:
+            return paintingAtmosphere(motif)
         case .vine: return paintingVine()
         case .horse: return paintingHorse()
         case .terrace: return paintingTerrace()
@@ -30,7 +31,6 @@ extension ShanShuiEngine {
         case .crow, .swallow: return paintingBird(swallow: motif == .swallow)
         case .waves, .stream: return paintingWater(stream: motif == .stream)
         case .reef: return paintingRock()
-        case .snow: return paintingRock(width: 160, height: 22, tone: 0.25)
         case .mist, .afterRain: return paintingDistant(0)
         default: return paintingLegacy(sceneAsset(motif))
         }
