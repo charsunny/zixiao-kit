@@ -655,8 +655,17 @@ private final class PaintingStage {
     private func treeCrows() {
         guard let tree = elements.first(where: { ["oldTree", "bareTree"].contains($0.motif) })?.bounds.cgRect else { return }
         let b = CGRect(x: tree.minX * w, y: tree.minY * h, width: tree.width * w, height: tree.height * h)
-        let candidates = parts.flatMap { $0.canv }.flatMap(\.p).filter {
-            $0.x >= b.minX && $0.x <= b.maxX && $0.y > b.minY + b.height * 0.22 && $0.y < b.minY + b.height * 0.55
+        let minX = Double(b.minX), maxX = Double(b.maxX)
+        let minY = Double(b.minY + b.height * 0.22), maxY = Double(b.minY + b.height * 0.55)
+        var candidates: [ZXArt.P] = []
+        for part in parts {
+            for polygon in part.canv {
+                for point in polygon.p {
+                    if point.x >= minX && point.x <= maxX && point.y > minY && point.y < maxY {
+                        candidates.append(point)
+                    }
+                }
+            }
         }
         for fraction in [0.23, 0.77] {
             let target = ZXArt.P(b.minX + b.width * fraction, b.minY + b.height * 0.38)

@@ -3,6 +3,59 @@ import Testing
 @testable import ZixiaoArt
 
 struct ZXArtGuohuaTests {
+    @Test func stageAAssetsAreFiniteAndRepeatable() {
+        for motif in [ZXArt.SceneMotif.horse, .traveler, .crow, .swallow, .bridge, .stream] {
+            var silhouettes = Set<[Int]>()
+            for seed in 0..<6 {
+                let name = "atlas-\(motif.rawValue)-\(seed)"
+                let first = ShanShuiEngine(seed: .init(name)).paintingAsset(motif)
+                let repeatDraw = ShanShuiEngine(seed: .init(name)).paintingAsset(motif)
+                #expect(!first.isEmpty)
+                #expect(first.map(\.p) == repeatDraw.map(\.p))
+                #expect(first.map(\.fil) == repeatDraw.map(\.fil))
+                let points = first.flatMap(\.p)
+                #expect(points.allSatisfy { $0.x.isFinite && $0.y.isFinite })
+                let x0 = points.map(\.x).min()!, x1 = points.map(\.x).max()!
+                let y0 = points.map(\.y).min()!, y1 = points.map(\.y).max()!
+                // Coarse occupancy ignores subpixel brush jitter; the six-seed atlas is also inspected visually.
+                var occupied = Set<Int>()
+                for p in points {
+                    let x = Int((p.x - x0) / max(1, x1 - x0) * 16)
+                    let y = Int((p.y - y0) / max(1, y1 - y0) * 16)
+                    occupied.insert(y * 17 + x)
+                }
+                silhouettes.insert(occupied.sorted())
+            }
+            #expect(silhouettes.count >= 3, "\(motif) must vary beyond subpixel jitter")
+        }
+    }
+
+    @Test func bridgeVocabularyAndWaterlineStayConsistent() {
+        var kinds = Set<Int>()
+        for seed in 0..<24 {
+            let bridge = ShanShuiEngine(seed: .init("bridge-plan-\(seed)")).paintingBridgePlan()
+            kinds.insert(PaintingBridge.Kind.allCases.firstIndex(of: bridge.kind)!)
+            #expect(bridge.arch.first!.y == 60 && abs(bridge.arch.last!.y - 60) < 0.0001)
+            #expect(abs(bridge.arch.first!.x - bridge.width * 0.1) < 0.0001)
+            let reflected = ShanShuiEngine(seed: .init("reflection-\(seed)")).paintingBridgeReflection(bridge)
+            #expect(reflected.flatMap(\.p).allSatisfy { $0.y >= 60 })
+        }
+        #expect(kinds.count == 3)
+        for broad in [false, true] {
+            for phase in [-0.8, 0.0, 0.8] {
+                let channel = PaintingWaterChannel(width: 100, height: 80, phase: phase, broad: broad)
+                var previousWidth = 0.0
+                for step in 0...20 {
+                    let t = Double(step) / 20
+                    let left = channel.point(t, across: -1), right = channel.point(t, across: 1)
+                    #expect(left.y == right.y)
+                    #expect(right.x - left.x >= previousWidth)
+                    previousWidth = right.x - left.x
+                }
+            }
+        }
+    }
+
     @Test func travelersStandOnTheBankAndBridgesCrossWater() throws {
         for scene in [ZXArt.PoetryScene.farewell, .autumnTravel, .waterTown, .winterForest, .village, .spring] {
             for size in [CGSize(width: 750, height: 1000), CGSize(width: 1200, height: 675)] {
