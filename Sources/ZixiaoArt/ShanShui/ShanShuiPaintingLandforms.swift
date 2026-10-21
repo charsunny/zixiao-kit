@@ -59,11 +59,11 @@ extension ShanShuiEngine {
                         let sx = x + Double(hair) * 2.4
                         let sy = ridge(sx) + depth * (0.08 + Double(hair) * 0.025)
                         let reach = depth * (0.15 + r() * 0.25)
-                        let run = reach * (style == .shoal ? 1.6 : 0.9)
+                        let run = reach * (style == .shoal ? 1.6 : 1.25)
                         let line = [P(sx, sy), P(sx + run * 0.7, sy + reach * 0.12),
-                            P(sx + run, sy + reach)]
+                            P(sx + run + reach * 0.65, sy + reach)]
                         guard line.last!.x < right - 3 else { continue }
-                        c += slopeStroke(inkCurve(line), width: 0.8 + r() * 0.6, tone: 0.30 + r() * 0.20,
+                        c += slopeStroke(line, width: 0.8 + r() * 0.6, tone: 0.30 + r() * 0.20,
                             pressures: [0.5, 0.8, 0.9, 0.45, 0.08], dry: 0.65)
                     }
                 }
