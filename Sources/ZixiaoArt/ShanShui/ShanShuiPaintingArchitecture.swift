@@ -20,13 +20,13 @@ extension ShanShuiEngine {
             c += inkLine([P(a, 77), P(b, 74)], width: 1.4, tone: 0.7)
         }
         if form == 2 {
-            c += paintingHipGableRoof(width: span + 26, height: 29).map { p in
-                var q = p; q.p = p.p.map { P($0.x - 13, $0.y + 3) }; return q
+            c += paintingHipGableRoof(width: span + 26, height: 24).map { p in
+                var q = p; q.p = p.p.map { P($0.x - 13, $0.y + 8) }; return q
             }
         } else {
-            let apex = P(mid, 2), left = P(-13, 30), right = P(span + 13, 30)
-            let front = P(mid, 38)
-            let outline = [left, P(mid - 17, 20), apex, P(mid + 17, 20), right, front, left]
+            let apex = P(mid, 6), left = P(-13, 31), right = P(span + 13, 31)
+            let front = P(mid, 34)
+            let outline = [left, P(mid - 20, 23), apex, P(mid + 20, 23), right, front, left]
             c.append(poly(outline, fil: .white, str: nil))
             c.append(poly([apex, right, front], fil: .gray(0, 0.075), str: nil))
             c += inkLine(inkCurve(Array(outline.prefix(5))), width: 1.5, tone: 0.72, dry: 0.32)
@@ -34,10 +34,10 @@ extension ShanShuiEngine {
             c += inkLine([apex, P(mid, 22), front], width: 1.2, tone: 0.6, dry: 0.35)
             if form == 1 {
                 for x in [mid - 24, mid + 24] {
-                    c += inkLine([apex, P(mid + (x - mid) * 0.55, 23), P(x, 34)], width: 0.7, tone: 0.44)
+                    c += inkLine([apex, P(mid + (x - mid) * 0.55, 23), P(x, 33)], width: 0.7, tone: 0.44)
                 }
             }
-            c += inkLine([P(mid, -2), P(mid, 2)], width: 1.5, tone: 0.8)
+            c += inkLine([P(mid, 4), P(mid, 6)], width: 1.5, tone: 0.8)
         }
         c += inkEdges([P(-6, foot + 1), P(span + 6, foot + 1), P(span + 10, foot + 5), P(-10, foot + 5)],
                       width: 1.2, tone: 0.63, dry: 0.4)

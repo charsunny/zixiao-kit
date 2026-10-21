@@ -3,36 +3,63 @@ import Foundation
 
 extension ShanShuiEngine {
     func paintingRuins() -> ZXArt.SSCanv {
-        let count = 2 + Int(r() * 65_536) % 3
+        let count = 2 + Int(r() * 65536) % 3
         var c: ZXArt.SSCanv = [], x = 0.0
         for k in 0..<count {
-            let width = 26 + r() * 20, height = 22 + r() * 41
-            let top = 73 - height, step = 5.0
-            let crest = [P(x, top + 9), P(x + width * 0.19, top + 9), P(x + width * 0.19, top),
-                         P(x + width * 0.56, top), P(x + width * 0.56, top + step),
-                         P(x + width * 0.77, top + step), P(x + width * 0.77, top + 17), P(x + width, top + 17)]
-            let face = crest + [P(x + width - 3, 73), P(x + 2, 73)]
-            c.append(poly(face, fil: .white, str: nil))
-            let side = [P(x + width, top + 17), P(x + width + 5, top + 13), P(x + width + 2, 71), P(x + width - 3, 73)]
-            c += [poly(side, fil: .white, str: nil), poly(side, fil: .gray(0, 0.065), str: nil)]
-            c += inkEdges(crest, width: 1.4, tone: 0.64, dry: 0.46)
-            c += inkLine([P(x, top + 9), P(x + 2, 73)], width: 1, tone: 0.52, dry: 0.52)
-            c += inkEdges([P(x + width, top + 17), P(x + width - 3, 73)], width: 1.2, tone: 0.6, dry: 0.45)
-            for j in 0..<Int((height - 20) / 7) {
-                let y = top + 22 + Double(j) * 7, start = x + 3 + r() * 4
-                c += inkLine([P(start, y), P(x + width - 5, y)], width: 0.6, tone: 0.31, dry: 0.5)
-                let joint = x + width * (j % 2 == 0 ? 0.38 : 0.65)
-                c += inkLine([P(joint, y), P(joint, y + 6)], width: 0.6, tone: 0.32, dry: 0.45)
+            let width = 39 + r() * 27, height = k == 0 ? 48 + r() * 18 : 20 + r() * 34
+            let top = 75 - height, peak = 0.20 + r() * 0.40
+            let divisions = 6 + Int(r() * 3)
+            // A broken, sloping wall head, with a few exposed brick ends. No repeated merlons.
+            var crest: [P] = []
+            for j in 0...divisions {
+                let u = Double(j) / Double(divisions)
+                let distance = u < peak ? (peak - u) / peak : (u - peak) / (1 - peak)
+                let loss = pow(distance, 1.2) * (u < peak ? 0.35 : 0.82)
+                let y = top + height * max(0, loss + (r() - 0.5) * 0.18)
+                crest.append(P(x + width * u, y))
+                if j > 0, j < divisions, j % 3 == k % 3 {
+                    crest.append(P(x + width * u + 2.5, y - 1.5))
+                }
             }
-            for dx in [-5.0, 0, 7] {
-                let root = P(x + width * 0.35, top + 1)
-                c += inkLine([root, P(root.x + dx, root.y - 6 - r() * 7)], width: 0.75, tone: 0.63, dry: 0.45, profile: .tip)
+            func head(_ px: Double) -> Double {
+                for (a, b) in zip(crest, crest.dropFirst()) where px >= a.x && px <= b.x {
+                    return a.y + (b.y - a.y) * (px - a.x) / max(0.01, b.x - a.x)
+                }
+                return 75
             }
-            if k > 0 {
-                c += inkEdges([P(x - 11, 72), P(x - 9, 67), P(x - 2, 67), P(x, 72)], width: 0.7, tone: 0.4, dry: 0.5)
+            c.append(poly(crest + [P(x + width, 75), P(x, 75)], fil: .white, str: nil))
+            let back = crest.map { $0 + P(3, -2) }
+            c.append(poly(crest + back.reversed(), fil: .gray(0, 0.10), str: nil))
+            c += inkEdges(crest, width: 1.6, tone: 0.68, dry: 0.45)
+            c += inkLine([crest[0], P(x, 75)], width: 1.2, tone: 0.60, dry: 0.5)
+            c += inkLine([crest.last!, P(x + width, 75)], width: 1.1, tone: 0.57, dry: 0.5)
+            // Mortar ends at the broken profile; sparse missing courses keep the wall weathered.
+            for row in 1..<Int(height / 6) {
+                let y = 75 - Double(row) * 6
+                let inside = stride(from: x + 2, through: x + width - 2, by: 2).filter { head($0) < y - 1 }
+                if let l = inside.first, let rr = inside.last, rr - l > 6 {
+                    let start = l + r() * (rr - l) * 0.2, end = rr - r() * (rr - l) * 0.2
+                    c += inkLine([P(start, y), P(end, y + 0.3)], width: 0.65, tone: 0.33, dry: 0.5)
+                    for joint in stride(from: l + (row % 2 == 0 ? 4 : 10), to: rr - 2, by: 14) {
+                        c += inkLine([P(joint, y), P(joint, min(74, y + 5.5))], width: 0.6, tone: 0.30, dry: 0.5)
+                    }
+                }
             }
-            c += inkLine([P(x - 2, 75), P(x + width + 5, 75)], width: 0.9, tone: 0.3, dry: 0.6)
-            x += width + 11 + r() * 14
+            for u in [peak, 0.72] {
+                let root = P(x + width * u, head(x + width * u))
+                for j in 0..<4 {
+                    let dx = Double(j) * 4 - 6
+                    c += inkLine(inkCurve([root, root + P(dx * 0.3, -4), root + P(dx, -7 - r() * 6)]),
+                        width: 0.8, tone: 0.64, dry: 0.4, profile: .cone)
+                }
+            }
+            for _ in 0..<(2 + k % 2) {
+                let p = P(x + width + 2 + r() * 9, 73 + r() * 4)
+                c += inkEdges([p + P(-4, 0), p + P(-3, -3), p + P(3, -2), p + P(5, 1)],
+                    width: 0.7, tone: 0.47, dry: 0.5)
+            }
+            c += inkLine([P(x - 2, 77), P(x + width * 0.7, 77)], width: 0.8, tone: 0.3, dry: 0.6)
+            x += width + 10 + r() * 15
         }
         return c
     }
