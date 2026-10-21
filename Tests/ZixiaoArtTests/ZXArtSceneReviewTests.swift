@@ -147,6 +147,7 @@ final class ZXArtSceneReviewTests: XCTestCase {
         for stage in ShanShuiEngine.LotusStage.allCases {
             entries.append(("lotus.\(stage.rawValue)", { $0.paintingLotusDrawing(stage: stage).canvas }))
         }
+        entries.append(("horse.donkey", { $0.paintingHorse(donkey: true) }))
         let label = 150.0, cell = CGSize(width: 190, height: 150), columns = 6, perPage = 10
         let out = URL(fileURLWithPath: dir, isDirectory: true)
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)

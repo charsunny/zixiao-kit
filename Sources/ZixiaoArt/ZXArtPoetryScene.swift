@@ -25,13 +25,20 @@ public extension ZXArt {
         case corner = "corner-v1", oppositeBank = "opposite-bank-v1", depth = "depth-v1"
     }
 
+    enum LotusState: String, Sendable, Hashable, Codable, CaseIterable {
+        case young, flowering, spent
+    }
+
     /// Persist this selection in the recipe. Rendering never reinterprets the poem or the current date.
     struct SceneOptions: Sendable, Hashable, Codable {
         public var motifs: [SceneMotif]
         public var purpose: ScenePurpose?
         public var composition: SceneComposition?
-        public init(motifs: [SceneMotif] = [], purpose: ScenePurpose? = nil, composition: SceneComposition? = nil) {
+        public var lotusState: LotusState?
+        public var donkey: Bool?
+        public init(motifs: [SceneMotif] = [], purpose: ScenePurpose? = nil, composition: SceneComposition? = nil, lotusState: LotusState? = nil, donkey: Bool? = nil) {
             self.motifs = motifs; self.purpose = purpose; self.composition = composition
+            self.lotusState = lotusState; self.donkey = donkey
         }
         public var canonicalMotifs: [SceneMotif] {
             let selected = Set(motifs)
@@ -126,10 +133,18 @@ public extension ZXArt {
         add(.pine, ["松"]); add(.bamboo, ["竹", "篁"]); add(.willow, ["柳"])
         add(.reeds, ["芦", "荻", "蒹葭"]); add(.maple, ["枫"]); add(.vine, ["藤"])
         add(.blossom, ["桃花", "杏花", "梅", "花满"]); add(.lotus, ["荷", "莲叶", "菡萏"])
-        add(.waterfall, ["瀑"]); add(.stream, ["溪", "泉", "长河"]); add(.bridge, ["小桥", "枫桥", "石桥"])
+        add(.house, ["人家", "村舍", "农舍", "柴门"])
+        add(.hut, ["茅屋", "茅舍", "草堂"])
+        add(.oldTree, ["老树", "古木", "古树"])
+        add(.pagoda, ["塔"]); add(.boat, ["舟", "船"])
+        // Tune names and a named 月亭 are not evidence for a standalone pavilion.
+        let pavilionText = body.replacingOccurrences(of: "月亭", with: "")
+            .replacingOccurrences(of: "亭亭", with: "")
+        if pavilionText.contains("亭") { motifs.append(.pavilion) }
+        add(.waterfall, ["瀑"]); add(.stream, ["溪", "泉", "长河", "流水", "春水", "溪水"]); add(.bridge, ["小桥", "枫桥", "石桥"])
         add(.sail, ["帆"]); add(.mooredBoat, ["泊", "系舟", "系船"]); add(.angler, ["钓"])
         add(.egret, ["鹭"]); add(.crow, ["鸦"]); add(.swallow, ["燕子", "双燕"])
-        add(.dragonfly, ["蜻蜓"]); add(.butterfly, ["蝶"]); add(.horse, ["马"])
+        add(.dragonfly, ["蜻蜓"]); add(.butterfly, ["蝶"]); add(.horse, ["马", "驴"])
         add(.traveler, ["归人", "行人", "游子"]); add(.window, ["窗"]); add(.curtain, ["帘"]); add(.stars, ["星", "银河", "天河"])
         // Smoke is not automatically mountain mist. Rain that has ended stays ended.
         let afterRain = has(["雨后", "新雨", "雨歇", "雨霁", "雨过", "初霁"])
@@ -147,8 +162,12 @@ public extension ZXArt {
             motifs.removeAll { $0 == .sunrise || $0 == .sunset }
         } else if has(["日出", "初日", "朝日", "旭日"]) { motifs.append(.sunrise) }
         else if has(["夕", "落日", "斜阳", "晚", "暮"]) { motifs.append(.sunset) }
-        let options = SceneOptions(motifs: motifs)
-        return SceneSelection(scene: scene, options: .init(motifs: options.canonicalMotifs),
+        if scene == .autumnTravel, motifs.contains(.oldTree) { motifs.removeAll { $0 == .bareTree } }
+        let state: LotusState = has(["残荷", "枯荷", "留得"]) ? .spent
+            : has(["小荷才露尖尖角", "小荷", "初荷"]) ? .young : .flowering
+        var options = SceneOptions(motifs: motifs, lotusState: state, donkey: has(["驴"]) ? true : nil)
+        options.motifs = options.canonicalMotifs
+        return SceneSelection(scene: scene, options: options,
                               matched: selected.map { $0.1.filter(body.contains) } ?? [])
     }
 

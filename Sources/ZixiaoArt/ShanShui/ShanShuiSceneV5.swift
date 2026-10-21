@@ -122,11 +122,15 @@ private final class PaintingStage {
     let bandTop: Double?
     let waterEngine: ShanShuiEngine
     let selectedMotifs: Set<Motif>
+    let lotusState: ShanShuiEngine.LotusStage
+    let donkey: Bool
 
     init(seed: ZXArt.Seed, width: Double, height: Double, palette: ZXArt.Palette, verse: ZXArt.VerseLayout, quietTop: Double, options: ZXArt.SceneOptions) {
         self.w = width; self.h = height; self.palette = palette
         self.seed = seed.string
         selectedMotifs = Set(options.motifs)
+        lotusState = ShanShuiEngine.LotusStage(rawValue: options.lotusState?.rawValue ?? "flowering") ?? .flowering
+        donkey = options.donkey == true
         purpose = options.purpose ?? .inscription; composition = options.composition ?? .corner
         self.verse = options.purpose == .reading ? .null : verse.rect(in: CGSize(width: width, height: height)).insetBy(dx: -8, dy: -8)
         engine = ShanShuiEngine(seed: .init("poetry-painting-v1:" + seed.string))
@@ -214,9 +218,10 @@ private final class PaintingStage {
             raw = tree.canvas
         }
         else if motif == .lotus {
-            let drawing = engine.paintingLotusDrawing()
+            let drawing = engine.paintingLotusDrawing(stage: lotusState)
             lotus = drawing; raw = drawing.canvas
         }
+        else if motif == .horse, donkey { raw = engine.paintingHorse(donkey: true) }
         else if reserveWindow { raw = engine.paintingHouse(reservingWindow: true) }
         else if motif == .mooredBoat { raw = engine.paintingBoat(.mooredBoat, mooring: false) }
         else if motif == .stream {
@@ -330,7 +335,7 @@ private final class PaintingStage {
         } else { parts.append(.near(object.canv)) }
         elements.append(.init(motif: motif.rawValue,
             bounds: .init(x: actual.minX / w, y: actual.minY / h, width: actual.width / w, height: actual.height / h)))
-        if [.moon, .sunrise, .sunset].contains(motif) {
+        if [.moon, .crescent, .sunrise, .sunset].contains(motif) {
             celestialLayers.append((parts.count - 1, motif))
         }
         let kind: ZXArt.AnchorPiece.Kind?
@@ -796,7 +801,7 @@ private final class PaintingStage {
         let horseH = personH * 1.18
         let x = b.minX + b.width * 0.65
         let pose = Int(engine.r() * 2) // Keep the accepted standing/walking drawing and shared scale.
-        let horse = engine.paintingHorse(pose: pose, facingLeft: false)
+        let horse = engine.paintingHorse(pose: pose, facingLeft: false, donkey: donkey)
         let person = engine.paintingPerson(pose: 0, facingLeft: false)
         let horseW = personH * 1.7, personW = personH * 0.75
         guard let crest = bankFoot(x, x + horseW + personW) else { return }
@@ -1322,7 +1327,7 @@ private final class PaintingStage {
             if chosen.contains(.snow), let bank = elements.first(where: { $0.motif == "groundBank" }) {
                 elements.append(.init(motif: Motif.snow.rawValue, bounds: bank.bounds))
             }
-            placed.insert(.snow)
+            if chosen.contains(.snow) { add(.snow, slot(0.04, 0.12, 0.90, 0.52)) }
         case .moonNight:
             add(.house, slot(0.23, 0.55, 0.65, 0.26))
             include(.window, slot(0.43, 0.67, 0.14, 0.14))
@@ -1485,9 +1490,9 @@ private final class PaintingStage {
             case .waterfall: mountainWaterfall()
             case .stream: add(motif, slot(0.60, 0.02, 0.22, 0.88, front: true))
             case .mist, .afterRain: add(motif, slot(0.02, 0.42, 0.96, 0.10))
-            case .rain: break
+            case .rain: add(motif, slot(0.04, 0.10, 0.90, 0.55))
             case .vine: continue // only ever hangs from a tree crown
-            case .snow: continue // left as paper; the weather layer paints falling snow
+            case .snow: add(motif, slot(0.04, 0.12, 0.90, 0.52))
             case .path: add(motif, slot(0.1, 0.1, 0.4, 0.8, front: true))
             case .reeds, .grass: add(motif, slot(0.03, 0.1, 0.20, 0.8, front: true))
             case .bridge: crossing(river: false)

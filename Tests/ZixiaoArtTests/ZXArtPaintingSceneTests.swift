@@ -58,7 +58,9 @@ struct ZXArtPaintingSceneTests {
                 // With a full-width ground band there is no separate near slope; the stream then runs
                 // through the band from its top edge down into the dissolving lower half.
                 let near = d.sceneElements.first { $0.motif == "nearBank" }?.bounds.cgRect
-                #expect(stream.minY <= far.minY + 0.006)
+                // A rocky spring starts at the local stone gap, which may be below the
+                // highest stone on the opposite side of the same bank.
+                #expect(stream.minY >= far.minY - 0.006 && stream.minY < far.maxY)
                 #expect(stream.maxY >= (near?.maxY ?? (far.minY + far.height * 0.5)) - 0.006)
                 #expect(d.anchors?.water != nil)
                 for object in d.sceneElements where ["hut", "pine", "bamboo"].contains(object.motif) {

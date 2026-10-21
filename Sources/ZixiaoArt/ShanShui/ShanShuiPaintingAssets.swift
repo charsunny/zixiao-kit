@@ -143,7 +143,7 @@ extension ShanShuiEngine {
 
     /// 白描瘦马: hip, withers and tucked belly remain legible through a very dilute coat.
     /// Three anatomical poses, with knees forward and hocks behind the hind legs.
-    func paintingHorse(pose requested: Int? = nil, facingLeft: Bool? = nil) -> ZXArt.SSCanv {
+    func paintingHorse(pose requested: Int? = nil, facingLeft: Bool? = nil, donkey: Bool = false) -> ZXArt.SSCanv {
         let pose = requested ?? Int(r() * 3), flip = facingLeft ?? (r() < 0.5)
         let tone = 0.48 + r() * 0.23
         let headY = pose == 2 ? 62.0 : (pose == 1 ? 21.0 : 36.0)
@@ -161,8 +161,8 @@ extension ShanShuiEngine {
         }
         c += inkLine(inkCurve([P(73, 25), P(81, headY - 12), P(87, headY - 9)]),
                      width: 2.1, tone: tone, dry: 0.60)
-        c += inkLine([P(86, headY - 9), P(84, headY - 17), P(89, headY - 10)], width: 1, tone: 0.8)
-        c += inkLine([P(91, headY - 6), P(92, headY - 13)], width: 0.8, tone: 0.7)
+        c += inkLine([P(86, headY - 9), P(84, headY - (donkey ? 27 : 17)), P(89, headY - 10)], width: 1, tone: 0.8)
+        c += inkLine([P(91, headY - 6), P(92, headY - (donkey ? 24 : 13))], width: 0.8, tone: 0.7)
         c += inkBlot(94, headY, radius: 0.7, squash: 0.65, tone: 0.8)
         // Far legs first; a walking foreleg lifts at the knee, while the other carries the weight.
         let legs: [[P]] = [
@@ -182,19 +182,41 @@ extension ShanShuiEngine {
             c += inkLine([P(43, 28), P(44, 34), P(61, 35), P(64, 28)], width: 1.6, tone: tone)
             c += inkLine([P(51, 35), P(50, 50)], width: 0.7, tone: tone * 0.8)
         }
+        if donkey {
+            // A shorter barrel and long ears distinguish the donkey without changing accepted horses.
+            c = c.map { var p = $0; p.p = p.p.map { P($0.x < 75 ? 75 - (75 - $0.x) * 0.78 : $0.x, $0.y) }; return p }
+        }
         if flip { c = c.map { var p = $0; p.p = p.p.map { P(112 - $0.x, $0.y) }; return p } }
         return c
     }
 
-    /// 烘云托月: the moon is left as paper; a soft ring of pale wash around it makes it glow.
-    func paintingMoon() -> ZXArt.SSCanv {
+    /// 烘云托月: unequal cloud banks carry a paper-white moon, without a radial halo.
+    func paintingMoon(crescent: Bool = false) -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
-        // Many faint, overlapping rings fade the halo smoothly; no outline on the disc.
-        for k in 0..<16 {
-            let radius = 52 - Double(k) * 1.9
-            c += sceneEllipse(40, 40, radius, radius, fill: C(0, 0, 0, 0.009), tone: 0)
+        let form = Int(r() * 65536) % 3
+        for k in 0..<(2 + form) {
+            let y = 25 + Double(k) * 13, x = k % 2 == 0 ? 7.0 : 31.0
+            for wash in 0..<7 {
+                let spread = Double(wash) * 1.6
+                let edge = inkCurve([P(x - spread, y), P(x + 16, y - 6 - spread),
+                    P(x + 36, y - 2 - spread), P(x + 61 + spread, y + 2)])
+                let bottom = inkCurve([P(x + 61 + spread, y + 4 + spread),
+                    P(x + 30, y + 5 + spread), P(x - spread, y + 2)])
+                c.append(poly(edge + bottom, fil: .gray(0, 0.010 + Double(6 - wash) * 0.002), str: nil))
+            }
         }
-        c += sceneEllipse(40, 40, 21, 21, fill: .white, tone: 0)
+        if crescent {
+            let fullness = [0.18, 0.36, 0.55][form]
+            let outer = (0...40).map { i -> P in
+                let a = Double(i) / 40 * .pi
+                return P(42 + sin(a) * 23, 40 - cos(a) * 23)
+            }
+            let inner = (0...40).reversed().map { i -> P in
+                let a = Double(i) / 40 * .pi
+                return P(42 + sin(a) * 23 * (1 - fullness), 40 - cos(a) * 23)
+            }
+            c.append(poly(outer + inner, fil: .white, str: .gray(0, 0.19), wid: 0.6))
+        } else { c += sceneEllipse(42, 40, 21, 21, fill: .white, tone: 0) }
         return c
     }
 
