@@ -34,7 +34,7 @@ extension ShanShuiEngine {
             }
             var marks = [poly(left + right.reversed(), fil: .gray(0, tone), str: nil)]
             if width > 2.5 {
-                // A dry split stays inside the broad base and ends before the fine tip.
+                // A dry bark stroke stays inside the broad base and ends before the fine tip.
                 let split = Array(path.dropFirst(2).prefix(path.count / 2))
                 marks += inkLine(split, width: width * 0.13, tone: 0.22, dry: 0.65, profile: .cone)
             }
@@ -45,7 +45,7 @@ extension ShanShuiEngine {
             let count = 3 + Int(r() * 3)
             for j in 0..<count {
                 let spread = Double(j) / Double(count - 1)
-                let origin = tip + P(-side * spread * 3.5, spread * 1.2)
+                let origin = tip
                 let reach = 3 + r() * 3.5 + spread * 2
                 let end: P
                 let bend: P

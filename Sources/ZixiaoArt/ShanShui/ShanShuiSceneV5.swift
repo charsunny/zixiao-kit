@@ -101,6 +101,7 @@ private final class PaintingStage {
     var paintedTrees: [Motif: ZXArt.SSCanv] = [:]
     var treePerches: [Motif: [ZXArt.P]] = [:]
     var treeVines: [Motif: ZXArt.SSCanv] = [:]
+    var treeRoots: [Motif: ZXArt.P] = [:]
     var celestialLayers: [(layer: Int, motif: Motif)] = []
     var boats: [ZXArt.Anchors.Boat] = []
     var mountainRidges: [[ZXArt.P]] = []
@@ -338,7 +339,10 @@ private final class PaintingStage {
             }
         }
         support(motif, bounds: actual, root: plantedRoot)
-        if let root = plantedRoot { parts.append(.near(engine.paintingRootMoss(root))) }
+        if let root = plantedRoot {
+            treeRoots[motif] = root
+            parts.append(.near(engine.paintingRootMoss(root)))
+        }
         if [.mist, .afterRain, .dunes].contains(motif) {
             parts.append(.init(canv: object.canv, mist: .init(depth: actual.height * 4,
                 blur: motif == .dunes ? 0.4 : 0.7, peak: 0.95, floorY: actual.maxY,
@@ -1382,10 +1386,24 @@ private final class PaintingStage {
                 let limit = (bank.minX + bank.width * leftReach) * w - width * 0.52
                 let desired = max(bank.minX * w + width * 0.52, min(limit,
                     (bridge?.maxX ?? (bank.minX + bank.width * 0.26)) * w + width * 0.58))
-                if let foot = bankFoot(desired - width * 0.36, desired + width * 0.36) {
+                // Keep the accepted house/person scale. Move the dwelling along the existing
+                // bank instead of burying the old tree's root behind its facade.
+                let root = treeRoots[.oldTree]
+                let treeWidth = elements.first(where: { $0.motif == "oldTree" })?.bounds.cgRect.width ?? 0
+                let clearance = width * 0.60 + treeWidth * w * 0.06
+                let alternatives = bankSurface.map { surface in
+                    surface.heights.indices.filter { surface.heights[$0].isFinite }
+                        .map { surface.x0 + Double($0) * surface.step }
+                        .filter { $0 > bank.minX * w + width * 0.52 && $0 < bank.maxX * w - width * 0.52 }
+                        .sorted { abs($0 - desired) < abs($1 - desired) }
+                } ?? []
+                for x in [desired] + alternatives {
+                    guard root.map({ abs(x - $0.x) >= clearance }) ?? true else { continue }
+                    guard let foot = bankFoot(x - width * 0.36, x + width * 0.36) else { continue }
                     pinned = true
-                    add(.house, CGRect(x: desired - width / 2, y: foot - height, width: width, height: height), source: raw)
+                    let landed = add(.house, CGRect(x: x - width / 2, y: foot - height, width: width, height: height), source: raw)
                     pinned = false
+                    if landed { break }
                 }
             }
             // The accepted pair now belongs to the nearer bend of its own bounded road.
