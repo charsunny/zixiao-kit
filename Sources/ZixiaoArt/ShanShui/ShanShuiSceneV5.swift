@@ -901,20 +901,31 @@ private final class PaintingStage {
                          width: box.width, height: box.height * 0.35)
         }
         if prepareOnly {
-            preparedGround = fitted(engine.paintingBank(style: [.retreat, .temple].contains(scene) ? .cliff : (scene == .historic || structure == .corner ? .headland : .shoal)), to: box)
-            if groundInBand, var ground = preparedGround {
-                // Terrain fills the whole lower band. Fitting it like a tree would narrow a
-                // steep bank into a floating island; only its horizontal ground plane expands.
-                let scaleX = box.width / ground.bounds.width
-                let x0 = ground.bounds.minX
-                ground.canv = ground.canv.map { poly in
-                    var p = poly
-                    p.p = poly.p.map { .init(box.minX + ($0.x - x0) * scaleX, $0.y) }
-                    return p
+            let style: ShanShuiEngine.BankStyle = [.retreat, .temple].contains(scene) ? .cliff
+                : (scene == .historic || structure == .corner ? .headland : .shoal)
+            if !narrow, scene != .historic {
+                // Two staggered reaches occupy the lower band, leaving a real water/earth gap.
+                // Fit each bank uniformly; stretching one paper silhouette made a pale platform.
+                var canvas: ZXArt.SSCanv = []
+                var bounds = CGRect.null
+                for side in 0..<2 {
+                    let reach = CGRect(x: side == 0 ? box.minX : box.minX + box.width * 0.61,
+                        y: box.minY + box.height * (side == 0 ? 0 : 0.22),
+                        width: box.width * (side == 0 ? 0.54 : 0.39),
+                        height: box.height * (side == 0 ? 0.82 : 0.76))
+                    if var ground = fitted(engine.paintingBank(style: style), to: reach) {
+                        let dx = side == 0 ? box.minX - ground.bounds.minX : box.maxX - ground.bounds.maxX
+                        ground.canv = ground.canv.map { poly in
+                            var p = poly; p.p = p.p.map { .init($0.x + dx, $0.y) }; return p
+                        }
+                        ground.bounds = ground.bounds.offsetBy(dx: dx, dy: 0)
+                        canvas += ground.canv
+                        bounds = bounds.union(ground.bounds)
+                    }
                 }
-                ground.bounds.origin.x = box.minX
-                ground.bounds.size.width = box.width
-                preparedGround = ground
+                preparedGround = bounds.isNull ? nil : (canvas, bounds)
+            } else {
+                preparedGround = fitted(engine.paintingBank(style: style), to: box)
             }
             if let object = preparedGround, scene != .historic || historicGroundNeeded { recordBank(object) }
             return
