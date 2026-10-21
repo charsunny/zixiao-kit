@@ -111,7 +111,7 @@ struct ZXArtGuohuaTests {
                     if scene == .waterTown {
                         let bridge = try bounds("bridge"), house = try bounds("house"), water = try bounds("riverChannel")
                         #expect(bridge.width > house.width * 0.8)
-                        #expect(house.midX > bridge.midX)
+                        #expect(house.midX > bridge.midX, "\(size) seed \(seed): house \(house) bridge \(bridge) bank \(bank)")
                         #expect(bridge.intersects(water))
                         #expect(water.maxY > bridge.maxY)
                     } else {
