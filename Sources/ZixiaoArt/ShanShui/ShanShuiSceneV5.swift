@@ -116,10 +116,12 @@ private final class PaintingStage {
     /// Top of the full-width ground band beneath the verse, when the page has one.
     let bandTop: Double?
     let waterEngine: ShanShuiEngine
+    let selectedMotifs: Set<Motif>
 
     init(seed: ZXArt.Seed, width: Double, height: Double, palette: ZXArt.Palette, verse: ZXArt.VerseLayout, quietTop: Double, options: ZXArt.SceneOptions) {
         self.w = width; self.h = height; self.palette = palette
         self.seed = seed.string
+        selectedMotifs = Set(options.motifs)
         purpose = options.purpose ?? .inscription; composition = options.composition ?? .corner
         self.verse = options.purpose == .reading ? .null : verse.rect(in: CGSize(width: width, height: height)).insetBy(dx: -8, dy: -8)
         engine = ShanShuiEngine(seed: .init("poetry-painting-v1:" + seed.string))
@@ -197,7 +199,7 @@ private final class PaintingStage {
     private func add(_ motif: Motif, _ box: CGRect, repeatable: Bool = false, source: ZXArt.SSCanv? = nil) -> Bool {
         guard repeatable || !placed.contains(motif) else { return false }
         let raw: ZXArt.SSCanv
-        let reserveWindow = motif == .house && currentScene == .moonNight && chosen.contains(.window)
+        let reserveWindow = motif == .house && currentScene == .moonNight && selectedMotifs.contains(.window)
         if let source { raw = source }
         else if reserveWindow { raw = engine.paintingHouse(reservingWindow: true) }
         else if motif == .stream {
