@@ -5,7 +5,7 @@ extension ShanShuiEngine {
     /// Straight joinery: vertical mullions, square lattice, or ice-crack tracery. No skewed
     /// wall slab is carried with the window, so the same frame can be set into a house or court.
     func paintingWindow(embedded: Bool = false) -> ZXArt.SSCanv {
-        let form = Int(r() * 65_536) % 3
+        let form = Int(r() * 4096) % 3
         let w = [44.0, 56, 62][form], h = 52.0
         let frame = [P(0, 0), P(w, 0), P(w, h), P(0, h), P(0, 0)]
         var c = [poly(frame, fil: .white, str: nil), poly(frame, fil: .gray(0, embedded ? 0.045 : 0.065), str: nil)]
@@ -33,9 +33,9 @@ extension ShanShuiEngine {
 
     /// Bamboo blind: horizontal slats bound by two tapes, with a rolled lower edge.
     /// Pull cords keep the full hanging extent even when most of the blind is rolled up.
-    func paintingCurtain() -> ZXArt.SSCanv {
-        let form = Int(r() * 65_536) % 3
-        let w = 54.0, drop = [20.0, 43, 67][form]
+    func paintingCurtain(width: Double = 54, height: Double = 77) -> ZXArt.SSCanv {
+        let form = Int(r() * 4096) % 5
+        let w = 54.0, drop = [15.0, 28, 41, 54, 67][form]
         let blind = [P(0, 0), P(w, 0), P(w, drop), P(0, drop)]
         var c = [poly(blind, fil: .white, str: nil)]
         for y in stride(from: 3.0, through: drop - 1, by: 3) {
@@ -50,7 +50,10 @@ extension ShanShuiEngine {
         c += inkLine([P(-3, -2), P(w + 3, -2)], width: 2, tone: 0.73)
         c += inkLine([P(w - 6, 1), P(w - 6, 75)], width: 0.55, tone: 0.48, dry: 0.4)
         c += inkLine([P(w - 8, 75), P(w - 4, 75)], width: 1.1, tone: 0.6)
-        return c
+        return c.map { p in
+            var q = p; q.p = p.p.map { P($0.x * width / 54, $0.y * height / 77) }
+            q.wid *= min(width / 54, height / 77); return q
+        }
     }
 
     /// Paddy fields as the farmer sees them across the slope: curved bund lines (田埂) that follow

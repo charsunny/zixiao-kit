@@ -26,6 +26,8 @@ extension ShanShuiEngine {
         case .vine: return paintingVine()
         case .horse: return paintingHorse()
         case .terrace: return paintingTerrace()
+        case .ruins: return paintingRuins()
+        case .cityGate: return paintingCityGate()
         case .fence: return paintingFence()
         case .boat, .angler, .mooredBoat, .sail: return paintingBoat(motif)
         case .traveler: return paintingPerson()
@@ -216,42 +218,44 @@ extension ShanShuiEngine {
         return c
     }
 
-    /// An ancient terrace (古台): a low platform of dressed stone with a battered face and a
-    /// short broken parapet, seen slightly from below.
-    func paintingTerrace() -> ZXArt.SSCanv {
-        let top = [P(14, 8), P(106, 8)], base = [P(0, 30), P(120, 30)]
-        let face = [top[0], top[1], base[1], base[0]]
-        var c = [poly(face, fil: .white, str: nil), poly(face, fil: .gray(0, 0.16), str: nil)]
-        c += inkEdges([P(0, 30), P(14, 8), P(106, 8), P(120, 30)], width: 1.4, tone: 0.7, dry: 0.4)
-        c += inkLine([P(0, 30), P(120, 30)], width: 1.8, tone: 0.75, dry: 0.4)
-        for k in 1..<4 {  // stone courses
-            let y = 8 + Double(k) * 5.5, inset = 14 * (1 - Double(k) * 5.5 / 22)
-            c += inkLine([P(inset + 2, y), P(120 - inset - 2, y)], width: 0.5, tone: 0.3, dry: 0.6)
+    /// Low stone terrace with a level bearing edge. Small chips affect the front face only.
+    /// Scene and atlas share the same strokes; a summit supplies its own width and shallow depth.
+    func paintingTerrace(width w: Double = 120, height requestedHeight: Double? = nil) -> ZXArt.SSCanv {
+        let form = Int(r() * 65_536) % 3
+        let h = requestedHeight ?? [15.0, 23, 31][form]
+        let face = [P(w * 0.10, 0), P(w * 0.90, 0), P(w, h), P(0, h)]
+        var c = [poly(face, fil: .white, str: nil), poly(face, fil: .gray(0, 0.075), str: nil)]
+        c += inkEdges([face[3], face[0], face[1], face[2]], width: min(1.4, h * 0.14), tone: 0.66, dry: 0.4)
+        c += inkLine([P(0, h), P(w, h)], width: min(1.4, h * 0.12), tone: 0.57, dry: 0.5)
+        for k in 1...2 {
+            let y = h * Double(k) / 3, inset = w * 0.1 * (1 - y / h)
+            c += inkLine([P(inset + 2, y), P(w - inset - 2, y)], width: min(0.6, h * 0.07), tone: 0.30, dry: 0.5)
         }
-        for x in stride(from: 18.0, to: 102, by: 14) where r() < 0.7 {  // broken parapet
-            c += inkLine([P(x, 8), P(x, 2 + r() * 2)], width: 1.2, tone: 0.65, dry: 0.4)
+        let chips = form + 1
+        for k in 0..<chips {
+            let x = w * (0.2 + Double(k) * 0.23)
+            c += inkEdges([P(x, 0), P(x + w * 0.025, h * 0.24), P(x + w * 0.07, h * 0.28)],
+                          width: min(0.8, h * 0.1), tone: 0.4, dry: 0.55)
         }
         return c
     }
 
-    /// A rustic fence: upright posts of slightly uneven height, two level rails sagging a little
-    /// between posts. Nothing leans.
+    /// A low rustic fence with variable span and spacing; a missing bay interrupts both rails.
     func paintingFence() -> ZXArt.SSCanv {
+        let form = Int(r() * 65_536) % 3
+        let posts = [7, 10, 13][form], spacing = [13.0, 9, 8][form]
+        let gap = form == 2 ? 6 : -1
         var c: ZXArt.SSCanv = []
-        let posts = 12
-        for k in 0..<posts {
-            let x = 4 + Double(k) * 9
-            let top = 2 + r() * 4
-            c += inkEdges([P(x, top), P(x, 30)], width: 1.1 + r() * 0.4, tone: 0.50 + r() * 0.15, dry: 0.4)
+        for k in 0..<posts where k != gap {
+            let x = 4 + Double(k) * spacing
+            c += inkLine([P(x, 2 + r() * 4), P(x, 30)], width: 1.1 + r() * 0.4, tone: 0.50 + r() * 0.15, dry: 0.4)
         }
         for y in [11.0, 21] {
-            var rail: [P] = []
-            for k in 0..<posts {
-                let x = 4 + Double(k) * 9
-                rail.append(P(x, y))
-                if k < posts - 1 { rail.append(P(x + 4.5, y + 0.6)) }
+            for k in 0..<(posts - 1) where k != gap && k + 1 != gap {
+                let x = 4 + Double(k) * spacing
+                c += inkLine([P(x, y), P(x + spacing * 0.5, y + 0.6), P(x + spacing, y)],
+                             width: 1, tone: 0.5, dry: 0.4)
             }
-            c += inkLine(rail, width: 1.0, tone: 0.48, dry: 0.45)
         }
         return c
     }

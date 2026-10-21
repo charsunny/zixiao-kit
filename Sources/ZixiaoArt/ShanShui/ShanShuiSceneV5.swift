@@ -205,6 +205,8 @@ private final class PaintingStage {
         else if motif == .stream {
             raw = currentScene == .desert ? waterEngine.paintingLongRiver()
                 : waterEngine.paintingChannel(width: box.width, height: box.height)
+        } else if motif == .curtain {
+            raw = engine.paintingCurtain(width: box.width, height: box.height)
         } else if motif == .window, currentScene == .courtyard {
             raw = engine.paintingWindow(embedded: true)
         } else { raw = engine.paintingAsset(motif) }
@@ -1237,10 +1239,9 @@ private final class PaintingStage {
                 let left = ledge.minX + ledge.width * 0.12, right = ledge.maxX - ledge.width * 0.12
                 let depth = max(0.8, ledge.width * 0.08)
                 if chosen.contains(.terrace) {
-                    let rim = engine.inkLine([.init(left, ledge.minY), .init(right, ledge.minY)],
-                        width: 0.8, tone: 0.6, dry: 0.55)
-                        + engine.inkLine([.init(left + 1, ledge.minY + depth), .init(right - 1, ledge.minY + depth)],
-                            width: 0.5, tone: 0.32, dry: 0.65)
+                    let rim = engine.paintingTerrace(width: right - left, height: depth).map { p in
+                        var q = p; q.p = p.p.map { ZXArt.P($0.x + left, $0.y + ledge.minY) }; return q
+                    }
                     parts.append(.init(canv: rim))
                     engine.noted(.building(.pavilion), rim)
                     elements.append(.init(motif: "terrace", bounds: .init(x: left / w, y: ledge.minY / h,
