@@ -322,11 +322,12 @@ extension ShanShuiEngine {
             }
             // Smaller shoulders turn each broad face. Their short fibres descend into the
             // parent valley, while the top of each shoulder remains lit paper.
-            for j in 0..<2 {
-                let center = rib[8 + j * 10] + P(-width * (0.07 + r() * 0.04), 0)
+            do {
+                let center = rib[8 + Int(r() * 12)] + P(-width * (0.07 + r() * 0.04), 0)
                 let rx = width * (0.055 + r() * 0.025), ry = height * (0.025 + r() * 0.02)
-                let cap = inkCurve([center + P(-rx, ry), center + P(-rx * 0.45, 0),
-                    center + P(rx * 0.15, -ry * 0.15), center + P(rx, ry * 0.5)]) .map(inside)
+                let cap = inkCurve([center + P(-rx, ry * 1.2), center + P(-rx * 0.60, ry * 0.12),
+                    center + P(-rx * 0.17, -ry * 0.18), center + P(rx * 0.3, ry * 0.05),
+                    center + P(rx * 0.8, ry * 0.7), center + P(rx * 0.95, ry * 2)]).map(inside)
                 c += slopeStroke(cap, width: 1.5, tone: 0.52,
                     pressures: [0.15, 0.7, 0.5, 0.8, 0.08], dry: 0.48)
                 for band in 0..<9 {

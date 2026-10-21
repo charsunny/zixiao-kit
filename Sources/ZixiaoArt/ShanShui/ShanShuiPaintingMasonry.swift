@@ -7,20 +7,18 @@ extension ShanShuiEngine {
         var c: ZXArt.SSCanv = [], x = 0.0
         for k in 0..<count {
             let width = 39 + r() * 27, height = k == 0 ? 48 + r() * 18 : 20 + r() * 34
-            let top = 75 - height, peak = 0.20 + r() * 0.40
-            let divisions = 6 + Int(r() * 3)
-            // A broken, sloping wall head, with a few exposed brick ends. No repeated merlons.
-            var crest: [P] = []
-            for j in 0...divisions {
-                let u = Double(j) / Double(divisions)
-                let distance = u < peak ? (peak - u) / peak : (u - peak) / (1 - peak)
-                let loss = pow(distance, 1.2) * (u < peak ? 0.35 : 0.82)
-                let y = top + height * max(0, loss + (r() - 0.5) * 0.18)
-                crest.append(P(x + width * u, y))
-                if j > 0, j < divisions, j % 3 == k % 3 {
-                    crest.append(P(x + width * u + 2.5, y - 1.5))
-                }
-            }
+            let top = 75 - height, peak = 0.17 + r() * 0.17
+            // A surviving flat section breaks into an oblique torn edge. A central peaked
+            // outline would resemble the gable of a roof, rather than a fragment of wall.
+            var crest = [P(x, top + 3 + r() * 5), P(x + width * 0.12, top + r() * 3),
+                P(x + width * 0.23, top + 3 + r() * 2), P(x + width * 0.29, top + r() * 2),
+                P(x + width * (0.40 + r() * 0.12), top + 2 + r() * 4),
+                P(x + width * 0.60, top + height * (0.28 + r() * 0.12)),
+                P(x + width * 0.67, top + height * 0.26),
+                P(x + width * 0.75, top + height * (0.52 + r() * 0.10)),
+                P(x + width * 0.86, top + height * 0.68),
+                P(x + width, top + height * (0.72 + r() * 0.12))]
+            if r() < 0.5 { crest = crest.reversed().map { P(x + width - ($0.x - x), $0.y) } }
             func head(_ px: Double) -> Double {
                 for (a, b) in zip(crest, crest.dropFirst()) where px >= a.x && px <= b.x {
                     return a.y + (b.y - a.y) * (px - a.x) / max(0.01, b.x - a.x)
