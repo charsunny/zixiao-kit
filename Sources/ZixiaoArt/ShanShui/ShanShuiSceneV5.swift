@@ -1085,7 +1085,8 @@ private final class PaintingStage {
             if chosen.contains(.bridge) { crossing(river: true) }
             if chosen.contains(.house), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
                 let width = bank.width * w * 0.23, height = bank.width * w * 0.10
-                let x = (bank.minX + bank.width * 0.83) * w
+                // Stand on the nearest stone of the far reach; its stones need not cover every column.
+                let x = supportedBankX((bank.minX + bank.width * 0.83) * w)
                 if let foot = bankFoot(x - width * 0.3, x + width * 0.3) {
                     pinned = true
                     add(.house, CGRect(x: x - width / 2, y: foot - height, width: width, height: height))
