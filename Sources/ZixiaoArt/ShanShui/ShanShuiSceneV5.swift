@@ -1289,7 +1289,7 @@ private final class PaintingStage {
             include(.pavilion, slot(0.33, 0.60, 0.29, 0.16))
             include(.willow, slot(0.01, 0.13, 0.70, 0.64))
             if chosen.contains(.traveler), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
-                let size = art.width * 0.043
+                let size = min(art.width * 0.043, (elements.first { $0.motif == "willow" }?.bounds.cgRect.height ?? 1) * h * 0.22)
                 for fraction in [0.68, 0.74] {
                     let x = supportedBankX((bank.minX + bank.width * fraction) * w)
                     if let foot = bankFoot(x - size * 0.2, x + size * 0.2) {
