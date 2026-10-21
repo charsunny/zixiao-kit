@@ -706,27 +706,47 @@ private final class PaintingStage {
         parts.append(.near(engine.inkLine(rein, width: 0.32, tone: 0.58, dry: 0.4)))
     }
 
-    /// The bridge and its channel share a coordinate frame: the feet straddle the water.
+    /// Place water, bridge and reflection without independently fitting their bounding boxes.
     private func crossing(river: Bool) {
         guard let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect else { return }
         let b = CGRect(x: bank.minX * w, y: bank.minY * h, width: bank.width * w, height: bank.height * h)
         let width = min(b.width * 0.36, art.width * 0.46)
         let box = CGRect(x: b.minX + b.width * 0.12, y: b.minY + b.height * 0.10,
                          width: width, height: b.height * 0.88)
-        let channel = PaintingWaterChannel(width: width, height: box.height, phase: 0.35, broad: true)
-        let raw = waterEngine.paintingChannel(width: width, height: box.height, river: true, phase: 0.35)
-        layWater(raw, in: box, motif: river ? "riverChannel" : "stream")
-        if !river { placed.insert(.stream) }
-        let left = channel.point(0.55, across: -1), right = channel.point(0.55, across: 1)
-        let bridgeW = (right.x - left.x) * 1.65, bridgeH = bridgeW * 0.43
-        pinned = true
-        add(.bridge, CGRect(x: box.minX + (left.x + right.x) / 2 - bridgeW / 2,
-            y: box.minY + left.y - bridgeH, width: bridgeW, height: bridgeH))
-        pinned = false
-        let ripples = CGRect(x: box.minX + left.x, y: box.minY + left.y + 2,
-                             width: right.x - left.x, height: max(4, box.height * 0.20))
-        layWater(waterEngine.paintingSurface(.pond, width: ripples.width, height: ripples.height),
-                 in: ripples, motif: "bridgeReflection")
+        let phase = waterEngine.r() * 1.6 - 0.8
+        let channel = PaintingWaterChannel(width: width, height: box.height, phase: phase, broad: true)
+        func place(_ raw: ZXArt.SSCanv, x: Double, y: Double, scale: Double = 1, motif: String) {
+            let canvas = raw.map { poly -> ZXArt.SSPoly in
+                var p = poly; p.p = p.p.map { .init(x + $0.x * scale, y + $0.y * scale) }
+                p.wid *= scale; return p
+            }
+            let points = canvas.flatMap(\.p)
+            guard let x0 = points.map(\.x).min(), let x1 = points.map(\.x).max(),
+                  let y0 = points.map(\.y).min(), let y1 = points.map(\.y).max() else { return }
+            parts.append(.near(canvas))
+            if motif != "bridge" { engine.noted(.water, canvas) }
+            elements.append(.init(motif: motif, bounds: .init(x: x0 / w, y: y0 / h, width: (x1 - x0) / w, height: (y1 - y0) / h)))
+        }
+        place(waterEngine.paintingChannel(channel), x: box.minX, y: box.minY, motif: river ? "riverChannel" : "stream")
+        placed.insert(.stream)
+        let left = channel.point(0.46, across: -1), right = channel.point(0.46, across: 1)
+        let bridge = engine.paintingBridgePlan()
+        let scale = (right.x - left.x) * 1.30 / bridge.width
+        let x = box.minX + (left.x + right.x) / 2 - bridge.width * scale / 2
+        let y = box.minY + left.y - 60 * scale
+        place(engine.paintingBridge(bridge), x: x, y: y, scale: scale, motif: "bridge")
+        placed.insert(.bridge)
+        place(engine.paintingBridgeReflection(bridge), x: x, y: y, scale: scale, motif: "bridgeReflection")
+        // The bridge ends disappear into short bank contours, without separate round stone piles.
+        let landing = bridge.kind == .arch ? 54.0 : 42.0
+        var joins: ZXArt.SSCanv = []
+        for (end, side) in [(0.0, -1.0), (bridge.width, 1.0)] {
+            joins += engine.inkLine([.init(end - side * 2, landing + 1), .init(end + side * 8, landing + 1),
+                                    .init(end + side * 18, landing - 3)], width: 1.0, tone: 0.48, dry: 0.6)
+        }
+        parts.append(.near(joins.map { poly in
+            var p = poly; p.p = p.p.map { .init(x + $0.x * scale, y + $0.y * scale) }; p.wid *= scale; return p
+        }))
     }
 
     /// Search actual sky above the main and guest ridges, not their rectangular bounding boxes.

@@ -338,22 +338,67 @@ extension ShanShuiEngine {
         return c
     }
 
-    func paintingBridge() -> ZXArt.SSCanv {
-        let top = inkCurve([P(0, 42), P(29, 26), P(77, 12), P(121, 25), P(156, 43)])
-        let arch = inkCurve([P(156, 60), P(127, 60), P(113, 39), P(79, 30), P(43, 42), P(28, 60), P(0, 60)])
-        var c = [poly(top + arch, fil: .white, str: nil), poly(top + arch, fil: .gray(0, 0.10), str: nil)]
-        c += inkLine(top, width: 2.8, tone: 0.72, dry: 0.45)
-        c += inkLine(arch, width: 2.6, tone: 0.85, dry: 0.32)
-        c += inkLine(top.map { P($0.x, $0.y - 7) }, width: 1.1, tone: 0.52, dry: 0.4)
-        for k in 0..<7 {
-            let x = 8 + Double(k) * 23, y = 42 - sin(x / 156 * .pi) * 27
-            c += inkLine([P(x, y - 9), P(x, y + 1)], width: 1.0, tone: 0.6)
-            c += inkLine([P(x + 3, y + 5), P(x + 11, y + 8)], width: 0.6, tone: 0.23, dry: 0.6)
-        }
-        for (x, y) in [(-8.0, 59.0), (137, 62)] {
-            c += paintingRock(width: 35, height: 18).map { p in
-                var result = p; result.p = p.p.map { P($0.x + x, $0.y + y - 10) }; return result
+    func paintingBridge(_ specification: PaintingBridge? = nil) -> ZXArt.SSCanv {
+        let bridge = specification ?? paintingBridgePlan()
+        let w = bridge.width, floor = 60.0
+        var c: ZXArt.SSCanv = []
+        if bridge.kind == .arch {
+            let top = bridge.deck
+            let arch = bridge.arch
+            let face = top + [P(w, floor)] + arch.reversed() + [P(0, floor)]
+            c += [poly(face, fil: .white, str: nil), poly(face, fil: .gray(0, 0.045), str: nil)]
+            c += inkLine(top, width: 1.9, tone: 0.72, dry: 0.45)
+            c += inkLine(arch, width: 2.0, tone: 0.78, dry: 0.40)
+            for k in 1..<10 {
+                let t = Double(k) / 10, x = w * (0.10 + t * 0.80)
+                let y = floor - sin(t * .pi) * bridge.rise
+                c += inkLine([P(x, y), P(x + (x - w / 2) * 0.04, y - 5)], width: 0.65, tone: 0.35, dry: 0.5)
             }
+        } else {
+            let deckY = 42.0, thick = bridge.kind == .slab ? 6.0 : 3.5
+            let deck = [P(0, deckY), P(w * 0.48, deckY - 1), P(w, deckY + 1),
+                        P(w, deckY + thick), P(w * 0.49, deckY + thick - 1), P(0, deckY + thick)]
+            c += [poly(deck, fil: .white, str: nil), poly(deck, fil: .gray(0, 0.04), str: nil)]
+            c += inkLine(Array(deck.prefix(3)), width: 1.7, tone: 0.70, dry: 0.48)
+            c += inkLine(Array(deck.suffix(3)), width: 2.0, tone: 0.75, dry: 0.42)
+            let piers = bridge.kind == .slab ? [w * 0.16, w * 0.53, w * 0.85] : [w * 0.10, w * 0.89]
+            for x in piers {
+                if bridge.kind == .slab {
+                    c += inkLine([P(x - 2, deckY + thick), P(x - 3, floor), P(x + 3, floor), P(x + 2, deckY + thick)],
+                                 width: 1.2, tone: 0.6, dry: 0.4)
+                } else { c += inkLine([P(x, deckY - 3), P(x - 1, floor)], width: 2.1, tone: 0.75, dry: 0.5) }
+            }
+            for x in [w * 0.28, w * 0.68] {
+                c += inkLine([P(x, deckY), P(x + 1, deckY + thick)], width: 0.8, tone: 0.48)
+            }
+        }
+        if bridge.railing {
+            let deck = bridge.deck
+            c += inkLine(deck.map { P($0.x, $0.y - 10) }, width: 1.4, tone: 0.60, dry: 0.45)
+            for i in stride(from: 0, through: deck.count - 1, by: 6) {
+                let p = deck[i]
+                c += inkLine([P(p.x, p.y - 12), P(p.x, p.y + 1)], width: 1.5, tone: 0.67, dry: 0.4)
+            }
+        }
+        return c
+    }
+
+    func paintingBridgePlan() -> PaintingBridge {
+        PaintingBridge(kind: PaintingBridge.Kind.allCases[Int(r() * 3)], width: 140 + r() * 32,
+                       rise: 24 + r() * 13, railing: r() < 0.5)
+    }
+
+    func paintingBridgeReflection(_ bridge: PaintingBridge) -> ZXArt.SSCanv {
+        var c: ZXArt.SSCanv = []
+        if bridge.kind == .arch {
+            let reflected = bridge.arch.map { P($0.x, 120 - $0.y) }
+            for start in stride(from: 1, to: reflected.count - 4, by: 7) {
+                c += inkLine(Array(reflected[start...start + 4]), width: 0.85, tone: 0.22, dry: 0.65)
+            }
+        }
+        for (x, y, length) in [(0.24, 65.0, 0.23), (0.44, 71, 0.30), (0.18, 82, 0.38)] {
+            c += inkLine([P(bridge.width * x, y), P(bridge.width * (x + length * 0.5), y + 0.5),
+                          P(bridge.width * (x + length), y)], width: 0.8, tone: 0.33, dry: 0.5)
         }
         return c
     }
