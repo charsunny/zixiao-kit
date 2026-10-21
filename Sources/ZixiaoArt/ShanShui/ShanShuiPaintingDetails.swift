@@ -117,7 +117,7 @@ extension ShanShuiEngine {
                 let t0 = Double(k) / Double(segments), t1 = Double(k + 1) / Double(segments)
                 let y0 = 130 - t0 * 130, y1 = 130 - t1 * 130
                 let w0 = 1.6 + 2.6 * t0, w1 = 1.6 + 2.6 * t1
-                let sway = 1.2 * sin(t1 * 2.4)
+                let sway = 0.0
                 c.append(poly([P(30 - w0, y0), P(30 + sway - w1, y1), P(30 + sway + w1, y1), P(30 + w0, y0)],
                     fil: .gray(0, 0.11 * (1 - t0 * 0.85)), str: nil))
             }
