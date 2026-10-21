@@ -62,7 +62,8 @@ struct ZXArtGuohuaTests {
             let d = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: .init(width: 750, height: 1000)))
             let bank = try #require(d.sceneElements.first { $0.motif == "groundBank" }).bounds.cgRect
             #expect(bank.minX < 0.05 && bank.maxX > 0.95)
-            #expect(bank.minY > #require(recipe.verseLayout(pixelSize: .init(width: 750, height: 1000))).rect.maxY)
+            let verse = try #require(recipe.verseLayout(pixelSize: .init(width: 750, height: 1000)))
+            #expect(bank.minY > verse.rect.maxY)
         }
     }
 
