@@ -77,13 +77,23 @@ extension ShanShuiEngine {
                 P(p.x, p.y + (base + 14 - p.y) * pow(sin(Double(i) / Double(crest.count - 1) * .pi), 0.35))
             }
             c.append(poly(crest + floor.reversed(), fil: .white, str: nil))
-            c.append(poly(crest + floor.reversed(), fil: .gray(0, 0.05 + depth * 0.05), str: nil))
-            // Lee face in shadow: a wedge under the crest's falling side.
+            // Sand is mostly paper: a faint body, a little more tone just under the crest.
+            c.append(poly(crest + floor.reversed(), fil: .gray(0, 0.025 + depth * 0.02), str: nil))
+            let lip = crest.map { P($0.x, $0.y + 5 + depth * 4) }
+            c.append(poly(crest + lip.reversed(), fil: .gray(0, 0.03 + depth * 0.03), str: nil))
+            // Lee face: nested, fading washes plus dry strokes down the slope, never one hard wedge.
             let shadowTop = Array(crest.suffix(lee.count + 4))
-            let shadowFoot = shadowTop.map { P($0.x - 6 - depth * 6, base + 6) }
-            c.append(poly(shadowTop + shadowFoot.reversed(), fil: .gray(0, 0.06 + depth * 0.06), str: nil))
-            let core = shadowTop.map { P($0.x - 2, $0.y + 1.5) }
-            c += inkLine(core, width: 3 + depth * 3, tone: 0.06 + depth * 0.05, dry: 0.5)
+            for k in 0..<3 {
+                let reach = (4 + depth * 5) * (1 + Double(k) * 0.8)
+                let foot = shadowTop.map { P($0.x - reach * 0.8, min(base + 8, $0.y + reach)) }
+                c.append(poly(shadowTop + foot.reversed(), fil: .gray(0, (0.035 + depth * 0.035) * (1 - Double(k) * 0.25)), str: nil))
+            }
+            for _ in 0..<(4 + Int(depth * 6)) {
+                let p = shadowTop[Int(r() * Double(shadowTop.count - 1))]
+                let len = 5 + r() * (8 + depth * 8)
+                c += inkLine([P(p.x, p.y + 1), P(p.x - len * 0.6, p.y + len)], width: 1.2 + r() * 1.6,
+                    tone: 0.06 + depth * 0.06, dry: 0.75)
+            }
             c += inkLine(crest, width: 0.6 + depth * 0.7, tone: 0.20 + depth * 0.25, dry: 0.45)
             // Ripples on the windward slope, parallel to the crest.
             for j in 0..<(3 + Int(depth * 5)) {

@@ -803,7 +803,7 @@ private final class PaintingStage {
                     y: near.bounds.minY / h, width: near.bounds.width / w, height: near.bounds.height / h)))
             }
             placed.insert(.dunes)
-            let sunSize = w * 0.09
+            let sunSize = min(w, h) * 0.085
             let sunX = verse.isNull || verse.minX > w / 2 ? art.minX + art.width * 0.55 : art.maxX - art.width * 0.55
             if chosen.contains(.sunset) {
                 add(.sunset, CGRect(x: sunX - sunSize / 2, y: horizon - sunSize * 1.05, width: sunSize, height: sunSize))
