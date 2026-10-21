@@ -23,9 +23,10 @@ extension ShanShuiEngine {
                     P(x + span, height * (0.78 + r() * 0.20))]
             case .cliff:
                 let top = height * (0.05 + r() * 0.36)
-                controls += [P(peak, top), P(x + span * 0.72, top + height * (0.02 + r() * 0.08)),
-                    P(x + span * 0.82, height * (0.62 + r() * 0.17)),
-                    P(x + span, height * (0.77 + r() * 0.17))]
+                controls += [P(peak, top), P(x + span * 0.63, top + height * (0.04 + r() * 0.10)),
+                    P(x + span * 0.75, top + height * (0.02 + r() * 0.10)),
+                    P(x + span * 0.86, height * (0.48 + r() * 0.17)),
+                    P(x + span, height * (0.63 + r() * 0.17))]
             case .headland:
                 let top = height * (0.04 + Double(k) * 0.24 + r() * 0.09)
                 controls += [P(peak, top), P(x + span * 0.74, top + height * (0.04 + r() * 0.07)),
@@ -64,14 +65,16 @@ extension ShanShuiEngine {
             return height
         }
         // 披麻: sparse fibres follow the slope in one direction, without a hooked tail.
-        let count = style == .shoal ? 13 : 18
+        let count = style == .shoal ? 18 : (style == .cliff ? 24 : 20)
         for k in 0..<count {
             let px = width * (0.10 + r() * 0.80), py = top(at: px) + 2 + r() * 3
             let available = max(0, height - py)
-            let reach = available * (0.18 + pow(r(), 1.4) * 0.72)
+            let reach = available * (0.28 + pow(r(), 1.4) * 0.66)
             guard reach > 3 else { continue }
-            let lean = style == .cliff ? 0.10 + r() * 0.18 : 0.30 + r() * 0.40
-            let dx = -min(px - 2, reach * lean)
+            let lean = style == .cliff ? 0.05 + r() * 0.12 : 0.30 + r() * 0.40
+            let direction = top(at: px + 2) > top(at: px - 2) ? 1.0 : -1.0
+            let edge = direction > 0 ? width - px - 2 : px - 2
+            let dx = direction * min(edge, reach * lean)
             let line = (0...18).map { i -> P in
                 let t = Double(i) / 18
                 return P(px + dx * (0.7 * t + 0.3 * t * t), py + reach * t)
@@ -79,11 +82,11 @@ extension ShanShuiEngine {
             guard line.allSatisfy({ $0.y >= top(at: $0.x) }) else { continue }
             let shade = min(1, 0.30 + 0.45 * px / width + 0.25 * reach / max(1, available))
             c += inkLine(line, width: style == .cliff ? 0.7 + r() * 2.0 : 0.4 + r() * 0.6,
-                tone: k % 6 == 0 ? 0.38 : (0.07 + r() * 0.17) * shade, dry: 0.65)
+                tone: k % 6 == 0 ? 0.48 : (0.16 + r() * 0.25) * shade, dry: 0.65)
         }
         var start = 1
         while start < crest.count - 3 {
-            let run = 3 + Int(r() * 7)
+            let run = 2 + Int(r() * 5)
             c += inkLine(Array(crest[start...min(start + run, crest.count - 1)]),
                 width: style == .shoal ? 0.8 + r() * 0.5 : 1.2 + r() * 0.9,
                 tone: 0.40 + r() * 0.23, dry: 0.52)

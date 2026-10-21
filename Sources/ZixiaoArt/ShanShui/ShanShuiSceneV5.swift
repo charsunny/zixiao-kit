@@ -647,8 +647,9 @@ private final class PaintingStage {
         let pad = min(w, h) * 0.045
         for scale in [1.0, 0.8, 0.6] {
             let width = requested.width * scale, height = requested.height * scale
-            let sky = CGRect(x: art.minX, y: pad, width: art.width,
-                height: max(height, min(footer, art.minY + art.height * 0.55) - pad))
+            let skyTop = max(pad, art.minY)
+            let sky = CGRect(x: art.minX, y: skyTop, width: art.width,
+                height: max(height, min(footer, art.minY + art.height * 0.55) - skyTop))
             var candidates: [CGRect] = []
             for row in 0...16 { for column in 0...16 {
                 let x = sky.minX + max(0, sky.width - width) * Double(column) / 16
