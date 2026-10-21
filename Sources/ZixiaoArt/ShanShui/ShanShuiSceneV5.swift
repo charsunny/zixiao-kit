@@ -1399,7 +1399,7 @@ private final class PaintingStage {
                 // bank instead of burying the old tree's root behind its facade.
                 let root = treeRoots[.oldTree]
                 let treeWidth = elements.first(where: { $0.motif == "oldTree" })?.bounds.cgRect.width ?? 0
-                let clearance = width * 0.60 + treeWidth * w * 0.06
+                let clearance = width * 0.52 + treeWidth * w * 0.025
                 var alternatives: [Double] = []
                 if let surface = bankSurface {
                     let low = bank.minX * w + width * 0.52
