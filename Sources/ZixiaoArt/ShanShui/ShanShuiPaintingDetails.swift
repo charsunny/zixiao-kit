@@ -99,7 +99,6 @@ extension ShanShuiEngine {
                 continue
             }
             // Open the foot into paper: only the crest is outlined, never a closed lens.
-            c.append(poly(crest + [P(x0 + span, base + 48), P(x0, base + 48)], fil: .white, str: nil))
             for band in 0..<14 {
                 func edge(_ t: Double) -> [P] {
                     crest.enumerated().map { i, p in
@@ -111,7 +110,7 @@ extension ShanShuiEngine {
                 c.append(poly(edge(t) + edge(Double(band + 1) / 14).reversed(),
                     fil: .gray(0, (0.06 + depth * 0.025) * pow(1 - t, 1.8)), str: nil))
             }
-            c += inkLine(crest, width: 0.8 + depth * 0.35, tone: 0.25 + depth * 0.13, dry: 0.57)
+            c += inkLine(crest, width: 0.8 + depth * 0.35, tone: 0.25 + depth * 0.13, dry: 0.38)
             for _ in 0..<(4 + Int(r() * 4)) {
                 let start = 8 + Int(r() * 27), length = 9 + Int(r() * 12), offset = 3 + r() * rise * 0.35
                 let sweep = Array(crest[start..<min(crest.count, start + length)]).map { $0 + P(-offset * 0.7, offset) }

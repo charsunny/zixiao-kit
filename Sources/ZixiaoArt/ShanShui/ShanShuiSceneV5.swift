@@ -108,6 +108,7 @@ private final class PaintingStage {
     var houseWindowFrame: CGRect?
     var lotusFlowerTip: ZXArt.P?
     var streamInlet: ZXArt.P?
+    var terrainLayerEnd = 0
     var historicGroundNeeded = false
     enum Structure { case high, deep, level, corner }
     var structure: Structure = .level
@@ -979,26 +980,47 @@ private final class PaintingStage {
             height: max(12, bottom - bank.minY * h))
     }
 
-    /// Place the fall by its outlet, joined to the existing stream's actual water gap.
+    /// Water falls through the main mountain, then a short tributary joins the existing creek.
+    /// Keep this new tributary behind the bank/tree layers; the accepted creek is unchanged.
     private func mountainWaterfall() {
         if streamInlet == nil { add(.stream, mountainStreamSlot()) }
-        guard let target = streamInlet else { return }
+        guard let inlet = streamInlet else { return }
+        let mountain = elements.first { $0.motif == "mainMountain" }?.bounds.cgRect
+        let m = mountain.map { CGRect(x: $0.minX * w, y: $0.minY * h, width: $0.width * w, height: $0.height * h) } ?? art
+        let outlet = ZXArt.P(m.minX + m.width * 0.73, min(inlet.y - 8, m.minY + m.height * 0.78))
         let fall = engine.paintingWaterfall(), points = fall.canvas.flatMap(\.p)
         let x0 = points.map(\.x).min()!, x1 = points.map(\.x).max()!
         let y0 = points.map(\.y).min()!, y1 = points.map(\.y).max()!
-        let scale = min(art.height * 0.42 / (y1 - y0),
-            (target.x - art.minX) / max(1, fall.outlet.x - x0),
-            (art.maxX - target.x) / max(1, x1 - fall.outlet.x),
-            (target.y - art.minY) / max(1, fall.outlet.y - y0))
-        guard scale > 0.03 else { return }
+        let scale = min(m.height * 0.48 / (y1 - y0), m.width * 0.42 / (x1 - x0))
         let raw = fall.canvas.map { polygon in
-            var p = polygon; p.p = p.p.map { target + ($0 - fall.outlet) * scale }; p.wid *= scale; return p
+            var p = polygon; p.p = p.p.map { outlet + ($0 - fall.outlet) * scale }; p.wid *= scale; return p
         }
-        let box = CGRect(x: target.x + (x0 - fall.outlet.x) * scale,
-            y: target.y + (y0 - fall.outlet.y) * scale, width: (x1 - x0) * scale, height: (y1 - y0) * scale)
+        let box = CGRect(x: outlet.x + (x0 - fall.outlet.x) * scale,
+            y: outlet.y + (y0 - fall.outlet.y) * scale, width: (x1 - x0) * scale, height: (y1 - y0) * scale)
         pinned = true
-        add(.waterfall, box, source: raw)
+        let added = add(.waterfall, box, source: raw)
         pinned = false
+        guard added else { return }
+        let layer = parts.removeLast()
+        // Connect both banks of the water gap, broadening slightly before the creek mouth.
+        let center = engine.inkCurve([outlet, outlet + ZXArt.P(5, (inlet.y - outlet.y) * 0.45),
+            ZXArt.P(inlet.x - 8, inlet.y - 7), inlet])
+        let left = center.enumerated().map { i, p -> ZXArt.P in
+            let t = Double(i) / Double(center.count - 1)
+            return p - ZXArt.P(10 * scale * (1 - t) + 1.3 * t, 0)
+        }
+        let right = center.enumerated().map { i, p -> ZXArt.P in
+            let t = Double(i) / Double(center.count - 1)
+            return p + ZXArt.P(11 * scale * (1 - t) + 1.3 * t, 0)
+        }
+        var runoff = [engine.poly(left + right.reversed(), fil: .white, str: nil)]
+        for edge in [left, right] { runoff += engine.inkLine(edge, width: 0.65, tone: 0.42, dry: 0.48) }
+        parts.insert(.near(runoff), at: terrainLayerEnd)
+        parts.insert(layer, at: terrainLayerEnd)
+        celestialLayers = celestialLayers.map { ($0.layer >= terrainLayerEnd ? $0.layer + 2 : $0.layer, $0.motif) }
+        let xs = (left + right).map(\.x), ys = (left + right).map(\.y)
+        elements.append(.init(motif: "waterfallRunoff", bounds: .init(x: xs.min()! / w, y: ys.min()! / h,
+            width: (xs.max()! - xs.min()!) / w, height: (ys.max()! - ys.min()!) / h)))
     }
 
     private func waterDetails() {
@@ -1161,6 +1183,7 @@ private final class PaintingStage {
             elements.append(.init(motif: "farShore", bounds: .init(x: shore.bounds.minX / w, y: shore.bounds.minY / h,
                 width: shore.bounds.width / w, height: shore.bounds.height / h)))
         }
+        terrainLayerEnd = parts.count
         ground(for: scene)
         switch scene {
         case .retreat:

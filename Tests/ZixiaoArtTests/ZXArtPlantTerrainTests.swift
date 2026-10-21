@@ -54,9 +54,11 @@ struct ZXArtPlantTerrainTests {
                     seed: "waterfall-connection-\(index)", verseSide: "right"), palette: .paperInk, pixelSize: size))
                 let fall = try #require(drawing.sceneElements.first { $0.motif == "waterfall" }).bounds.cgRect
                 let stream = try #require(drawing.sceneElements.first { $0.motif == "stream" }).bounds.cgRect
-                #expect(abs(fall.maxY - stream.minY) < 0.008)
+                let runoff = try #require(drawing.sceneElements.first { $0.motif == "waterfallRunoff" }).bounds.cgRect
+                #expect(abs(runoff.minY - fall.maxY) < 0.008)
+                #expect(abs(runoff.maxY - stream.minY) < 0.008)
                 #expect(fall.minY < stream.minY - 0.02)
-                #expect(fall.maxX > stream.minX && fall.minX < stream.maxX)
+                #expect(runoff.maxX > stream.minX && runoff.minX < stream.maxX)
             }
         }
     }
