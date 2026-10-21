@@ -1435,8 +1435,10 @@ private final class PaintingStage {
                     let height = width / 1.16
                     let low = max(r.minX, art.minX) + width / 2
                     let high = min(r.maxX, art.maxX) - width / 2
-                    let preferred = r.minX + r.width * (x + willowW / 2 < r.midX ? 0.72 : 0.28)
-                    let center = high >= low ? min(max(preferred, low), high) : r.midX
+                    let stem = (paintedTrees[.willow] ?? []).flatMap(\.p)
+                        .filter { $0.y > rootY - r.height * 0.10 }
+                    let stemX = stem.isEmpty ? x + willowW / 2 : stem.map(\.x).reduce(0, +) / Double(stem.count)
+                    let center = high >= low ? ([low, high].max { abs($0 - stemX) < abs($1 - stemX) } ?? low) : r.midX
                     let base = r.minY + r.height * 0.28
                     pinned = true
                     add(.pavilion, CGRect(x: center - width / 2, y: base - height, width: width, height: height))
@@ -1613,8 +1615,14 @@ private final class PaintingStage {
             let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect
             let width = min(art.width * 0.40, band.width * 0.22)
             let height = motif == .sail ? width * 0.85 : width * 0.40
-            let bottom = min(footer - 3, (bank?.maxY ?? 0.8) * h + height * 0.50)
-            add(motif, CGRect(x: band.minX + band.width * 0.65, y: bottom - height, width: width, height: height))
+            var bottom = min(footer - 3, (bank?.maxY ?? 0.8) * h + height * 0.50)
+            var left = band.minX + band.width * 0.65
+            if let pavilion = elements.first(where: { $0.motif == "pavilion" })?.bounds.cgRect {
+                // A boat belongs to the open water below the pavilion's rocky footing.
+                bottom = min(footer - 3, max(bottom, pavilion.maxY * h + height * 1.45))
+                left = min(band.maxX - width, max(band.minX, pavilion.maxX * w + width * 0.18))
+            }
+            add(motif, CGRect(x: left, y: bottom - height, width: width, height: height))
         }
     }
 

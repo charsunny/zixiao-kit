@@ -85,6 +85,8 @@ struct ZXArtElementsCompletionTests {
                         let bank = try #require(elements.first { $0.motif == "groundBank" }).bounds.cgRect
                         #expect(pavilion.midX >= bank.minX && pavilion.midX <= bank.maxX)
                         #expect(pavilion.maxY >= bank.minY && pavilion.maxY <= bank.maxY + 0.01)
+                        let boat = try #require(elements.first { $0.motif == "boat" }).bounds.cgRect
+                        #expect(!boat.intersects(pavilion), "Boat must leave water below the pavilion")
                     }
                 }
             }
