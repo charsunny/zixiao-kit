@@ -4,7 +4,7 @@ import Testing
 
 struct ZXArtCompositionTests {
     @Test func portraitLandscapesRiseBesideTheInscription() throws {
-        let exceptions: Set<String> = ["historic", "ocean", "moon", "desert", "courtyard"]
+        let exceptions: Set<String> = ["historic", "ocean", "moon", "desert"]
         for poem in ZXArtSceneReviewTests.poems where !exceptions.contains(poem.id) {
             let selection = ZXArt.poetryScene(text: poem.text, title: poem.title)
             for seed in ["review-\(poem.id)"] + (0..<4).map({ "variety-\($0)-\(poem.id)" }) {

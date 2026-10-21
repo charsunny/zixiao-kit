@@ -1484,10 +1484,16 @@ private final class PaintingStage {
             // The wall stands on the ground beneath the verse; the willow grows behind it, its trunk
             // hidden by the wall, its crown heaped above into the open column (杨柳堆烟).
             let band = lowerBand(columnFrom: 0.45)
-            let wallBox = CGRect(x: band.minX + band.width * [0.0, 0.12, 0.26, 0.05][layoutVariant],
+            var wallBox = CGRect(x: band.minX + band.width * [0.0, 0.12, 0.26, 0.05][layoutVariant],
                 y: band.minY + band.height * [0.02, 0.15, 0.06, 0.23][layoutVariant],
                 width: band.width * [0.64, 0.52, 0.70, 0.58][layoutVariant],
                 height: band.height * [0.76, 0.64, 0.80, 0.58][layoutVariant])
+            if layoutVariant == 1 || layoutVariant == 2 {
+                // A distant court occupies the middle of the open column. Its smaller willow
+                // rises with the wall, instead of becoming another miniature at the page foot.
+                wallBox = CGRect(x: art.minX, y: art.minY + art.height * 0.44,
+                    width: art.width * 0.96, height: art.height * 0.20)
+            }
             if let wall = fitted(engine.paintingCourtyard(), to: wallBox) {
                 // Root the willow just behind the wall's near end, so the wall hides its trunk.
                 let willowW = art.width * [0.98, 0.62, 0.70, 0.80][layoutVariant]
