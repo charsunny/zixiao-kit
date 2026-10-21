@@ -6,6 +6,19 @@ import Foundation
 extension ShanShuiEngine {
     func inkSeed() -> UInt32 { UInt32(r() * 4_294_967_295) }
 
+    enum InkDepth { case far, middle, near }
+
+    /// Keep unpainted paper intact; deepen loaded strokes more than pale washes.
+    func paintingInk(_ source: ZXArt.SSCanv, depth: InkDepth) -> ZXArt.SSCanv {
+        let factor = depth == .near ? 1.42 : (depth == .middle ? 0.65 : 0.36)
+        return source.map { poly in
+            var p = poly
+            if var c = p.fil, c != .white { c.a = min(0.94, c.a * factor); p.fil = c }
+            if var c = p.str, c != .white { c.a = min(0.94, c.a * factor); p.str = c }
+            return p
+        }
+    }
+
     /// Loaded centre, irregular pressure, split hairs and a drying tail.
     func inkLine(_ points: [P], width: Double = 1.5, tone: Double = 0.65,
                  dry: Double = 0.28, profile: ZXArt.Brush.Profile = .brush) -> ZXArt.SSCanv {
@@ -94,18 +107,20 @@ extension ShanShuiEngine {
 
     /// A low, staggered slope (坡陀): one taller rock as the host, flatter guests stepping down and
     /// away, so the bank reads as ground receding into water rather than a pile of cushions.
-    func paintingBank() -> ZXArt.SSCanv {
+    enum BankStyle { case shoal, cliff, headland }
+
+    func paintingBank(style: BankStyle = .headland) -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
         let flip = r() < 0.5
-        let stones: [(Double, Double, Double, Double)] = [
-            (20, 20, 130, 52),      // host rock, highest
-            (120, 44, 120, 30),     // guest stepping down
-            (200, 58, 90, 20),      // low shelf into the water
-            (0, 52, 95, 26),        // foreground lip
-        ]
+        let stones: [(Double, Double, Double, Double)]
+        switch style {
+        case .shoal: stones = [(0, 42, 170, 22), (130, 48, 155, 17), (230, 57, 60, 11)]
+        case .cliff: stones = [(0, 0, 145, 86), (115, 42, 90, 38), (190, 66, 100, 18)]
+        case .headland: stones = [(0, 2, 160, 76), (115, 50, 110, 28), (205, 68, 85, 10)]
+        }
         for (sx, y, width, height) in stones {
             let x = flip ? 290 - sx - width : sx
-            c += paintingRock(width: width, height: height, tone: 0.85).map { poly in
+            c += paintingRock(width: width, height: height, tone: style == .cliff ? 1.35 : 1.10).map { poly in
                 var p = poly; p.p = poly.p.map { P($0.x + x, $0.y + y) }; return p
             }
             // 坡脚: a dark, broken stroke where the stone meets ground or water anchors it.
@@ -121,9 +136,9 @@ extension ShanShuiEngine {
         return c
     }
 
-    func paintingMountain() -> ZXArt.SSCanv {
+    func paintingMountain(form: PaintingMountainProfile.Form? = nil) -> ZXArt.SSCanv {
         // Buildings are separate scene objects with their own scale and ground placement.
-        let profile = PaintingMountainProfile(random: { self.r() })
+        let profile = PaintingMountainProfile(form: form, random: { self.r() })
         return paintingLegacy(mountain(140, 420, r() * 80, hei: profile.height,
             wid: profile.width, tex: 240, veg: false, architecture: false, profile: profile), textured: true)
     }

@@ -24,8 +24,8 @@ struct PaintingWaterChannel {
 }
 
 extension ShanShuiEngine {
-    func paintingChannel(width: Double, height: Double, river: Bool = false) -> ZXArt.SSCanv {
-        let channel = PaintingWaterChannel(width: width, height: height, phase: r() * 1.2, broad: river)
+    func paintingChannel(width: Double, height: Double, river: Bool = false, phase: Double? = nil) -> ZXArt.SSCanv {
+        let channel = PaintingWaterChannel(width: width, height: height, phase: phase ?? r() * 1.2, broad: river)
         let left = channel.left, right = channel.right
         // The unpainted water cuts through the rock bed rather than becoming another rock contour.
         var c = [poly(left + right.reversed(), fil: .white, str: nil)]
