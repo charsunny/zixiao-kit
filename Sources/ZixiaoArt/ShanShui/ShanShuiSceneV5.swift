@@ -511,7 +511,15 @@ private final class PaintingStage {
             .filter { $0 >= surface.x0 + bw / 2 && $0 <= bankEnd - bw / 2 }
             .sorted { abs($0 - cx) < abs($1 - cx) }
         let raw = engine.paintingAsset(motif)
+        let stems: [Double] = motif == .pavilion ? paintedTrees.values.compactMap { tree in
+            let points = tree.flatMap(\.p)
+            guard let top = points.map(\.y).min(), let bottom = points.map(\.y).max() else { return nil }
+            let foot = points.filter { $0.y > bottom - (bottom - top) * 0.12 }
+            return foot.isEmpty ? nil : foot.map(\.x).reduce(0, +) / Double(foot.count)
+        } : []
         for x in [cx] + alternatives {
+            // A tree may cover an eave, but its trunk must not pass through the open hall.
+            guard stems.allSatisfy({ abs(x - $0) > bw * 0.58 }) else { continue }
             guard let foot = bankFoot(x - bw * 0.4, x + bw * 0.4), foot >= peak.midY else { continue }
             pinned = true
             let landed = add(motif, CGRect(x: x - bw / 2, y: foot - bh, width: bw, height: bh), source: raw)
