@@ -10,7 +10,7 @@ extension ShanShuiEngine {
     /// side-brush axe cuts (斧劈).
     func paintingSlope(_ style: BankStyle) -> ZXArt.SSCanv {
         let width = 280 + r() * 50
-        let height = style == .shoal ? 36 + r() * 14 : (style == .cliff ? 92 + r() * 26 : 64 + r() * 24)
+        let height = style == .shoal ? 30 + r() * 12 : (style == .cliff ? 84 + r() * 24 : 64 + r() * 24)
         let flip = r() < 0.5
         struct Stone { var x0, x1, top, floor: Double; var rank: Int }
         var stones: [Stone] = []
@@ -50,18 +50,22 @@ extension ShanShuiEngine {
         // One side rises gently (the back of the slope), the other turns down steeply toward the
         // water. Cliffs turn both shoulders sharply; the top stays nearly level.
         let gentleLeft = r() < 0.5
-        let rise = cliff ? 0.07 + r() * 0.06 : 0.16 + r() * 0.14
-        let fall = cliff ? 0.05 + r() * 0.05 : 0.08 + r() * 0.08
+        // Shoals slide into the water over a long run; cliffs lean back like a battered wall.
+        let rise = cliff ? 0.14 + r() * 0.10 : (shoal ? 0.30 + r() * 0.16 : 0.18 + r() * 0.14)
+        let fall = cliff ? 0.08 + r() * 0.06 : (shoal ? 0.10 + r() * 0.08 : 0.08 + r() * 0.08)
+        // A tilted top: the gentle side sits lower than the steep shoulder.
+        let tilt = h * (cliff ? 0.06 + r() * 0.12 : 0.04 + r() * 0.10)
         let left = gentleLeft ? rise : fall, right = gentleLeft ? fall : rise
         var keys = [P(x0, floor - h * 0.04),
                     P(x0 + w * left * 0.45, top + h * (cliff ? 0.30 : 0.42) + h * r() * 0.12),
-                    P(x0 + w * left, top + h * r() * 0.06)]
+                    P(x0 + w * left, top + h * r() * 0.06 + (gentleLeft ? tilt : 0))]
         let bumps = cliff ? 1 + Int(r() * 2) : 1 + Int(r() * 3)
         for k in 1...bumps {
             let u = left + (1 - left - right) * Double(k) / Double(bumps + 1)
-            keys.append(P(x0 + w * (u + (r() - 0.5) * 0.06), top + h * r() * (cliff ? 0.05 : shoal ? 0.10 : 0.16)))
+            let lean = gentleLeft ? tilt * (1 - Double(k) / Double(bumps + 1)) : tilt * Double(k) / Double(bumps + 1)
+            keys.append(P(x0 + w * (u + (r() - 0.5) * 0.06), top + lean + h * r() * (cliff ? 0.05 : shoal ? 0.14 : 0.16)))
         }
-        keys += [P(x1 - w * right, top + h * (0.03 + r() * 0.10)),
+        keys += [P(x1 - w * right, top + h * (0.03 + r() * 0.10) + (gentleLeft ? 0 : tilt)),
                  P(x1 - w * right * 0.35, top + h * (cliff ? 0.30 : 0.45) + h * r() * 0.15),
                  P(x1, floor - h * 0.02)]
         // Cliffs keep their corners; earth and shoals are rounded by the brush.
@@ -77,8 +81,10 @@ extension ShanShuiEngine {
 
         // The fold where the lit top turns into the face, roughly parallel to the crest.
         let drop = h * (shoal ? 0.38 + r() * 0.12 : cliff ? 0.16 + r() * 0.08 : 0.22 + r() * 0.10)
-        let foldFrom = x0 + w * (left * (0.55 + r() * 0.3))
-        let foldTo = x0 + w * (0.58 + r() * 0.30)
+        // The fold is partial and starts at the steep shoulder, so it never doubles the contour.
+        let foldSpan = shoal ? 0.30 + r() * 0.20 : 0.40 + r() * 0.25
+        let foldFrom = gentleLeft ? x0 + w * (1 - right - foldSpan) : x0 + w * left * 0.6
+        let foldTo = gentleLeft ? x0 + w * (1 - right * 0.6) : foldFrom + w * foldSpan
         let fold = (0...20).map { i -> P in
             let x = foldFrom + (foldTo - foldFrom) * Double(i) / 20
             let wobble = (n(x * 0.05, Double(rank) + 7) - 0.5) * h * 0.08
@@ -114,15 +120,21 @@ extension ShanShuiEngine {
             u = shadeLeft ? pow(u, 1.4) : 1 - pow(1 - u, 1.4)
             let gx = x0 + w * (0.08 + u * 0.84)
             if cliff {
-                // 斧劈: a loaded side-brush wedge, heavy at the fold and dragged down and aside.
+                // 斧劈: the face splits into oblique planes. A plane line runs from the fold down
+                // and aside; the shaded plane beside it takes a pale wash and a dragged side stroke.
                 let sy = faceTop(gx) + 1
-                let reach = (floor - sy) * (0.40 + r() * 0.35)
+                let reach = (floor - sy) * (0.55 + r() * 0.40)
                 guard reach > 4 else { continue }
-                let lean = reach * (0.25 + r() * 0.35) * (gx < x0 + w / 2 ? -1 : 1)
-                c += slopeStroke(inkCurve([P(gx, sy), P(gx + lean * 0.4, sy + reach * 0.5), P(gx + lean, sy + reach)]),
-                    width: 6 + r() * 6, tone: 0.40 + r() * 0.14, pressures: [1.2, 0.9, 0.55, 0.25, 0.03], dry: 0.70)
-                c += slopeStroke([P(gx + 3, sy + reach * 0.1), P(gx + 3 + lean * 0.9, sy + reach * 0.95)],
-                    width: 1.1, tone: 0.55, pressures: [0.8, 1, 0.7, 0.4, 0.05], dry: 0.5)
+                let dir = shadeLeft ? -1.0 : 1.0
+                let lean = reach * (0.30 + r() * 0.45) * dir
+                let edge = [P(gx, sy), P(gx + lean * 0.55, sy + reach * 0.5), P(gx + lean, sy + reach)]
+                let breadth = w * (0.05 + r() * 0.06) * dir
+                let plane = edge + edge.reversed().map { P($0.x + breadth * (0.4 + 0.6 * ($0.y - sy) / reach), $0.y) }
+                c.append(poly(plane, fil: .gray(0, 0.06 + r() * 0.05), str: nil))
+                c += slopeStroke(edge, width: 1.2 + r() * 0.6, tone: 0.55 + r() * 0.12,
+                    pressures: [0.9, 1, 0.7, 0.4, 0.05], dry: 0.5)
+                c += slopeStroke([P(gx + breadth * 0.3, sy + reach * 0.08), P(gx + breadth * 0.5 + lean * 0.7, sy + reach * 0.78)],
+                    width: 4 + r() * 4, tone: 0.32 + r() * 0.12, pressures: [1.1, 0.8, 0.5, 0.2, 0.02], dry: 0.78)
             } else if shoal {
                 // 折带: short strokes laid along the face, turning down at their ends.
                 for k in 0..<(2 + Int(r() * 2)) {
