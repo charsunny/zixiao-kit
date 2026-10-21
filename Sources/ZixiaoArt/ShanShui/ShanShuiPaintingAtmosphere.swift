@@ -9,11 +9,14 @@ extension ShanShuiEngine {
         case .sunrise, .sunset:
             let radius = 24.0
             var c = sceneEllipse(40, 40, radius, radius, fill: C(171, 64, 51, 0.70), tone: 0)
-            // A round cinnabar disc, with zero, one or two narrow cloud veils. No luminous halo.
-            for k in 0..<(Int(r() * 65536) % 3) {
-                let y = 30 + Double(k) * 15 + r() * 5
-                c.append(poly(inkCurve([P(12, y), P(37, y - 1), P(68, y + 1)]) +
-                    inkCurve([P(68, y + 3), P(37, y + 2), P(12, y + 2)]), fil: .white, str: nil))
+            // Clouds obscure an unequal part of the rim; never stripe the disc like a badge.
+            let form = Int(r() * 65536) % 3
+            if form > 0 {
+                let y = form == 1 ? 58.0 : 48.0
+                let edge = inkCurve([P(form == 1 ? 12 : 43, y + 2), P(49, y - 1),
+                    P(59, y + 1), P(70, y - 2)])
+                c.append(poly(edge + [P(72, 68), P(form == 1 ? 12 : 43, 68)], fil: .white, str: nil))
+                c += inkLine(edge, width: 2.0, tone: 0.055, dry: 0.72)
             }
             return c
         case .stars:
