@@ -41,8 +41,8 @@ extension ShanShuiEngine {
             var start = 0
             while start < 38 {
                 let length = 4 + Int(r() * 5)
-                c += inkLine(Array(bank[start...min(start + length, 40)]), width: 0.65 + r() * 0.45,
-                    tone: 0.32 + r() * 0.12, dry: 0.6)
+                c += inkLine(Array(bank[start...min(start + length, 40)]), width: 0.95 + r() * 0.55,
+                    tone: 0.45 + r() * 0.14, dry: 0.42)
                 start += length + 2 + Int(r() * 3)
             }
         }
@@ -53,7 +53,7 @@ extension ShanShuiEngine {
             let lane = -0.75 + r() * 0.35
             let a = channel.point(t, across: lane), b = channel.point(t, across: min(0.80, lane + 0.65 + r() * 0.50))
             c += inkLine([a, P((a.x + b.x) / 2, a.y + min(0.8, height * 0.009)), b],
-                         width: 0.55 + t * 0.3, tone: 0.22 + t * 0.10, dry: 0.55)
+                         width: 0.75 + t * 0.4, tone: 0.35 + t * 0.12, dry: 0.40)
         }
         if !channel.broad {
             for t in [0.42, 0.76] where r() < 0.65 {

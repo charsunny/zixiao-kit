@@ -359,25 +359,29 @@ extension ShanShuiEngine {
             let deck = [P(0, deckY), P(w * 0.48, deckY - 1), P(w, deckY + 1),
                         P(w, deckY + thick), P(w * 0.49, deckY + thick - 1), P(0, deckY + thick)]
             c += [poly(deck, fil: .white, str: nil), poly(deck, fil: .gray(0, 0.04), str: nil)]
-            c += inkLine(Array(deck.prefix(3)), width: 1.7, tone: 0.70, dry: 0.48)
-            c += inkLine(Array(deck.suffix(3)), width: 2.0, tone: 0.75, dry: 0.42)
-            let piers = bridge.kind == .slab ? [w * 0.16, w * 0.53, w * 0.85] : [w * 0.10, w * 0.89]
+            c += inkLine(Array(deck.prefix(3)), width: 1.9, tone: 0.76, dry: 0.25)
+            c += inkLine(Array(deck.suffix(3)), width: 2.1, tone: 0.80, dry: 0.28)
+            let piers = bridge.kind == .slab ? [w * 0.19, w * 0.79] : [w * 0.13, w * 0.86]
             for x in piers {
                 if bridge.kind == .slab {
-                    c += inkLine([P(x - 2, deckY + thick), P(x - 3, floor), P(x + 3, floor), P(x + 2, deckY + thick)],
-                                 width: 1.2, tone: 0.6, dry: 0.4)
-                } else { c += inkLine([P(x, deckY - 3), P(x - 1, floor)], width: 2.1, tone: 0.75, dry: 0.5) }
-            }
-            for x in [w * 0.28, w * 0.68] {
-                c += inkLine([P(x, deckY), P(x + 1, deckY + thick)], width: 0.8, tone: 0.48)
+                    let pier = [P(x - 3, deckY + thick), P(x + 3, deckY + thick),
+                                P(x + 3, floor), P(x - 3, floor)]
+                    c.append(poly(pier, fil: .gray(0, 0.16), str: nil))
+                    c += inkLine([P(x - 3, deckY + thick), P(x - 3, floor)], width: 1.5, tone: 0.70, dry: 0.3)
+                    c += inkLine([P(x + 3, deckY + thick), P(x + 3, floor)], width: 1.0, tone: 0.50, dry: 0.35)
+                } else {
+                    // A single straight wooden pile enters the water, with no looped foot.
+                    c += inkLine([P(x, deckY + 2), P(x + 0.4, floor + 1)], width: 2.5, tone: 0.82, dry: 0.23)
+                }
             }
         }
         if bridge.railing {
             let deck = bridge.deck
-            c += inkLine(deck.map { P($0.x, $0.y - 10) }, width: 1.4, tone: 0.60, dry: 0.45)
-            for i in stride(from: 0, through: deck.count - 1, by: 6) {
+            // One low handrail on three posts, inset from the ends; no fence or door frame.
+            c += inkLine(Array(deck[3...33]).map { P($0.x, $0.y - 6) }, width: 1.15, tone: 0.62, dry: 0.32)
+            for i in [5, 18, 31] {
                 let p = deck[i]
-                c += inkLine([P(p.x, p.y - 12), P(p.x, p.y + 1)], width: 1.5, tone: 0.67, dry: 0.4)
+                c += inkLine([P(p.x, p.y - 6.5), P(p.x, p.y + 0.5)], width: 1.1, tone: 0.67, dry: 0.3)
             }
         }
         if bridge.pedestrian {

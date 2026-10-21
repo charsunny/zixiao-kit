@@ -737,9 +737,10 @@ private final class PaintingStage {
     private func crossing(river: Bool) {
         guard let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect else { return }
         let b = CGRect(x: bank.minX * w, y: bank.minY * h, width: bank.width * w, height: bank.height * h)
-        let width = min(b.width * 0.36, art.width * 0.46)
-        let box = CGRect(x: b.minX + b.width * 0.12, y: b.minY + b.height * 0.10,
-                         width: width, height: b.height * 0.88)
+        let width = b.width * 0.45
+        let startY = max(b.minY - b.height * 0.35, verse.isNull ? art.minY : verse.maxY + 4)
+        let box = CGRect(x: b.minX + b.width * 0.16, y: startY,
+                         width: width, height: b.maxY - startY + b.height * 0.12)
         let phase = waterEngine.r() * 1.6 - 0.8
         let channel = PaintingWaterChannel(width: width, height: box.height, phase: phase, broad: true)
         func place(_ raw: ZXArt.SSCanv, x: Double, y: Double, scale: Double = 1, motif: String) {
@@ -756,9 +757,9 @@ private final class PaintingStage {
         }
         place(waterEngine.paintingChannel(channel), x: box.minX, y: box.minY, motif: river ? "riverChannel" : "stream")
         placed.insert(.stream)
-        let left = channel.point(0.46, across: -1), right = channel.point(0.46, across: 1)
+        let left = channel.point(0.64, across: -1), right = channel.point(0.64, across: 1)
         let bridge = engine.paintingBridgePlan()
-        let scale = (right.x - left.x) * 1.30 / bridge.width
+        let scale = (right.x - left.x) * 1.16 / bridge.width
         let x = box.minX + (left.x + right.x) / 2 - bridge.width * scale / 2
         let y = box.minY + left.y - 60 * scale
         place(engine.paintingBridge(bridge), x: x, y: y, scale: scale, motif: "bridge")
