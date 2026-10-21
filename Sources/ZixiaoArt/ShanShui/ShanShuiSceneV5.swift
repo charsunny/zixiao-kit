@@ -713,7 +713,7 @@ private final class PaintingStage {
             let deep = structure == .deep
             let guestBox = CGRect(x: peakBox.minX + peakBox.width * (deep ? 0.34 : 0.48),
                 y: peakBox.minY + peakBox.height * (deep ? 0.02 : 0.28),
-                width: peakBox.width * (deep ? 0.65 : 0.51), height: peakBox.height * (deep ? 0.68 : 0.62))
+                width: peakBox.width * (deep ? 0.65 : 0.51), height: peakBox.height * (deep ? 0.50 : 0.62))
             if let guest = fitted(engine.paintingMountain(form: .folded, aspect: deep ? 1.55 : nil), to: guestBox) {
                 let r = guest.bounds
                 elements.append(.init(motif: "guestMountain", bounds: .init(x: r.minX / w, y: r.minY / h,
@@ -1490,7 +1490,7 @@ private final class PaintingStage {
                 height: band.height * [0.76, 0.64, 0.80, 0.58][layoutVariant])
             if let wall = fitted(engine.paintingCourtyard(), to: wallBox) {
                 // Root the willow just behind the wall's near end, so the wall hides its trunk.
-                let willowW = art.width * [0.98, 0.84, 0.96, 0.76][layoutVariant]
+                let willowW = art.width * [0.98, 0.62, 0.70, 0.80][layoutVariant]
                 let rootY = wall.bounds.minY + wall.bounds.height * 0.67
                 let x = min(max(art.minX, wall.bounds.minX + wall.bounds.width * [0.18, 0.62, 0.34, 0.77][layoutVariant] - willowW / 2), art.maxX - willowW)
                 // A roof inside the court, partially hidden by the wall and willow, gives the
@@ -1510,6 +1510,10 @@ private final class PaintingStage {
                 // so the normal small near-tree multiplier does not hide the crown as well.
                 pinned = true
                 include(.willow, CGRect(x: x, y: art.minY, width: willowW, height: rootY - art.minY))
+                if layoutVariant == 2, chosen.contains(.willow) {
+                    add(.willow, CGRect(x: art.maxX - art.width * 0.38, y: art.minY + art.height * 0.25,
+                        width: art.width * 0.38, height: rootY - art.minY - art.height * 0.25), repeatable: true)
+                }
                 pinned = false
                 let r = wall.bounds
                 if chosen.contains(.pavilion) {
@@ -1680,9 +1684,9 @@ private final class PaintingStage {
             }
         }
         placed.insert(.dunes)
+        let channel = PaintingWaterChannel(width: art.width * 0.96, height: footer - horizon,
+            phase: [0.2, 2.4, 4.1, 5.2][layoutVariant], broad: true, bend: 0.32, opening: 0.45)
         if chosen.contains(.stream) {
-            let channel = PaintingWaterChannel(width: art.width * 0.96, height: footer - horizon,
-                phase: [0.2, 2.4, 4.1, 5.2][layoutVariant], broad: true, bend: 0.32, opening: 0.45)
             let river = waterEngine.paintingChannel(channel).map { poly in
                 var p = poly; p.p = p.p.map { .init($0.x + art.minX, $0.y + horizon) }; return p
             }
@@ -1698,9 +1702,22 @@ private final class PaintingStage {
         }
         if chosen.contains(.beaconSmoke) {
             let width = art.width * 0.11
-            let x = art.minX + art.width * [0.12, 0.78, 0.18, 0.80][layoutVariant]
-            let base = sand.flatMap(\.p).filter { abs($0.x - x) < width * 0.25 }.map(\.y).min()
-                ?? (horizon + h * 0.10)
+            let preferred = art.minX + art.width * [0.12, 0.78, 0.18, 0.80][layoutVariant]
+            let sandPoints = sand.flatMap(\.p)
+            // Pick a real dune crest outside the river at that depth. A fixed x can land
+            // inside a meander on wide pages even when it works in the hanging scroll.
+            let footings: [(x: Double, y: Double)] = (0...24).compactMap { index in
+                let x = art.minX + width * 0.6 + (art.width - width * 1.2) * Double(index) / 24
+                guard let y = sandPoints.filter({ abs($0.x - x) < width * 0.25 }).map(\.y).min() else { return nil }
+                let t = min(1, max(0, (y - horizon) / channel.height))
+                let left = art.minX + channel.point(t, across: -1).x
+                let right = art.minX + channel.point(t, across: 1).x
+                guard !chosen.contains(.stream) || x + width * 0.7 < left || x - width * 0.7 > right else { return nil }
+                return (x, y)
+            }
+            let footing = footings.min { abs($0.x - preferred) < abs($1.x - preferred) }
+                ?? (x: preferred, y: horizon + h * 0.10)
+            let x = footing.x, base = footing.y
             let box = CGRect(x: x - width / 2, y: base - width * 0.70, width: width, height: width * 0.70)
             if let tower = fitted(engine.paintingBeacon(), to: box) {
                 parts.append(.near(tower.canv))
@@ -1716,13 +1733,15 @@ private final class PaintingStage {
     }
 
     private func ocean(_ chosen: Set<Motif>) {
-        let horizon = art.minY + art.height * [0.14, 0.33, 0.23, 0.43][layoutVariant]
+        let moonSize = art.width * [0.42, 0.34, 0.48, 0.38][layoutVariant]
+        let horizon = max(contentTop + moonSize * 1.10,
+            art.minY + art.height * [0.14, 0.33, 0.23, 0.43][layoutVariant])
         parts.append(.near(engine.inkLine([.init(art.minX, horizon),
             .init(art.minX + art.width * 0.45, horizon + 0.3), .init(art.maxX, horizon - 0.2)],
             width: 0.7, tone: 0.35, dry: 0.5)))
         let light: Motif? = chosen.contains(.moon) ? .moon : (chosen.contains(.sunrise) ? .sunrise : nil)
         if let light {
-            let size = art.width * [0.42, 0.34, 0.48, 0.38][layoutVariant]
+            let size = moonSize
             let x = art.minX + art.width * [0.28, 0.68, 0.48, 0.72][layoutVariant]
             add(light, CGRect(x: x - size / 2, y: horizon - size * 1.10, width: size, height: size))
             let path = CGRect(x: x - art.width * 0.14, y: horizon + 2, width: art.width * 0.28,
