@@ -2,186 +2,97 @@
 import Foundation
 
 extension ShanShuiEngine {
-    /// Seeded shores: separate low shoals, angular bluffs, or descending rock shelves.
+    /// Two or three opaque earth/stone masses. Each owns its contour and descending texture;
+    /// paper masks rear faces before the front face is drawn, so washes cannot become ghost hills.
     func paintingSlope(_ style: BankStyle) -> ZXArt.SSCanv {
-        let width = 270 + r() * 70
-        let height = style == .shoal ? 24 + r() * 20 : (style == .cliff ? 75 + r() * 35 : 52 + r() * 32)
-        let flip = r() < 0.5
-        let sections = style == .headland ? 3 : 2 + Int(r() * 2)
-        let lengths = (0..<sections).map { _ in 0.7 + r() * 0.8 }
-        let total = lengths.reduce(0, +)
-        var controls = [P(0, height * (style == .headland ? 0.35 : 0.88))]
-        var x = 0.0
-        for k in 0..<sections {
-            let span = width * lengths[k] / total
-            let peak = x + span * (0.24 + r() * 0.32)
-            switch style {
-            case .shoal:
-                let top = height * (0.08 + r() * 0.48)
-                controls += [P(x + span * 0.12, height * (0.65 + r() * 0.2)),
-                    P(peak, top), P(x + span * 0.82, top + height * (0.15 + r() * 0.18)),
-                    P(x + span, height * (0.78 + r() * 0.20))]
-            case .cliff:
-                let top = height * (0.05 + r() * 0.36)
-                controls += [P(peak, top), P(x + span * 0.62, top + height * (0.18 + r() * 0.14)),
-                    P(x + span * 0.75, top + height * (0.08 + r() * 0.10)),
-                    P(x + span * 0.86, height * (0.48 + r() * 0.17)),
-                    P(x + span, height * (0.63 + r() * 0.17))]
-            case .headland:
-                let top = height * (0.04 + Double(k) * 0.24 + r() * 0.09)
-                controls += [P(peak, top), P(x + span * 0.74, top + height * (0.04 + r() * 0.07)),
-                    P(x + span, top + height * (0.20 + r() * 0.08))]
+        let width = 280 + r() * 55
+        let height = style == .shoal ? 30 + r() * 17 : (style == .cliff ? 72 + r() * 26 : 48 + r() * 28)
+        let count = 2 + Int(r() * 2), flip = r() < 0.5
+        var blocks: [(crest: [P], foot: [P])] = []
+        for i in 0..<count {
+            let fraction = Double(i) / Double(count)
+            let left = i == 0 ? 0 : width * (fraction - 0.07)
+            let right = i == count - 1 ? width : width * (fraction + 1 / Double(count) + 0.07)
+            let span = right - left
+            let top = height * (style == .headland ? 0.08 + fraction * 0.48 : 0.08 + r() * 0.28)
+            let floor = height * (0.80 + Double(i) * 0.07)
+            let crest: [P]
+            if style == .cliff {
+                // Broad horizontal caps and steep faces, never a row of triangular peaks.
+                crest = [P(left, floor - height * 0.10), P(left + span * 0.09, top + height * 0.05),
+                    P(left + span * 0.32, top), P(left + span * 0.70, top + height * 0.035),
+                    P(left + span * 0.86, top + height * 0.13), P(right, floor - height * 0.08)]
+            } else {
+                let controls = [P(left, floor - height * 0.09), P(left + span * 0.19, top + height * 0.18),
+                    P(left + span * (0.39 + r() * 0.12), top), P(left + span * 0.77, top + height * 0.13),
+                    P(right, floor - height * 0.08)]
+                crest = style == .shoal ? inkCurve(controls) : controls
             }
-            x += span
+            let foot = inkCurve([crest.last!, P(left + span * 0.73, floor + height * 0.05),
+                P(left + span * 0.30, floor + height * 0.02), crest[0]])
+            blocks.append((crest, foot))
         }
-        let crest: [P]
-        if style == .shoal { crest = inkCurve(controls) }
-        else {
-            // Straight, unequal ledges preserve the angular faces instead of rounding every rock.
-            crest = zip(controls, controls.dropFirst()).flatMap { a, b in
-                (0..<6).map { i in let t = Double(i) / 6; return P(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t) }
-            } + [controls.last!]
-        }
-        let bottom = inkCurve([crest.last!, P(width * (0.77 + r() * 0.10), height + 4 + r() * 8),
-            P(width * (0.37 + r() * 0.18), height + 6 + r() * 10),
-            P(width * (0.08 + r() * 0.12), height + r() * 5), crest[0]])
-        let outline = crest + bottom
-        var c = [poly(outline, fil: .white, str: nil)]
-        func top(at x: Double) -> Double {
-            for (a, b) in zip(crest, crest.dropFirst()) where a.x <= x && x <= b.x {
+        func top(_ crest: [P], _ x: Double) -> Double {
+            for (a, b) in zip(crest, crest.dropFirst()) where x >= a.x && x <= b.x {
                 return a.y + (b.y - a.y) * (x - a.x) / max(0.001, b.x - a.x)
             }
-            return height
+            return crest.last!.y
         }
-        func floor(at x: Double) -> Double {
-            for (a, b) in zip(bottom, bottom.dropFirst()) where min(a.x, b.x) <= x && x <= max(a.x, b.x) {
-                if abs(b.x - a.x) > 0.001 { return a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x) }
-            }
-            return height + 5
-        }
-        func surface(_ x: Double, _ depth: Double) -> P {
-            let x = min(width, max(0, x)), y = top(at: x)
-            return P(x, y + max(0, floor(at: x) - y) * depth)
-        }
-        // Reserve the lit top; a connected dilute face makes the bank read as earth, not a few
-        // floating strokes. The darker wash sits lower and on the back of each unequal shoulder.
-        let faceTop = (0...100).map { i -> P in
+        // First polygon remains the terrain footprint used by support and outline inspection.
+        let silhouette = (0...100).map { i -> P in
             let x = width * Double(i) / 100
-            return surface(x, 0.09 + 0.035 * sin(Double(i) * 0.23))
+            let y = blocks.filter { x >= $0.crest.first!.x && x <= $0.crest.last!.x }
+                .map { top($0.crest, x) }.min() ?? height
+            return P(x, y)
         }
-        let faceFoot = (0...100).map { surface(width * Double($0) / 100, 0.98) }
-        c.append(poly(faceTop + faceFoot.reversed(), fil: .gray(0, 0.085), str: nil))
-        let lower = (0...100).map { i -> P in
-            let x = width * Double(i) / 100
-            return surface(x, 0.30 + 0.08 * n(x * 0.025, 3))
-        }
-        c.append(poly(lower + faceFoot.reversed(), fil: .gray(0, 0.045), str: nil))
-        var sectionX = 0.0
-        for spanWeight in lengths {
-            let span = width * spanWeight / total
-            let left = sectionX + span * (0.25 + r() * 0.12)
-            let right = sectionX + span * (0.88 + r() * 0.10)
-            for pass in 0..<2 {
-                let upper = (0...24).map { i -> P in
-                    let t = Double(i) / 24, x = left + (right - left) * t
-                    let belly = sin(t * .pi)
-                    return surface(x, 0.82 - belly * (pass == 0 ? 0.66 : 0.42))
-                }
-                let lower = (0...24).map { i -> P in
-                    let t = Double(i) / 24
-                    return surface(left + (right - left) * t, 0.82 + sin(t * .pi) * 0.12)
-                }
-                c.append(poly(upper + lower.reversed(), fil: .gray(0, style == .cliff ? 0.075 : 0.055), str: nil))
+        var c = [poly(silhouette + [P(width, height), P(0, height)], fil: .white, str: nil)]
+        for (index, block) in blocks.enumerated() {
+            let crest = block.crest, foot = block.foot, left = crest.first!.x, right = crest.last!.x
+            let span = right - left, floor = foot.map(\.y).max()!
+            c.append(poly(crest + foot, fil: .white, str: nil))
+            // One dilute wash confined to the shaded face; no nested shoulder silhouettes.
+            let shadeTop = (0...20).map { i -> P in
+                let x = left + span * (0.48 + Double(i) / 20 * 0.49)
+                let y = top(crest, x)
+                return P(x, y + (floor - y) * 0.24)
             }
-            sectionX += span
-        }
-        if style == .cliff {
-            // 斧劈: unequal oblique planes, loaded on one edge and split into dry side strokes.
-            // Each patch has width as well as length; no row of parallel hanging vertical lines.
-            for _ in 0..<(7 + Int(r() * 4)) {
-                let x = width * (0.14 + r() * 0.72)
-                let start = surface(x, 0.13 + r() * 0.13)
-                let reach = max(0, floor(at: x) - start.y) * (0.28 + r() * 0.43)
-                let dx = -reach * (0.45 + r() * 0.65)
-                let breadth = 5 + r() * 11
-                guard reach > 6, x + dx > 2 else { continue }
-                let plane = [start, P(x + breadth, start.y + reach * 0.10),
-                    P(x + dx + breadth * 0.45, start.y + reach * 0.92), P(x + dx, start.y + reach)]
-                guard plane.allSatisfy({ $0.x < width && $0.y >= top(at: $0.x) && $0.y <= floor(at: $0.x) }) else { continue }
-                c.append(poly(plane, fil: .gray(0, 0.10 + r() * 0.10), str: nil))
-                for hair in 0..<3 {
-                    let offset = Double(hair) * breadth * 0.24
-                    let fraction = 0.60 + r() * 0.38
-                    let line = (0...12).map { i -> P in
-                        let t = Double(i) / 12 * fraction
-                        return P(x + offset + dx * (0.85 * t + 0.15 * t * t), start.y + reach * t)
-                    }
-                    c += inkLine(line, width: hair == 0 ? 2.5 + r() * 3.5 : 0.65 + r(),
-                        tone: hair == 0 ? 0.42 + r() * 0.15 : 0.22 + r() * 0.13, dry: 0.72)
+            c.append(poly(shadeTop + [P(right - span * 0.03, floor - 1), P(left + span * 0.48, floor - 1)],
+                          fil: .gray(0, 0.035), str: nil))
+            c += inkLine(crest, width: style == .cliff ? 1.4 : 1.05, tone: 0.53, dry: 0.50)
+            c += inkLine(Array(foot.dropFirst().dropLast()), width: 1.35, tone: 0.62, dry: 0.55)
+            for bundle in 0..<(style == .cliff ? 5 : 6) {
+                let u = 0.46 + Double(bundle) * 0.065 + r() * 0.035
+                let x = left + span * u
+                let y = top(crest, x), depth = floor - y
+                let startY = y + depth * (0.18 + r() * 0.16)
+                let reach = depth * (0.22 + r() * 0.28)
+                let lean = style == .cliff ? -reach * 0.22 : reach * 0.45
+                for hair in 0..<(3 + Int(r() * 3)) {
+                    let dx = Double(hair) * (0.8 + r() * 0.5)
+                    let endY = min(floor - 3, startY + reach * (0.7 + r() * 0.3))
+                    let line = [P(x + dx, startY), P(x + dx + lean * 0.45, (startY + endY) / 2),
+                                P(x + dx + lean, endY)]
+                    guard line.allSatisfy({ $0.x < right - 2 && $0.y > top(crest, $0.x) }) else { continue }
+                    c += inkLine(line, width: style == .cliff && hair == 0 ? 2.8 : 0.65,
+                        tone: hair == 0 ? 0.38 : 0.22, dry: 0.70, profile: .cone)
                 }
             }
-        } else {
-            // 披麻: groups collect on the shaded shoulders, with open lit passages between them.
-            // Analytic single-direction curves preserve the accepted no-hook stroke endings.
-            let groups = 4 + Int(r() * 4)
-            for _ in 0..<groups {
-                let center = width * (0.12 + r() * 0.76)
-                let spread = width * (0.025 + r() * 0.055)
-                let strands = 2 + Int(r() * 6)
-                let startDepth = 0.09 + r() * 0.32
-                for k in 0..<strands {
-                    let px = min(width - 3, max(3, center + (r() - 0.5) * spread))
-                    let start = surface(px, startDepth + r() * 0.12)
-                    let available = floor(at: px) - start.y
-                    let reach = available * (0.15 + pow(r(), 0.65) * 0.70)
-                    guard reach > 3 else { continue }
-                    let direction = top(at: px + 2) > top(at: px - 2) ? 1.0 : -1.0
-                    let edge = direction > 0 ? width - px - 2 : px - 2
-                    let dx = direction * min(edge, reach * (0.12 + r() * 0.95))
-                    let curve = 0.48 + r() * 0.70
-                    let line = (0...18).map { i -> P in
-                        let t = Double(i) / 18
-                        return P(px + dx * pow(t, curve), start.y + reach * pow(t, 1.15))
-                    }
-                    guard line.allSatisfy({ $0.y >= top(at: $0.x) && $0.y <= floor(at: $0.x) }) else { continue }
-                    c += inkLine(line, width: k == 0 ? 1.2 + r() * 0.8 : 0.5 + r() * 0.6,
-                        tone: k == 0 ? 0.46 + r() * 0.13 : 0.20 + r() * 0.20, dry: 0.62)
+            // 折带 on the low shelf: short angular turns, attached to the shaded contour.
+            if style == .headland {
+                let x = left + span * 0.72, y = top(crest, x)
+                c += inkLine([P(x, y + 2), P(x + 4, y + height * 0.15), P(x - span * 0.12, y + height * 0.21)],
+                    width: 1.25, tone: 0.44, dry: 0.6)
+            }
+            for _ in 0..<(index == 0 ? 2 : 1) {
+                let center = left + span * (0.24 + r() * 0.48)
+                for k in 0..<(3 + Int(r() * 3)) {
+                    let x = center + Double(k) * 3.1, y = top(crest, x) + 0.5
+                    c += inkLine([P(x, y), P(x + 2 + r() * 1.5, y - 0.3)],
+                        width: 1.1 + r() * 0.6, tone: 0.60 + r() * 0.16, dry: 0.4)
                 }
             }
         }
-        var start = 1
-        while start < crest.count - 3 {
-            let run = 2 + Int(r() * 5)
-            c += inkLine(Array(crest[start...min(start + run, crest.count - 1)]),
-                width: style == .shoal ? 0.8 + r() * 0.5 : 1.2 + r() * 0.9,
-                tone: 0.40 + r() * 0.23, dry: 0.52)
-            start += run + (style == .shoal ? 5 : 2) + Int(r() * 6)
-        }
-        for _ in 0..<(2 + Int(r() * 3)) {
-            let p = crest[2 + Int(r() * Double(crest.count - 4))]
-            for _ in 0..<(2 + Int(r() * 4)) {
-                let mx = min(width - 1, max(1, p.x + (r() - 0.5) * 13))
-                c += inkBlot(mx, top(at: mx) + 1 + r() * 3,
-                    radius: 0.7 + r() * 1.4, squash: 0.44, tone: 0.55 + r() * 0.30)
-            }
-        }
-        // 坡脚压墨: a linked but broken dark foot remains above the last dissolving fringe.
-        // Its bends follow the ground plane; it is neither a straight waterline nor another ridge.
-        var footX = width * 0.025
-        while footX < width * 0.96 {
-            let span = min(width * (0.055 + r() * 0.09), width * 0.98 - footX)
-            let depth = 0.67 + r() * 0.16
-            let bend = (r() - 0.5) * 0.16
-            let line = (0...12).map { i -> P in
-                let t = Double(i) / 12, x = footX + span * t
-                // Follow the local face instead of clamping a horizontal line against its crest.
-                // Each loaded stroke turns with a different shoulder and lifts before the next.
-                return surface(x, depth + bend * sin(t * .pi) + 0.035 * sin(x * 0.19))
-            }
-            c += inkLine(line, width: 1.1 + r() * 1.7, tone: 0.70 + r() * 0.14, dry: 0.62)
-            footX += span + width * (0.012 + r() * 0.027)
-        }
-        if flip { c = c.map { poly in var p = poly; p.p = poly.p.map { P(width - $0.x, $0.y) }; return p } }
+        if flip { c = c.map { var p = $0; p.p = p.p.map { P(width - $0.x, $0.y) }; return p } }
         return c
     }
 
