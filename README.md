@@ -1,62 +1,79 @@
-# ZixiaoKit
+# ZixiaoKit (子晓套件)
 
-子晓纪产品矩阵的共享 Swift 内核 (L1)。消费者: 玄览 (`../xuan/apple`), 东坡志 / 诗人志系列 (`../zhi/apple`, 三个 target 经 `ZixiaoPoet` 模块接入, 2026-10-01 起)。
+[![Swift 6.0](https://img.shields.io/badge/Swift-6.0-orange.svg)](https://swift.org)
+[![Platforms](https://img.shields.io/badge/Platforms-iOS%2017%2B%20%7C%20macOS%2015%2B-blue.svg)](Package.swift)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-规划: `../.claude/plans/product-matrix-2026.md` 第 4 章; 当前冲刺: `../.claude/plans/xuanlan-swift-sprint-01.md`。
+**ZixiaoKit** 是子晓古典文化与诗词产品矩阵（微诗 Wish、玄览、东坡志 / 诗人志系列）的开源共享 Swift 内核（L1）。涵盖**程序化中国水墨山水与写意花鸟 (`ZixiaoArt`)**、**中国传统色与东方设计系统 (`ZixiaoDesign`)**、**农历节气七十二候历法 (`ZixiaoCalendar`)**、**线装书古籍阅读器 (`ZixiaoLibrary`)** 以及 **诗人编年与多编成书房框架 (`ZixiaoPoet`)**。
 
-## 模块
+---
+
+## 核心模块
 
 | 模块 | 职责 | 依赖 |
-|---|---|---|
-| ZixiaoCore | Supabase 配置、账号 (匿名优先 → 绑定 Apple / 手机号)、用户数据 (app_slug 隔离)、离线队列 | supabase-swift |
-| ZixiaoDesign | 设计 token、身份 (Identity) JSON、字体注册、文化组件 (印章、竖排、线装封面、釉面面板、分节标题) | ZixiaoColor |
-| ZixiaoCalendar | 农历、干支、节气、七十二候、花信、时辰更点、年号纪年、节日 | lunar-swift |
-| ZixiaoLibraryCore | book.json 模型、目录、随包 / 云端书库 (sha256)、本地阅读状态；无 UI | 无 |
-| ZixiaoLibrary | iOS / Catalyst 线装书阅读器；公开 re-export ZixiaoLibraryCore | ZixiaoLibraryCore, ZixiaoDesign |
-| ZixiaoPoetCore | 编成与资源、只读数据 (PoetStore)、用户同步 (PoetUserData)、多编成共享会话 (PoetSession)、阅读推导；无 UI | ZixiaoCore, ZixiaoCalendar, supabase-swift |
-| ZixiaoPoet | iOS / Catalyst 启动层与能力视图；公开 re-export ZixiaoPoetCore。诗人资源随各 App 包发，内核零诗人名 (`Tools/lint-no-poet-names.sh`) | ZixiaoPoetCore, ZixiaoDesign, ZixiaoLibrary, ZixiaoArt, SwiftPieces |
-| ZixiaoArt | 程序化国画 (画屏背景): 山水 (shan-shui-inf 移植) 与花卉 (nonflowers 移植), 配方 `background.procedural` 的解码与渲染 (CoreGraphics 与 SwiftUI Canvas); shanshui@1 / @2 的 `Drawing.anchors` 记录山脊 / 水 / 船 / 人 / 树 / 屋 / 天空带的位置 (只记录, 不影响出图); MIT 致谢 `ZXArt.acknowledgements` | ZixiaoColor |
+| :--- | :--- | :--- |
+| **`ZixiaoArt`** | 程序化中国水墨画引擎：山水长卷（`shan-shui-inf` 移植与三代笔法演进）与写意花卉（`nonflowers` 移植），支持 `background.procedural` 配方解码、CoreGraphics 与 SwiftUI Canvas 双后端渲染；`shanshui@1/@2/@3` 的 `Drawing.anchors` 输出山脊、水体、孤舟、行客、林木、屋舍、天际带等语义锚点，供动态画屏与视频工作台驱动自然动效 | `ZixiaoColor` |
+| **`ZixiaoDesign`** | 东方美学设计 Token、产品身份（Identity）JSON、传统色配色目录（鸦青、月白、缃叶、苍筤、藕丝、青黛、胭脂）、字体注册与文化组件（朱文/白文印章、竖排排版、线装封面、釉面面板、分节标题） | `ZixiaoColor` |
+| **`ZixiaoCalendar`** | 农历、干支、二十四节气、七十二候、二十四番花信风、时辰更点、历史年号纪年与传统节日计算 | `lunar-swift` |
+| **`ZixiaoLibraryCore`** | `book.json` 古籍模型、目录索引、随包/云端书库（`sha256` 校验）与本地阅读状态；纯数据层无 UI | 无 |
+| **`ZixiaoLibrary`** | iOS / macOS Catalyst 线装书阅读器视图组件；公开 re-export `ZixiaoLibraryCore` | `ZixiaoLibraryCore`, `ZixiaoDesign` |
+| **`ZixiaoPoetCore`** | 诗人编成与资源加载、只读文库（`PoetStore`）、用户同步（`PoetUserData`）、多编成共享会话（`PoetSession`）与阅读推导；纯数据层无 UI | `ZixiaoCore`, `ZixiaoCalendar`, `supabase-swift` |
+| **`ZixiaoPoet`** | iOS / Catalyst 启动层与能力视图（今日、生平长卷、文集、行迹、检索）；内核零硬编码诗人名（由 `Tools/lint-no-poet-names.sh` 守护） | `ZixiaoPoetCore`, `ZixiaoDesign`, `ZixiaoLibrary`, `ZixiaoArt`, `SwiftPieces` |
+| **`ZixiaoCore`** | 离线优先的 Supabase 客户端配置、匿名优先账号体系（支持绑定 Apple / 手机号）、按 `app_slug` 隔离的用户数据同步与幂等离线队列（`ZXOutbox`） | `supabase-swift` |
 
-`ZixiaoCore`、`ZixiaoCalendar`、`ZixiaoArt`、`ZixiaoLibraryCore`、`ZixiaoPoetCore` 支持原生 macOS 15。
-现有 iOS 客户端可继续导入 `ZixiaoLibrary` / `ZixiaoPoet`，数据类型只在对应 Core 模块定义一份。
-`ZixiaoColor` 是 Design 与 Art 共用的纯色值目标，`ZXHex` 经两个模块公开导出。
+- `ZixiaoCore`、`ZixiaoCalendar`、`ZixiaoArt`、`ZixiaoLibraryCore`、`ZixiaoPoetCore` 原生支持 **macOS 15+** 与 **iOS 17+**。
+- `ZixiaoColor` 是 `ZixiaoDesign` 与 `ZixiaoArt` 共用的轻量纯色值模块，`ZXHex` 经两个模块公开导出。
 
-多编成客户端由应用持有一份 `PoetSession`，通过 `CompositionContext(..., session: session)` 注入各编成。
-同一编成的多个窗口共享 `userData`；不同编成沿用各自原有 `appSlug`，导航状态和资源独立。
-资源可用 `PoetResources(bundleURL:slug:productName:)` 从各自的平铺目录载入，画作缓存以完整资源 URL 分键。
-本机验证用 `await session.start(localOnly: true)`；它不启动认证或上传。网络同步显式调用 `start()`。
-`ZXAppleExchange.Configuration.platform` 默认取当前平台 (`ios` / `macos`)，Mac Apple 登录可传发起窗口：
-`try await ZXAppleSignIn().request(presentationAnchor: window)`。
+---
 
-## 规则
+## 快速接入 (Swift Package Manager)
 
-- 内核里不出现任何产品专属逻辑 (不写「玄览」「苏轼」)。产品差异靠 Identity JSON 与资源注入。
-- 所有 public 模型与服务类型标 `Sendable`, 开 StrictConcurrency。SwiftUI View 本身不要求 Sendable, 但它交出去的数据必须是。
-- 每个模块有测试; 历法类必须对齐 `Fixtures/` 里的金标。
-- 不擅自改 `Package.swift` 的 target 结构; 加模块 / 依赖 / 资源须先经 charsunny 同意并在 PR 说明里写明
-  (ZixiaoArt 独立成模块已获批, 2026-09-30; ZixiaoPoet 并入已获批, charsunny 2026-10-01；
-  原生 macOS 数据层拆分与共享色值目标已随统一书房实施获批, 2026-10-07)。
-- 第三方移植代码 (目前只有 ZixiaoArt) 的许可全文随模块走 (`ZXArtLicenses.swift`), 仓库根 `LICENSES/` 列出处与上游 commit。
+在 `Package.swift` 或 Xcode 的 Package Dependencies 中添加：
 
-## 验证
+```swift
+dependencies: [
+    .package(url: "https://github.com/charsunny/zixiao-kit.git", branch: "master")
+]
+```
+
+按需引入目标模块（例如仅使用程序化水墨山水与传统色）：
+
+```swift
+import SwiftUI
+import ZixiaoArt
+import ZixiaoDesign
+
+// 使用种子确定性生成水墨山水与语义锚点
+let recipe = ZXArtProcedural(generator: "shanshui@2", seed: "hanlu-dufu", variant: "远山")
+```
+
+---
+
+## 架构与工程原则
+
+1. **零产品耦合**：内核中不出现具体产品或单一诗人硬编码，所有产品差异通过 Identity JSON 与资源包注入。
+2. **Swift 6 Strict Concurrency**：所有 `public` 模型与服务类型均标注 `Sendable`，开启严格并发检查。
+3. **金标基准测试**：历法计算与程序化山水构图均配备 `Fixtures/` 金标回归测试。
+4. **传统色与五行四时**：详见 [传统色配色方案](Docs/Design/THEME_PALETTES.md) 与 [Apple 共用组件规范](Docs/Design/README.md)。
+
+---
+
+## 构建与测试
 
 ```sh
 # 编译 (iOS Simulator)
 xcodebuild -scheme ZixiaoKit-Package -destination 'generic/platform=iOS Simulator' build
-# 测试
+
+# 运行全套单元测试与金标回归
 xcodebuild -scheme ZixiaoKit-Package -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 ```
 
-Apple 共用组件、风格及产品规范索引见 [设计规范](Docs/Design/README.md)。
+---
 
-传统色配色见 [方案](Docs/Design/THEME_PALETTES.md)。`ZXPaletteCatalog.entries` 提供七套配色
-（鸦青为首项，加月白、缃叶、苍筤、藕丝、青黛、胭脂）的色样与意象；`ZXPalettePicker` 接受选择绑定、上锁判断与回调，
-不包含会员规则。产品使用 `try productIdentity.applyingPalette(.moonWhite)` 保留自身字族和印文。
-`ZXPaletteCatalog.palette(for: .spring)` 等纯函数按五行选配色，应用后 `seasonTint` 传 `nil`。
-增强对比度经 SwiftUI 环境自动解析；旧身份资源缺省回落。
+## 致谢与开源许可 (License)
 
-本批在 Linux VPS 上编写，未构建、未运行测试，待用户 Mac 验证。
-藕丝（`ousi`）与青黛（`qingdai`）已按验收更名，原句、作者、篇名与诗库 ID 保存在 rationale。
-选择组件的 `season` 由 App 传入，随节气卡展示当季色样与「随节气 · 秋 · 月白」这类名称。
+本项目基于 [MIT License](LICENSE) 开源。
 
-第四稿七套色板采用近中性底与小面积点色；旧纸墨朱印仍可加载，但不再列入选择目录。
+其中 `ZixiaoArt` 模块的底层山水与花卉几何生成算法移植并演进自 Lingdong Huang 的开源作品，保留完整 MIT 版权声明（详见 [`LICENSES/`](LICENSES/README.md) 及代码内 `ZXArt.acknowledgements`）：
+- [`shan-shui-inf`](https://github.com/LingDong-/shan-shui-inf) (Copyright (c) 2018 Lingdong Huang, MIT License)
+- [`nonflowers`](https://github.com/LingDong-/nonflowers) (Copyright (c) 2018 Lingdong Huang, MIT License)
