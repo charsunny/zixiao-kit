@@ -651,6 +651,29 @@ private final class PaintingStage {
             width: r.width / w, height: r.height / h)))
     }
 
+    /// Crows gather beside the tree; perched feet are pinned to painted branch points.
+    private func treeCrows() {
+        guard let tree = elements.first(where: { ["oldTree", "bareTree"].contains($0.motif) })?.bounds.cgRect else { return }
+        let b = CGRect(x: tree.minX * w, y: tree.minY * h, width: tree.width * w, height: tree.height * h)
+        let candidates = parts.flatMap { $0.canv }.flatMap(\.p).filter {
+            $0.x >= b.minX && $0.x <= b.maxX && $0.y > b.minY + b.height * 0.22 && $0.y < b.minY + b.height * 0.55
+        }
+        for fraction in [0.23, 0.77] {
+            let target = ZXArt.P(b.minX + b.width * fraction, b.minY + b.height * 0.38)
+            guard let branch = candidates.min(by: {
+                hypot($0.x - target.x, $0.y - target.y) < hypot($1.x - target.x, $1.y - target.y)
+            }) else { continue }
+            let scale = b.height * 0.036 / 17
+            let bird = engine.paintingPerchedCrow().map { poly -> ZXArt.SSPoly in
+                var p = poly; p.p = p.p.map { .init(branch.x + $0.x * scale, branch.y + $0.y * scale) }
+                p.wid *= scale; return p
+            }
+            parts.append(.near(bird))
+        }
+        add(.crow, CGRect(x: max(1, b.minX - b.width * 0.2), y: b.minY - b.height * 0.12,
+            width: b.width * 0.9, height: b.height * 0.15))
+    }
+
     /// A shared scale and a rein connect the traveler and horse; their feet follow the same road.
     private func journey() {
         guard let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect else { return }
@@ -1013,7 +1036,7 @@ private final class PaintingStage {
                 add(.vine, CGRect(x: (tree.minX + tree.width * 0.12) * w, y: (tree.minY + tree.height * 0.06) * h,
                     width: tree.width * w * 0.76, height: tree.height * h * 0.55))
             }
-            include(.crow, slot(0.12, 0.23, 0.13, 0.08))
+            if chosen.contains(.crow) { treeCrows() }
             include(.path, slot(0.05, 0, 0.52, 0.95, front: true))
             // Rider and horse share one ground plane and one scale (马与人同高): a small pair on the road.
             if chosen.contains(.horse), chosen.contains(.traveler) { journey() }

@@ -441,12 +441,43 @@ extension ShanShuiEngine {
         return c
     }
 
+    /// A flock of crows or a pair of swallows. Each wing has its own beat, body and tail.
     func paintingBird(swallow: Bool) -> ZXArt.SSCanv {
-        var c = inkLine([P(3, 4), P(19, 18), P(27, 18)], width: swallow ? 3 : 4, tone: 0.9, profile: .tip)
-        c += inkLine([P(27, 18), P(37, 12), P(49, 0)], width: 3, tone: 0.8, profile: .tip)
-        c += inkLine([P(26, 17), P(30, 23), P(25, 28)], width: 2.2, tone: 0.8)
-        if swallow { c += inkLine([P(30, 23), P(35, 30)], width: 1.3, tone: 0.9) }
+        let count = swallow ? (r() < 0.25 ? 1 : 2) : 2 + Int(r() * 4)
+        var c: ZXArt.SSCanv = []
+        for i in 0..<count {
+            let x = Double(i) * (swallow ? 37 : 23) + r() * 8
+            let y = r() * 24 + Double(i % 2) * 12
+            let scale = 0.55 + r() * 0.45
+            let beat = Int(r() * 3)
+            let lift = beat == 0 ? -13.0 : (beat == 1 ? 7.0 : -3.0)
+            var bird = inkLine([P(0, -3), P(2, 3), P(0, 7)], width: swallow ? 2 : 3.6, tone: 0.86, profile: .cone)
+            let span = swallow ? 22.0 : 16.0
+            bird += inkLine([P(0, 0), P(-span * 0.5, lift * 0.3 - 2), P(-span, lift)],
+                            width: swallow ? 2.3 : 3.3, tone: 0.86, profile: .cone)
+            bird += inkLine([P(1, 1), P(span * 0.55, lift * 0.4 - 3), P(span * 0.9, lift - 4)],
+                            width: swallow ? 2 : 3, tone: 0.78, profile: .cone)
+            if swallow {
+                bird += inkLine([P(1, 5), P(-6, 18)], width: 1.2, tone: 0.86, profile: .cone)
+                bird += inkLine([P(1, 5), P(8, 17)], width: 1.2, tone: 0.86, profile: .cone)
+            } else {
+                bird += inkLine([P(0, 5), P(-3, 11)], width: 2.2, tone: 0.8, profile: .cone)
+            }
+            c += bird.map { var p = $0; p.p = p.p.map { P(x + $0.x * scale, y + $0.y * scale) }; p.wid *= scale; return p }
+        }
         return c
+    }
+
+    /// Feet at the origin, so a perch can be attached to an actual painted branch.
+    func paintingPerchedCrow() -> ZXArt.SSCanv {
+        let flip = r() < 0.5 ? -1.0 : 1.0
+        let lean = -2 + r() * 4
+        var c = inkLine([P(-2, -7), P(lean, -12), P(4, -10)], width: 5.2, tone: 0.88, profile: .lens)
+        c += inkBlot(4 + lean * 0.3, -15, radius: 2.3, squash: 0.85, tone: 0.9)
+        c += inkLine([P(5, -15), P(9, -14)], width: 1.1, tone: 0.85)
+        c += inkLine([P(-2, -8), P(-7, -3)], width: 2, tone: 0.86, profile: .cone)
+        for x in [-1.0, 2] { c += inkLine([P(x, -6), P(x, 0), P(x + 2, 0)], width: 0.7, tone: 0.8) }
+        return c.map { var p = $0; p.p = p.p.map { P($0.x * flip, $0.y) }; return p }
     }
 
     func paintingWater(stream: Bool) -> ZXArt.SSCanv {
