@@ -482,7 +482,7 @@ private final class PaintingStage {
                 parts.append(.init(canv: engine.paintingInk(guest.canv, depth: .middle),
                     fade: .init(top: r.minY + r.height * 0.55, bottom: r.maxY, seed: engine.inkSeed())))
             }
-            peakBox.size.width *= 0.80
+            peakBox.size.width *= 0.90
         }
         if main, let object = fitted(engine.paintingMountain(form: structure == .deep ? .clustered : .monumental), to: peakBox) {
             // 山腰云锁: the lower third of the main peak dissolves into cloud instead of
@@ -669,7 +669,7 @@ private final class PaintingStage {
             box = CGRect(x: x, y: top, width: width, height: max(20, min(bottom - top, h * 0.13)))
             groundInBand = true
         }
-        if let object = fitted(engine.paintingBank(style: structure == .high ? .cliff : (structure == .corner ? .headland : .shoal)), to: box) {
+        if let object = fitted(engine.paintingBank(style: [.retreat, .temple].contains(scene) ? .cliff : (structure == .corner ? .headland : .shoal)), to: box) {
             // In the band beneath the verse the near ground dissolves downward into mist and water,
             // instead of ending in a hard edge like an island floating on the paper.
             let b = object.bounds
@@ -744,8 +744,8 @@ private final class PaintingStage {
             if chosen.contains(.bridge) { crossing(river: true) }
             include(.mooredBoat, slot(0.78, 0.55, 0.20, 0.17, front: true))
         case .farewell:
+            include(.pavilion, slot(0.52, 0.60, 0.29, 0.16))
             include(.willow, slot(0.01, 0.13, 0.70, 0.64))
-            include(.pavilion, slot(0.66, 0.60, 0.29, 0.16))
             include(.traveler, slot(0.56, 0.72, 0.07, 0.09))
             if chosen.contains(.traveler) { add(.traveler, slot(0.67, 0.73, 0.06, 0.08), repeatable: true) }
             include(.path, slot(0.05, 0, 0.28, 0.8, front: true))

@@ -110,37 +110,11 @@ extension ShanShuiEngine {
     enum BankStyle { case shoal, cliff, headland }
 
     func paintingBank(style: BankStyle = .headland) -> ZXArt.SSCanv {
-        var c: ZXArt.SSCanv = []
-        let flip = r() < 0.5
-        let stones: [(Double, Double, Double, Double)]
-        switch style {
-        case .shoal: stones = [(0, 42, 170, 22), (130, 48, 155, 17), (230, 57, 60, 11)]
-        case .cliff: stones = [(0, 0, 145, 86), (115, 42, 90, 38), (190, 66, 100, 18)]
-        case .headland: stones = [(0, 2, 160, 76), (115, 50, 110, 28), (205, 68, 85, 10)]
-        }
-        for (sx, y, width, height) in stones {
-            let x = flip ? 290 - sx - width : sx
-            c += paintingRock(width: width, height: height, tone: style == .cliff ? 1.35 : 1.10).map { poly in
-                var p = poly; p.p = poly.p.map { P($0.x + x, $0.y + y) }; return p
-            }
-            // 坡脚: a dark, broken stroke where the stone meets ground or water anchors it.
-            let foot = y + height - 1
-            var fx = x + width * (0.08 + r() * 0.1)
-            while fx < x + width * 0.9 {
-                let run = width * (0.15 + r() * 0.25)
-                c += inkLine([P(fx, foot + r()), P(fx + run * 0.5, foot + 0.8), P(min(x + width * 0.95, fx + run), foot + r())],
-                    width: 1.6 + r() * 1.2, tone: 0.42 + r() * 0.2, dry: 0.5)
-                fx += run + width * (0.05 + r() * 0.1)
-            }
-        }
-        return c
+        paintingSlope(style)
     }
 
     func paintingMountain(form: PaintingMountainProfile.Form? = nil) -> ZXArt.SSCanv {
-        // Buildings are separate scene objects with their own scale and ground placement.
-        let profile = PaintingMountainProfile(form: form, random: { self.r() })
-        return paintingLegacy(mountain(140, 420, r() * 80, hei: profile.height,
-            wid: profile.width, tex: 240, veg: false, architecture: false, profile: profile), textured: true)
+        paintingMassif(PaintingMountainProfile(form: form, random: { self.r() }))
     }
 
     /// Cloud at the foot of a peak (山腰云锁), painted by leaving paper: stacked paper-coloured

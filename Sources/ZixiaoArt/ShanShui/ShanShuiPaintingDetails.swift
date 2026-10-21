@@ -72,14 +72,16 @@ extension ShanShuiEngine {
                 let t = Double(i) / 12
                 return P(peakX + (x1 - peakX) * t, base - height * (1 - pow(t, 0.7)))
             }
-            let crest = windward + lee
+            let crest = inkCurve([windward[0], windward[12], windward[24],
+                P(peakX - 8, base - height + 1.5), P(peakX + 12, base - height + 2),
+                lee[5], lee.last!], steps: 9)
             let floor = crest.enumerated().map { i, p in
                 P(p.x, p.y + (base + 14 - p.y) * pow(sin(Double(i) / Double(crest.count - 1) * .pi), 0.35))
             }
             c.append(poly(crest + floor.reversed(), fil: .white, str: nil))
             // Sand is mostly paper: a faint body, a little more tone just under the crest.
             c.append(poly(crest + floor.reversed(), fil: .gray(0, 0.025 + depth * 0.02), str: nil))
-            let lip = crest.map { P($0.x, $0.y + 5 + depth * 4) }
+            let lip = crest.enumerated().map { i, p in P(p.x, p.y + (5 + depth * 4) * sin(Double(i) / Double(crest.count - 1) * .pi)) }
             c.append(poly(crest + lip.reversed(), fil: .gray(0, 0.03 + depth * 0.03), str: nil))
             // Lee face: nested, fading washes plus dry strokes down the slope, never one hard wedge.
             let shadowTop = Array(crest.suffix(lee.count + 4))
@@ -94,7 +96,10 @@ extension ShanShuiEngine {
                 c += inkLine([P(p.x, p.y + 1), P(p.x - len * 0.6, p.y + len)], width: 1.2 + r() * 1.6,
                     tone: 0.06 + depth * 0.06, dry: 0.75)
             }
-            c += inkLine(crest, width: 0.6 + depth * 0.7, tone: 0.20 + depth * 0.25, dry: 0.45)
+            for start in stride(from: 3, to: crest.count - 6, by: 10) {
+                c += inkLine(Array(crest[start...start + 6]), width: 0.6 + depth * 0.5,
+                    tone: 0.16 + depth * 0.16, dry: 0.65)
+            }
             // Ripples on the windward slope, parallel to the crest.
             for j in 0..<(3 + Int(depth * 5)) {
                 let t = 0.2 + r() * 0.6, i = Int(t * 30)
@@ -117,9 +122,9 @@ extension ShanShuiEngine {
                 let t0 = Double(k) / Double(segments), t1 = Double(k + 1) / Double(segments)
                 let y0 = 130 - t0 * 130, y1 = 130 - t1 * 130
                 let w0 = 1.6 + 2.6 * t0, w1 = 1.6 + 2.6 * t1
-                let sway = 0.0
+                let sway = sin(t1 * 2.5) * 0.5
                 c.append(poly([P(30 - w0, y0), P(30 + sway - w1, y1), P(30 + sway + w1, y1), P(30 + w0, y0)],
-                    fil: .gray(0, 0.11 * (1 - t0 * 0.85)), str: nil))
+                    fil: .gray(0, 0.075 * (1 - t0 * 0.94)), str: nil))
             }
             c += inkLine([P(30, 130), P(30, 70), P(30.4, 40)], width: 0.5, tone: 0.12, dry: 0.7)
             return c
