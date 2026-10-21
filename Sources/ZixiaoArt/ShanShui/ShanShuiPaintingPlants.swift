@@ -7,6 +7,7 @@ extension ShanShuiEngine {
 
     private func paintingLeaves(_ x: Double, _ y: Double, width: Double, height: Double,
                                 needles: Bool = false, flowering: Bool = false, style: LeafStyle = .dots) -> ZXArt.SSCanv {
+        if needles { return paintingPineNeedles(x, y, width: width, height: height) }
         var c: ZXArt.SSCanv = []
         for _ in 0..<6 {
             c += inkBlot(x + (r() - 0.5) * width * 0.65, y + (r() - 0.5) * height * 0.6,
@@ -80,7 +81,7 @@ extension ShanShuiEngine {
             return spine[i]
         }
         var c: ZXArt.SSCanv = []
-        let limbs = willow ? 4 : (pine ? 6 + Int(r() * 3) : 5 + Int(r() * 3))
+        let limbs = willow ? 4 : (pine ? 4 + Int(r() * 3) : 5 + Int(r() * 3))
         var side = r() < 0.5 ? -1.0 : 1.0
         var tips: [(P, Double)] = []
         for k in 0..<limbs {
@@ -102,7 +103,7 @@ extension ShanShuiEngine {
                 let from = P(origin.x + (tip.x - origin.x) * u, origin.y + (tip.y - origin.y) * u)
                 let to = P(from.x + side * (5 + r() * 9), from.y - (pine ? r() * 3 : 6 + r() * 8) + (bare ? 3 : 0))
                 c += inkLine([from, to], width: 0.8, tone: 0.6, dry: 0.45)
-                tips.append((to, side))
+                if !pine { tips.append((to, side)) }
             }
             tips.append((tip, side))
         }
@@ -127,7 +128,7 @@ extension ShanShuiEngine {
             }
         }
         // Trunk after the crown, a loaded contour with dry bark inside; roots grip the ground.
-        c += inkLine(spine, width: pine ? 7.4 : 6.6, tone: 0.85, dry: 0.42, profile: .cone)
+        c += inkLine(spine, width: pine ? 10.5 : 6.6, tone: 0.85, dry: 0.42, profile: .cone)
         if twin {
             // A second, slimmer stem leaving the trunk low and rising beside it.
             let fork = spinePoint(0.22), side = lean >= 0 ? -1.0 : 1.0
@@ -142,9 +143,12 @@ extension ShanShuiEngine {
             c += inkLine(spine.map { P($0.x + offset, $0.y + 1) }, width: 0.7, tone: 0.52, dry: 0.72)
         }
         if pine {
-            for _ in 0..<8 {  // bark scales
-                let p = spinePoint(0.1 + r() * 0.7)
-                c += inkLine([P(p.x - 2.5, p.y), P(p.x + 2, p.y + 1.5)], width: 0.9, tone: 0.55, dry: 0.5)
+            for k in 0..<15 {
+                let t = 0.06 + Double(k) * 0.048
+                let p = spinePoint(t), radius = 2.7 * (1 - t * 0.6)
+                let scale = [p + P(-radius, -2), p + P(-radius * 0.8, 2), p + P(0, 4),
+                    p + P(radius, 1), p + P(radius * 0.7, -2)]
+                c += inkLine(scale, width: 0.9, tone: 0.75, dry: 0.38)
             }
         }
         for (dx, dy) in [(-13.0, 4.0), (9, 4), (-6, 6)] {
@@ -162,43 +166,6 @@ extension ShanShuiEngine {
                     let t = 0.06 + r() * 0.91
                     c += inkBlot(x - 6 + sin(t * 4) * 2, y + t * len,
                         radius: 1.5 + r() * 1.5, squash: 0.25, angle: -0.7 - r() * 0.5, tone: 0.32 + r() * 0.3)
-                }
-            }
-        }
-        return c
-    }
-
-    /// A bamboo grove: stalks of unequal height leaning slightly apart, pale far stalks behind
-    /// dark near ones, nodes as short dark strokes, and leaves in clustered 个 / 介 groups at the
-    /// tips and joints, heavier toward the top.
-    func paintingBamboo() -> ZXArt.SSCanv {
-        var c: ZXArt.SSCanv = []
-        let stalks = 6 + Int(r() * 3)
-        for k in 0..<stalks {
-            let far = k < stalks / 3
-            let x = 20 + Double(k) * (90 / Double(stalks)) + (r() - 0.5) * 8
-            let height = (far ? 110 : 130) + r() * 40, lean = (r() - 0.5) * 34
-            let tone = far ? 0.28 + r() * 0.1 : 0.55 + r() * 0.25
-            c += inkLine([P(x, 175), P(x + lean * 0.4, 175 - height * 0.55), P(x + lean, 175 - height)],
-                width: (far ? 1.6 : 2.4) + r() * 0.8, tone: tone, dry: 0.25, profile: .even)
-            let nodes = 6
-            for j in 1..<nodes {
-                let y = 175 - height * Double(j) / Double(nodes), xx = x + lean * Double(j) / Double(nodes)
-                c += inkLine([P(xx - 2, y), P(xx + 2.5, y - 0.5)], width: 1.0, tone: min(0.9, tone + 0.2))
-            }
-            // Leaf clusters: three to five blades fanning from one point, 个 or 介.
-            let clusters = far ? 3 : 5 + Int(r() * 3)
-            for q in 0..<clusters {
-                let t = 0.32 + 0.68 * (Double(q) + r() * 0.6) / Double(clusters)
-                let base = P(x + lean * t, 175 - height * t)
-                let side = r() < 0.5 ? -1.0 : 1.0
-                let blades = 3 + Int(r() * 2.5)
-                for b in 0..<blades {
-                    let angle = side * (0.35 + Double(b) * 0.42) + (r() - 0.5) * 0.2
-                    let length = 20 + r() * 14
-                    let tip = P(base.x + sin(angle) * length, base.y + cos(angle) * length * 0.55 - 2)
-                    c += inkLine([base, P((base.x + tip.x) / 2, (base.y + tip.y) / 2 + 1), tip],
-                        width: 4.2 + r() * 2.2, tone: far ? 0.30 : 0.62 + r() * 0.25, dry: 0.1, profile: .lens)
                 }
             }
         }

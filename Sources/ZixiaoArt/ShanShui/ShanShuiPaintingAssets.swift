@@ -20,7 +20,8 @@ extension ShanShuiEngine {
         case .fields: return paintingFields()
         case .dunes: return paintingDunes()
         case .beaconSmoke, .cookingSmoke: return paintingSmoke(beacon: motif == .beaconSmoke)
-        case .reeds, .grass: return paintingReeds()
+        case .reeds: return paintingReeds()
+        case .grass: return paintingGrass()
         case .moon, .crescent, .sunrise, .sunset, .stars, .waterfall, .rain, .snow:
             return paintingAtmosphere(motif)
         case .vine: return paintingVine()

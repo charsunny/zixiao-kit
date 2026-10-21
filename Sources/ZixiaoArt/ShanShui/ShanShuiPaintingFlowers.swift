@@ -75,28 +75,28 @@ extension ShanShuiEngine {
                 let wave = 1 + 0.055 * sin(a * 7 + phase) + 0.035 * cos(a * 11)
                 return placed(P(cos(a) * rx * wave, sin(a) * ry * wave))
             }
-            let tone = 0.40 + Double(k) / Double(count) * 0.28 + r() * 0.09
+            let tone = 0.48 + Double(k) / Double(count) * 0.28 + r() * 0.12
             c.append(poly(edge, fil: .white, str: nil))
             c.append(poly(edge, fil: .gray(0, tone), str: nil))
             // A folded lip exposes paper between the upper and lower leaf planes.
             let fold = inkCurve([placed(P(-rx * 0.92, -ry * 0.2)), placed(P(-rx * 0.2, -ry * 0.45)),
                 placed(P(rx * 0.40, -ry * 0.08)), placed(P(rx * 0.92, -ry * 0.24))])
-            c.append(poly(fold + fold.reversed().map { $0 + P(0, 1.5) }, fil: .white, str: nil))
+            c.append(poly(fold + fold.reversed().map { $0 + P(0, 0.75) }, fil: .white, str: nil))
             c += inkLine(fold, width: 1.8, tone: min(0.88, tone + 0.18), dry: 0.4)
             let center = placed(P(0, ry * 0.12))
             for j in 0..<7 {
                 let a = Double(j) * .pi / 3.5 + 0.25
                 let tip = placed(P(cos(a) * rx * 0.83, sin(a) * ry * 0.85))
-                c.append(poly([center, tip, tip + P(0.2, 0.25), center + P(0.7, 0.4)], fil: .white, str: nil))
+                c.append(poly([center, tip, tip + P(0.2, 0.25), center + P(0.5, 0.3)], fil: C(255, 255, 255, 0.65), str: nil))
             }
             // Broken darker ink is bounded by the leaf, concentrated near its stem and rim.
             for _ in 0..<7 {
                 let p = placed(P((r() - 0.5) * rx * 1.25, (r() - 0.5) * ry))
-                c += inkBlot(p.x, p.y, radius: 2 + r() * 4, squash: 0.35, tone: 0.12)
+                c += inkBlot(p.x, p.y, radius: rx * (0.15 + r() * 0.15), squash: ry / rx * 0.65, tone: 0.12)
             }
         }
         let fx = 69 + r() * 24, fy = 37 + r() * 6
-        c += inkLine([P(fx + 1, 153), P(fx, fy + 15)], width: 1.3, tone: 0.65, dry: 0.28)
+        c.insert(contentsOf: inkLine([P(fx + 1, 153), P(fx, fy + 12)], width: 1.3, tone: 0.65, dry: 0.28), at: 0)
         let tip: P
         if form == 0 {
             tip = P(fx, fy - 18)

@@ -1231,6 +1231,7 @@ private final class PaintingStage {
         case .autumnTravel:
             if chosen.contains(.bridge) { crossing(river: false) }
             add(.oldTree, slot(0.0, 0.08, 0.76, 0.72))
+            placed.insert(.bareTree) // The autumn fallback is this old tree, not a second sapling.
             if chosen.contains(.vine), let vine = treeVines[.oldTree] ?? treeVines[.bareTree],
                let x0 = vine.flatMap(\.p).map(\.x).min(), let x1 = vine.flatMap(\.p).map(\.x).max(),
                let y0 = vine.flatMap(\.p).map(\.y).min(), let y1 = vine.flatMap(\.p).map(\.y).max() {
