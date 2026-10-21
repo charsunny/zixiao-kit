@@ -388,6 +388,21 @@ private final class PaintingStage {
             if left >= surface.x0, left + landed.width <= endX { landed.origin.x = left }
             else if right + landed.width <= endX { landed.origin.x = right }
         }
+        if motif == .traveler || motif == .horse {
+            let buildings = elements.filter { ["house", "hut", "pavilion", "templeGate", "pagoda"].contains($0.motif) }
+                .map { CGRect(x: $0.bounds.cgRect.minX * w, y: $0.bounds.cgRect.minY * h,
+                    width: $0.bounds.cgRect.width * w, height: $0.bounds.cgRect.height * h) }
+            for building in buildings where landed.intersects(building) {
+                for x in [building.minX - landed.width - 3, building.maxX + 3] {
+                    guard x >= surface.x0, x + landed.width <= endX,
+                          let foot = bankFoot(x, x + landed.width) else { continue }
+                    let candidate = CGRect(x: x, y: foot - landed.height, width: landed.width, height: landed.height)
+                    guard !candidate.intersects(verse), !buildings.contains(where: { $0.intersects(candidate) }) else { continue }
+                    landed = candidate
+                    break
+                }
+            }
+        }
         return landed
     }
 

@@ -4,11 +4,15 @@ import Testing
 
 struct ZXArtGuohuaTests {
     @Test func travelersStandOnTheBankAndBridgesCrossWater() throws {
-        for scene in [ZXArt.PoetryScene.farewell, .autumnTravel, .waterTown] {
+        for scene in [ZXArt.PoetryScene.farewell, .autumnTravel, .waterTown, .winterForest] {
             for size in [CGSize(width: 750, height: 1000), CGSize(width: 1200, height: 675)] {
                 for index in 0..<3 {
+                    // The autumn poem explicitly names bridge and horse; winter names a traveler.
+                    // These textual accents are optional in the generic scene defaults.
+                    let accents: [ZXArt.SceneMotif] = scene == .autumnTravel ? [.bridge, .horse, .stream]
+                        : (scene == .winterForest ? [.traveler] : [])
                     let selection = ZXArt.SceneSelection(scene: scene,
-                        options: .init(motifs: ZXArt.defaultMotifs(for: scene)), matched: [])
+                        options: .init(motifs: ZXArt.defaultMotifs(for: scene) + accents), matched: [])
                     let recipe = selection.paintingProcedural(seed: "guohua-ground-\(index)")
                     let drawing = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: size))
                     let bank = try #require(drawing.sceneElements.first { $0.motif == "groundBank" }).bounds.cgRect
@@ -16,18 +20,21 @@ struct ZXArtGuohuaTests {
                         let r = person.bounds.cgRect
                         #expect(r.midX >= bank.minX && r.midX <= bank.maxX)
                         #expect(r.maxY >= bank.minY - 0.003 && r.maxY <= bank.maxY + 0.003)
+                        for building in drawing.sceneElements where ["house", "pavilion", "hut"].contains(building.motif) {
+                            #expect(!r.intersects(building.bounds.cgRect))
+                        }
                         if let tree = drawing.sceneElements.first(where: { ["willow", "bareTree"].contains($0.motif) }) {
                             #expect(r.height < tree.bounds.cgRect.height * 0.25)
                         }
                     }
-                    if scene != .farewell {
+                    if scene == .autumnTravel || scene == .waterTown {
                         let bridge = try #require(drawing.sceneElements.first { $0.motif == "bridge" }).bounds.cgRect
                         let channel = try #require(drawing.sceneElements.first { $0.motif == (scene == .waterTown ? "riverChannel" : "stream") }).bounds.cgRect
                         let reflection = try #require(drawing.sceneElements.first { $0.motif == "bridgeReflection" }).bounds.cgRect
                         #expect(bridge.intersects(channel))
                         #expect(bridge.midX > channel.minX && bridge.midX < channel.maxX)
                         #expect(reflection.minY >= bridge.maxY - 0.003)
-                    } else {
+                    } else if scene == .farewell {
                         #expect(drawing.sceneElements.filter { $0.motif == "traveler" }.count == 2)
                     }
                 }
