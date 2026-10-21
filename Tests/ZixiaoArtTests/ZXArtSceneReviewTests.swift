@@ -211,7 +211,10 @@ final class ZXArtSceneReviewTests: XCTestCase {
         ]
         let cell = CGSize(width: 400, height: 260)
         let paper = ZXArt.Palette.paperInk.paper
-        let paperColor = CGColor(red: paper.red, green: paper.green, blue: paper.blue, alpha: 1)
+        // The renderer writes sRGB bytes directly. A DeviceRGB CGColor converts to a
+        // slightly different paper when composited into this sRGB sheet.
+        let paperColor = try XCTUnwrap(CGColor(colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+            components: [paper.red, paper.green, paper.blue, 1]))
         var images: [CGImage] = []
         for (title, scene, motifs) in groups {
             for seed in 0..<4 {
