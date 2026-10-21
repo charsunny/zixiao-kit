@@ -290,7 +290,7 @@ extension ShanShuiEngine {
             let rib = inkCurve(controls, steps: 10)
             func inside(_ p: P) -> P { P(p.x, max(ridgeY(p.x) + 1, min(height + 1, p.y))) }
             // Adjacent narrow wash strips fade away from the valley edge, without rectangles.
-            let shadowWidth = width * (0.10 + r() * 0.065)
+            let shadowWidth = width * (0.16 + r() * 0.07)
             for band in 0..<12 {
                 func edge(_ t: Double) -> [P] {
                     rib.enumerated().map { i, p in
@@ -310,10 +310,11 @@ extension ShanShuiEngine {
             for bundle in 0..<3 {
                 let start = 2 + bundle * 7
                 for strand in 0..<(8 + Int(r() * 5)) {
-                    let offset = 2.5 + Double(strand) * (2.0 + r() * 1.4)
+                    let offset = 2.5 + Double(strand) * (2.4 + r() * 1.6)
+                    let stagger = Int(r() * 5) - 2
                     let length = 9 + Int(r() * 7)
                     let line = (0...length).map { j -> P in
-                        let index = min(rib.count - 1, start + j)
+                        let index = max(0, min(rib.count - 1, start + j + stagger))
                         let p = rib[index]
                         let t = Double(j) / Double(length)
                         let loosen = sin(t * .pi * 1.5 + Double(strand) * 0.35) * (2 + t * 3)
@@ -321,7 +322,7 @@ extension ShanShuiEngine {
                             Double(strand) * 1.2))
                     }
                     c += slopeStroke(line, width: strand % 5 == 0 ? 2.7 : 1.0 + r() * 0.65,
-                        tone: 0.43 + r() * 0.14, pressures: [0.3, 0.9, 0.65, 0.7, 0.04], dry: 0.58)
+                        tone: 0.37 + r() * 0.15, pressures: [0.3, 0.9, 0.65, 0.7, 0.04], dry: 0.58)
                 }
             }
             // A second, broad wash settles in the lower valley. Each strip fades sideways;

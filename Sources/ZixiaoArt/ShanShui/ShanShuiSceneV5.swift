@@ -987,8 +987,12 @@ private final class PaintingStage {
             ?? (bank.minX + bank.width * 0.35, bank.minX + bank.width * 0.55)
         let near = elements.first(where: { $0.motif == "nearBank" })?.bounds.cgRect ?? bank
         let bottom = max(bank.maxY, near.maxY) * h
-        return CGRect(x: gap.0 * w, y: bank.minY * h, width: (gap.1 - gap.0) * w,
-            height: max(12, bottom - bank.minY * h))
+        let mid = (gap.0 + gap.1) * w / 2
+        let sourceY = currentScene == .retreat
+            ? max(bank.minY * h, (bankFoot(mid - 2, mid + 2) ?? (bank.minY * h)) - (bottom - bank.minY * h) * 0.18)
+            : bank.minY * h
+        return CGRect(x: gap.0 * w, y: sourceY, width: (gap.1 - gap.0) * w,
+            height: max(12, bottom - sourceY))
     }
 
     /// Water falls through the main mountain, then a short tributary joins the existing creek.
