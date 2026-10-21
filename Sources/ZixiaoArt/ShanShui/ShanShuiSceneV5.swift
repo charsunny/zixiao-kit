@@ -1733,7 +1733,8 @@ private final class PaintingStage {
     }
 
     private func ocean(_ chosen: Set<Motif>) {
-        let moonSize = art.width * [0.42, 0.34, 0.48, 0.38][layoutVariant]
+        // A wide page must retain enough sea below the moon for its broken reflection.
+        let moonSize = min(art.width * [0.42, 0.34, 0.48, 0.38][layoutVariant], h * 0.30)
         let horizon = max(contentTop + moonSize * 1.10,
             art.minY + art.height * [0.14, 0.33, 0.23, 0.43][layoutVariant])
         parts.append(.near(engine.inkLine([.init(art.minX, horizon),
