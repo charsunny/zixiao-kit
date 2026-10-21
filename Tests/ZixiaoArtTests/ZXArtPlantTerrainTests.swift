@@ -26,6 +26,41 @@ struct ZXArtPlantTerrainTests {
         }
     }
 
+    @Test func lotusAtlasIncludesYoungFloweringAndSpentPlants() {
+        let stages = (0..<6).map { index in
+            ShanShuiEngine(seed: .init("atlas-lotus-\(index)")).paintingLotusDrawing().stage
+        }
+        #expect(Set(stages) == Set(ShanShuiEngine.LotusStage.allCases))
+        for stage in ShanShuiEngine.LotusStage.allCases {
+            var forms = Set<[ZXArt.P]>()
+            for index in 0..<6 {
+                let lotus = ShanShuiEngine(seed: .init("atlas-lotus.\(stage.rawValue)-\(index)"))
+                    .paintingLotusDrawing(stage: stage)
+                #expect(lotus.stage == stage)
+                let points = lotus.canvas.flatMap(\.p)
+                #expect(points.contains { hypot($0.x - lotus.flowerTip.x, $0.y - lotus.flowerTip.y) < 2 })
+                forms.insert(points)
+            }
+            #expect(forms.count == 6)
+        }
+    }
+
+    @Test func waterfallJoinsTheExistingStreamInBothFormats() throws {
+        let selection = ZXArt.SceneSelection(scene: .retreat,
+            options: .init(motifs: [.waterfall, .stream, .pine]), matched: [])
+        for size in [CGSize(width: 750, height: 1000), CGSize(width: 1200, height: 675)] {
+            for index in 0..<6 {
+                let drawing = try #require(ZXArt.drawing(procedural: selection.paintingProcedural(
+                    seed: "waterfall-connection-\(index)", verseSide: "right"), palette: .paperInk, pixelSize: size))
+                let fall = try #require(drawing.sceneElements.first { $0.motif == "waterfall" }).bounds.cgRect
+                let stream = try #require(drawing.sceneElements.first { $0.motif == "stream" }).bounds.cgRect
+                #expect(abs(fall.maxY - stream.minY) < 0.008)
+                #expect(fall.minY < stream.minY - 0.02)
+                #expect(fall.maxX > stream.minX && fall.minX < stream.maxX)
+            }
+        }
+    }
+
     @Test func massifsHaveBroadFeetAndContinuousSummitBearingPlanes() throws {
         for form in PaintingMountainProfile.Form.allCases {
             for index in 0..<6 {

@@ -107,6 +107,7 @@ private final class PaintingStage {
     var summitLedge: CGRect?
     var houseWindowFrame: CGRect?
     var lotusFlowerTip: ZXArt.P?
+    var streamInlet: ZXArt.P?
     var historicGroundNeeded = false
     enum Structure { case high, deep, level, corner }
     var structure: Structure = .level
@@ -312,7 +313,12 @@ private final class PaintingStage {
             lotusFlowerTip = .init(actual.minX + (lotus.flowerTip.x - x0) * scale,
                 actual.minY + (lotus.flowerTip.y - y0) * scale)
         }
-        if motif == .stream { engine.noted(.water, object.canv) }
+        if motif == .stream {
+            engine.noted(.water, object.canv)
+            if let bank = object.canv.first?.p, let left = bank.first, let right = bank.last {
+                streamInlet = (left + right) / 2
+            }
+        }
         support(motif, bounds: actual, root: plantedRoot)
         if let root = plantedRoot { parts.append(.near(engine.paintingRootMoss(root))) }
         if [.mist, .afterRain, .dunes].contains(motif) {
@@ -973,6 +979,28 @@ private final class PaintingStage {
             height: max(12, bottom - bank.minY * h))
     }
 
+    /// Place the fall by its outlet, joined to the existing stream's actual water gap.
+    private func mountainWaterfall() {
+        if streamInlet == nil { add(.stream, mountainStreamSlot()) }
+        guard let target = streamInlet else { return }
+        let fall = engine.paintingWaterfall(), points = fall.canvas.flatMap(\.p)
+        let x0 = points.map(\.x).min()!, x1 = points.map(\.x).max()!
+        let y0 = points.map(\.y).min()!, y1 = points.map(\.y).max()!
+        let scale = min(art.height * 0.42 / (y1 - y0),
+            (target.x - art.minX) / max(1, fall.outlet.x - x0),
+            (art.maxX - target.x) / max(1, x1 - fall.outlet.x),
+            (target.y - art.minY) / max(1, fall.outlet.y - y0))
+        guard scale > 0.03 else { return }
+        let raw = fall.canvas.map { polygon in
+            var p = polygon; p.p = p.p.map { target + ($0 - fall.outlet) * scale }; p.wid *= scale; return p
+        }
+        let box = CGRect(x: target.x + (x0 - fall.outlet.x) * scale,
+            y: target.y + (y0 - fall.outlet.y) * scale, width: (x1 - x0) * scale, height: (y1 - y0) * scale)
+        pinned = true
+        add(.waterfall, box, source: raw)
+        pinned = false
+    }
+
     private func waterDetails() {
         if currentScene == .retreat, let stream = elements.first(where: { $0.motif == "stream" })?.bounds.cgRect {
             let box = CGRect(x: (stream.midX - stream.width) * w, y: stream.maxY * h,
@@ -1416,7 +1444,7 @@ private final class PaintingStage {
                         width: size, height: size * 0.8))
                 } else { add(motif, slot(0.48, 0.32, 0.04, 0.03)) }
             case .crow, .swallow, .dragonfly: add(motif, slot(0.30, 0.18, 0.07, 0.04))
-            case .waterfall: add(motif, slot(0.15, 0.34, 0.18, 0.45))
+            case .waterfall: mountainWaterfall()
             case .stream: add(motif, slot(0.60, 0.02, 0.22, 0.88, front: true))
             case .mist, .afterRain: add(motif, slot(0.02, 0.42, 0.96, 0.10))
             case .rain: break

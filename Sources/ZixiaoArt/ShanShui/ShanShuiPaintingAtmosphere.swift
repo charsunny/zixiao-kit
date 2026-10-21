@@ -6,6 +6,7 @@ extension ShanShuiEngine {
     func paintingAtmosphere(_ motif: ZXArt.SceneMotif) -> ZXArt.SSCanv {
         switch motif {
         case .moon: return paintingMoon()
+        case .waterfall: return paintingWaterfall().canvas
         case .rain, .snow: return [] // App weather overlay; snow-covered terrain reserves paper.
         default: return paintingLegacy(sceneAsset(motif))
         }

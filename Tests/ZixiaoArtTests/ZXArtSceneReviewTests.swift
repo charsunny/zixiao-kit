@@ -143,6 +143,9 @@ final class ZXArtSceneReviewTests: XCTestCase {
         for kind in PaintingWaterKind.allCases {
             entries.append(("water.\(kind.rawValue)", { $0.paintingSurface(kind, width: 320, height: 140) }))
         }
+        for stage in ShanShuiEngine.LotusStage.allCases {
+            entries.append(("lotus.\(stage.rawValue)", { $0.paintingLotusDrawing(stage: stage).canvas }))
+        }
         let label = 150.0, cell = CGSize(width: 190, height: 150), columns = 6, perPage = 10
         let out = URL(fileURLWithPath: dir, isDirectory: true)
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
@@ -216,7 +219,8 @@ final class ZXArtSceneReviewTests: XCTestCase {
             ("疏梅花径", .spring, [.blossom, .grass, .path]),
             ("荷塘清趣", .lotusPond, [.lotus, .dragonfly, .willow]),
             ("寒林古木", .winterForest, [.oldTree, .bareTree]),
-            ("松竹山居", .retreat, [.pine, .bamboo, .hut, .stream])
+            ("松竹山居", .retreat, [.pine, .bamboo, .hut, .stream]),
+            ("飞泉出涧", .retreat, [.waterfall, .stream, .pine])
         ]
         let cell = CGSize(width: 400, height: 260)
         let paper = ZXArt.Palette.paperInk.paper
@@ -289,7 +293,8 @@ final class ZXArtSceneReviewTests: XCTestCase {
         }
         let samples: [(String, ZXArt.PoetryScene, [ZXArt.SceneMotif])] = [
             ("objects-historic", .historic, [.cityGate, .ruins, .terrace, .traveler]),
-            ("objects-sail", .fishing, [.sail, .reeds])
+            ("objects-sail", .fishing, [.sail, .reeds]),
+            ("plants-waterfall", .retreat, [.waterfall, .stream, .pine])
         ]
         for (name, scene, motifs) in samples {
             let selection = ZXArt.SceneSelection(scene: scene, options: .init(motifs: motifs), matched: [])
