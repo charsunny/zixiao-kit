@@ -64,8 +64,8 @@ extension ShanShuiEngine {
         let leaning = !willow && r() < 0.3
         let twin = !pine && !willow && r() < 0.3
         let breadth = 0.75 + r() * 0.6
-        let height = (pine ? 168 : 150) * (leaning ? 0.85 : 1) + r() * 20
-        let lean = (r() - 0.5) * (willow ? 60 : (pine ? 40 : 28)) + (leaning ? (r() < 0.5 ? -1 : 1) * 55 : 0)
+        let height = (pine ? 132 : 150) * (leaning ? 0.85 : 1) + r() * 20
+        let lean = (r() - 0.5) * (willow ? 60 : (pine ? 65 : 28)) + (leaning ? (r() < 0.5 ? -1 : 1) * 55 : 0)
         var joints: [P] = [P(66, 178)]
         let segments = 5
         for k in 1...segments {
@@ -83,10 +83,10 @@ extension ShanShuiEngine {
         var side = r() < 0.5 ? -1.0 : 1.0
         var tips: [(P, Double)] = []
         for k in 0..<limbs {
-            let t = (pine ? 0.42 : 0.38) + 0.55 * (Double(k) + r() * 0.5) / Double(limbs)
+            let t = (pine ? 0.30 : 0.38) + 0.55 * (Double(k) + r() * 0.5) / Double(limbs)
             let origin = spinePoint(t)
             if r() < 0.7 { side = -side }
-            let span = (pine ? 34 + r() * 26 : 26 + r() * 24) * (1.1 - t * 0.6) * breadth
+            let span = (pine ? 40 + r() * 30 : 26 + r() * 24) * (1.1 - t * 0.6) * breadth
             // Pine limbs run nearly level and droop; deciduous limbs rise; bare limbs rise then hook.
             let rise = pine ? -2 + r() * 6 : (bare ? 14 + r() * 14 : 10 + r() * 16)
             let joint = P(origin.x + side * span * 0.5, origin.y - rise * 0.6)
@@ -108,11 +108,11 @@ extension ShanShuiEngine {
         if !bare && !willow {
             if pine {
                 // Flat, layered needle clusters along each limb end, plus a flat crown at the top.
-                for (p, _) in tips where r() < 0.8 {
-                    c += paintingLeaves(p.x, p.y - 2, width: 34 + r() * 16, height: 10 + r() * 4, needles: true)
+                for (p, _) in tips where r() < 0.94 {
+                    c += paintingLeaves(p.x, p.y - 2, width: 40 + r() * 16, height: 13 + r() * 5, needles: true)
                 }
                 let top = spine.last!
-                c += paintingLeaves(top.x, top.y + 4, width: 46, height: 12, needles: true)
+                c += paintingLeaves(top.x, top.y + 4, width: 54, height: 16, needles: true)
             } else {
                 // Rounded crown: clusters gather inside an ellipse around the upper trunk.
                 let center = spinePoint(0.78)

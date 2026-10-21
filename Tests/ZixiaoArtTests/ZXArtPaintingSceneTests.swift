@@ -63,7 +63,7 @@ struct ZXArtPaintingSceneTests {
                 #expect(d.anchors?.water != nil)
                 for object in d.sceneElements where ["hut", "pine", "bamboo"].contains(object.motif) {
                     let r = object.bounds.cgRect
-                    #expect(stream.maxX <= r.minX + 0.002 || stream.minX >= r.maxX - 0.002)
+                    #expect(stream.maxX <= r.minX + 0.002 || stream.minX >= r.maxX - 0.002, "\(purpose) \(composition) stream=\(stream) \(object.motif)=\(r)")
                 }
             }
         }
@@ -195,7 +195,7 @@ struct ZXArtPaintingSceneTests {
                         }
                         if ["house", "hut", "pavilion", "templeGate", "cityGate", "pagoda"].contains(element.motif) {
                             #expect(rect.height <= mountain.height * (element.motif == "pagoda" ? 0.27 : 0.14))
-                            #expect(rect.maxY >= mountain.minY + mountain.height * 0.5)
+                            #expect(rect.maxY >= mountain.minY + mountain.height * 0.5, "\(composition) \(size) \(element.motif)=\(rect) mountain=\(mountain)")
                         }
                     }
                 }

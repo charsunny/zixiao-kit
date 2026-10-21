@@ -9,6 +9,10 @@ extension ShanShuiEngine {
         case .lotus: return paintingLotus()
         case .bridge: return paintingBridge()
         case .house, .hut: return paintingHouse()
+        case .pavilion: return paintingPavilion()
+        case .templeGate: return paintingTempleGate()
+        case .pagoda: return paintingPagoda()
+        case .path: return paintingFootpath()
         case .courtyard: return paintingCourtyard()
         case .window: return paintingWindow()
         case .fields: return paintingFields()
@@ -60,7 +64,7 @@ extension ShanShuiEngine {
     /// one pale wash, then texture strokes that gather on the shadow side and in the recesses,
     /// leaving the lit top planes as paper. Moss dots in scorched ink sit on the upper edges.
     /// Light comes from the upper left; no straight-edged wash bands.
-    private func inkSurface(_ points: [P], textured: Bool) -> ZXArt.SSCanv {
+    func inkSurface(_ points: [P], textured: Bool, shadowWash: Bool = true) -> ZXArt.SSCanv {
         guard let x0 = points.map(\.x).min(), let x1 = points.map(\.x).max(),
               let y0 = points.map(\.y).min(), let y1 = points.map(\.y).max(),
               x1 - x0 > 25, y1 - y0 > 15 else { return [] }
@@ -91,7 +95,7 @@ extension ShanShuiEngine {
             let pull = 1 - min(1, shade(p.x, p.y) * 1.6)
             return P(p.x + (x1 - p.x) * pull * 0.55, p.y + (y1 - p.y) * pull * 0.45)
         }
-        result.append(poly(shadow, fil: .gray(0, 0.10), str: nil))
+        if shadowWash { result.append(poly(shadow, fil: .gray(0, 0.10), str: nil)) }
 
         // Texture strokes: density and tone follow the shade.
         let count = min(900, max(50, Int(w * h / 45)))
@@ -130,19 +134,24 @@ extension ShanShuiEngine {
     /// slightly, with small dark leaves bunched near the top. Drawn in the crown's own frame.
     func paintingVine() -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
-        let strands = 5 + Int(r() * 3)
+        let strands = 3 + Int(r() * 3)
         for k in 0..<strands {
-            let x = 8 + Double(k) * (84 / Double(strands)) + (r() - 0.5) * 8
-            let length = 40 + r() * 70
-            let sway = (r() - 0.5) * 10
-            let line = inkCurve([P(x, 0), P(x + sway * 0.4, length * 0.35), P(x + sway, length * 0.7),
-                                 P(x + sway * 0.6, length)])
-            c += inkLine(line, width: 0.6 + r() * 0.4, tone: 0.55 + r() * 0.2, dry: 0.45)
-            for _ in 0..<(3 + Int(r() * 4)) {
-                let t = pow(r(), 1.6) * 0.8
+            let x = 15 + r() * 65, top = r() * 12
+            let length = 24 + pow(r(), 0.7) * 80
+            let sway = (r() - 0.5) * 36
+            let line = inkCurve([P(x, top), P(x + sway + 7, top + length * 0.25),
+                P(x + sway - 5, top + length * 0.52), P(x + sway * 0.5, top + length * 0.78),
+                P(x + sway * 0.6 + 4, top + length)])
+            c += inkLine(line, width: k == 0 ? 1.5 : 0.65, tone: 0.65, dry: 0.5)
+            if k < 2 {
+                let loop = inkCurve([P(x, top + 4), P(x + 12, top - 5), P(x + 21, top + 3), P(x + 13, top + 12)])
+                c += inkLine(loop, width: 0.7, tone: 0.6, dry: 0.5)
+            }
+            for _ in 0..<(3 + Int(r() * 6)) {
+                let t = pow(r(), 2.2) * 0.55
                 let i = min(line.count - 1, Int(t * Double(line.count - 1)))
-                c += inkBlot(line[i].x + (r() - 0.5) * 3, line[i].y, radius: 1.2 + r() * 1.3,
-                    squash: 0.5 + r() * 0.3, angle: r() * 3, tone: 0.5 + r() * 0.3)
+                c += inkBlot(line[i].x + (r() - 0.5) * 6, line[i].y, radius: 1.4 + r() * 1.8,
+                    squash: 0.45, angle: r() * 3, tone: 0.65 + r() * 0.2)
             }
         }
         return c
@@ -268,7 +277,12 @@ extension ShanShuiEngine {
         let slope = 0.22
         let top = [P(14, 48), P(176, 48 + 162 * slope)], bottom = [P(14, 140), P(176, 140 + 162 * slope)]
         let face = [top[0], top[1], bottom[1], bottom[0]]
-        var c = [poly(face, fil: .white, str: nil), poly(face, fil: .gray(0, 0.04), str: nil)]
+        let ground = inkCurve([P(-18, 139), P(6, 133), P(52, 147), P(124, 160), P(194, 178),
+            P(159, 202), P(70, 186), P(-12, 164)])
+        var c = [poly(ground, fil: .white, str: nil), poly(ground, fil: .gray(0, 0.045), str: nil)]
+        c += inkLine([P(-14, 146), P(8, 142), P(32, 148)], width: 0.8, tone: 0.27, dry: 0.7)
+        c += inkLine([P(132, 178), P(172, 185), P(187, 183)], width: 0.7, tone: 0.19, dry: 0.72)
+        c += [poly(face, fil: .white, str: nil), poly(face, fil: .gray(0, 0.04), str: nil)]
         // The near end turns a corner: a narrow return face in shadow shows the wall's thickness.
         let end = [P(0, 42), P(14, 48), P(14, 140), P(0, 134)]
         c.append(poly(end, fil: .white, str: nil))
@@ -323,12 +337,16 @@ extension ShanShuiEngine {
         return c
     }
 
-    func paintingPerson() -> ZXArt.SSCanv {
+    func paintingPerson(hat: Bool = false) -> ZXArt.SSCanv {
         var c = inkBlot(44, 8, radius: 2.7, squash: 0.8, tone: 0.85)
+        if hat {
+            c += inkLine([P(35, 9), P(44, 2), P(54, 10), P(35, 9)], width: 1.3, tone: 0.85)
+        }
         let robe = inkCurve([P(43, 13), P(39, 22), P(31, 35), P(27, 38), P(45, 39), P(50, 34), P(46, 19)])
         c.append(poly(robe, fil: .white, str: nil))
         c.append(poly(robe, fil: .gray(0, 0.13), str: nil))
         c += inkLine(Array(robe.prefix(robe.count / 2)), width: 1.2, tone: 0.72)
+        c += inkLine([P(41, 23), P(35, 34), P(43, 36)], width: 0.85, tone: 0.66, dry: 0.45)
         c += inkLine([P(43, 15), P(46, 25), P(54, 27)], width: 1.6, tone: 0.75)
         c += inkLine([P(52, 25), P(57, 46)], width: 0.7, tone: 0.7)
         c += inkLine([P(40, 38), P(36, 44), P(31, 45)], width: 1.2, tone: 0.8)
@@ -341,10 +359,14 @@ extension ShanShuiEngine {
         var c = [poly(hull, fil: .gray(0, 0.48), str: nil)] // first shape is the hull anchor
         c += inkLine([P(0, 87), P(36, 94), P(86, 94), P(130, 85)], width: 1.0, tone: 0.8)
         if kind == .angler {
-            let person = paintingPerson().map { p -> ZXArt.SSPoly in
+            let person = paintingPerson(hat: true).map { p -> ZXArt.SSPoly in
                 var q = p; q.p = p.p.map { P($0.x * 0.75 + 10, $0.y * 0.75 + 56) }; q.wid *= 0.75; return q
             }
             c += person
+            for k in 0..<5 { // 蓑衣: a few dry slashes, never a detailed portrait.
+                c += inkLine([P(38 + Double(k) * 2, 70), P(34 + Double(k) * 3, 82)],
+                    width: 1.2, tone: 0.6, dry: 0.6)
+            }
             c += inkLine([P(47, 76), P(85, 55), P(131, 47)], width: 1.0, tone: 0.8)
             c += inkLine(inkCurve([P(131, 47), P(137, 69), P(137, 113)]), width: 0.5, tone: 0.4)
         } else if kind == .sail {
@@ -358,7 +380,15 @@ extension ShanShuiEngine {
             let awning = inkCurve([P(44, 93), P(48, 76), P(63, 69), P(87, 74), P(96, 92)])
             c.append(poly(awning, fil: .white, str: nil))
             c.append(poly(awning, fil: .gray(0, 0.13), str: nil))
-            c += inkLine(awning, width: 1.3, tone: 0.65)
+            c += inkLine(awning, width: 1.3, tone: 0.75)
+            // Curving bamboo ribs and a dark opening give the canopy volume at small scale.
+            for dx in [0.0, 9, 18, 27] {
+                c += inkLine(inkCurve([P(46 + dx, 92), P(48 + dx, 79), P(56 + dx, 73)]),
+                    width: 0.7, tone: 0.48, dry: 0.45)
+            }
+            let opening = inkCurve([P(79, 92), P(82, 80), P(88, 79), P(94, 92)])
+            c.append(poly(opening, fil: .gray(0, 0.58), str: nil))
+            c += inkLine(inkCurve([P(17, 93), P(8, 101), P(-10, 107)]), width: 1.3, tone: 0.7, dry: 0.45)
         }
         return c
     }

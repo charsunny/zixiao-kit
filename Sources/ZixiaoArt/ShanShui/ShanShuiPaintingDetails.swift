@@ -2,7 +2,20 @@
 import Foundation
 
 extension ShanShuiEngine {
-    func paintingWindow() -> ZXArt.SSCanv {
+    func paintingWindow(embedded: Bool = false) -> ZXArt.SSCanv {
+        if embedded {
+            // A recess in the existing wall plane, without another wall slab or projecting roof.
+            let frame = [P(0, 0), P(48, 10.56), P(48, 63.56), P(0, 53), P(0, 0)]
+            var c = [poly(frame, fil: .gray(0, 0.11), str: nil)]
+            c += inkLine(frame, width: 1.5, tone: 0.58, dry: 0.48)
+            for x in [16.0, 32] {
+                c += inkLine([P(x, x * 0.22 + 2), P(x, x * 0.22 + 51)], width: 0.8, tone: 0.48, dry: 0.5)
+            }
+            for y in [18.0, 36] {
+                c += inkLine([P(2, y), P(46, y + 44 * 0.22)], width: 0.7, tone: 0.42, dry: 0.5)
+            }
+            return c
+        }
         let wall = [P(0, 7), P(100, 24), P(100, 118), P(0, 118)]
         var c = [poly(wall, fil: .white, str: nil), poly(wall, fil: .gray(0, 0.06), str: nil)]
         c += inkEdges([P(0, 0), P(104, 18)], width: 7, tone: 0.68, dry: 0.43)
@@ -72,29 +85,38 @@ extension ShanShuiEngine {
                 let t = Double(i) / 12
                 return P(peakX + (x1 - peakX) * t, base - height * (1 - pow(t, 0.7)))
             }
-            let crest = windward + lee
+            let phase = r() * 6
+            let crest = (windward + lee).enumerated().map { i, p -> P in
+                let t = Double(i) / Double(windward.count + lee.count - 1)
+                let wave = sin(t * 11 + phase) * 2.5 + (n(t * 7, depth + 4) - 0.5) * 5
+                return P(p.x, p.y + wave * sin(t * .pi))
+            }
             let floor = crest.enumerated().map { i, p in
                 P(p.x, p.y + (base + 14 - p.y) * pow(sin(Double(i) / Double(crest.count - 1) * .pi), 0.35))
             }
             c.append(poly(crest + floor.reversed(), fil: .white, str: nil))
             // Sand is mostly paper: a faint body, a little more tone just under the crest.
             c.append(poly(crest + floor.reversed(), fil: .gray(0, 0.025 + depth * 0.02), str: nil))
-            let lip = crest.map { P($0.x, $0.y + 5 + depth * 4) }
-            c.append(poly(crest + lip.reversed(), fil: .gray(0, 0.03 + depth * 0.03), str: nil))
-            // Lee face: nested, fading washes plus dry strokes down the slope, never one hard wedge.
-            let shadowTop = Array(crest.suffix(lee.count + 4))
-            for k in 0..<3 {
-                let reach = (4 + depth * 5) * (1 + Double(k) * 0.8)
-                let foot = shadowTop.map { P($0.x - reach * 0.8, min(base + 8, $0.y + reach)) }
-                c.append(poly(shadowTop + foot.reversed(), fil: .gray(0, (0.035 + depth * 0.035) * (1 - Double(k) * 0.25)), str: nil))
+            // Dry side-brush sweeps break up the lee face. Each starts below a different
+            // portion of the ridge and lifts at a different depth, with paper between groups.
+            for _ in 0..<(22 + Int(depth * 14)) {
+                let index = 12 + Int(r() * Double(crest.count - 15))
+                let p = crest[index], foot = floor[index]
+                let reach = max(0, foot.y - p.y) * (0.15 + r() * 0.55)
+                let lean = -reach * (0.6 + r() * 0.8)
+                let line = (0...12).map { i -> P in
+                    let t = Double(i) / 12
+                    return P(p.x + lean * t, p.y + 1 + reach * (0.5 * t + 0.5 * t * t))
+                }
+                c += inkLine(line, width: 1 + r() * 2.8, tone: 0.04 + depth * 0.08 + r() * 0.03, dry: 0.82)
             }
-            for _ in 0..<(4 + Int(depth * 6)) {
-                let p = shadowTop[Int(r() * Double(shadowTop.count - 1))]
-                let len = 5 + r() * (8 + depth * 8)
-                c += inkLine([P(p.x, p.y + 1), P(p.x - len * 0.6, p.y + len)], width: 1.2 + r() * 1.6,
-                    tone: 0.06 + depth * 0.06, dry: 0.75)
+            var start = 2
+            while start < crest.count - 3 {
+                let length = 2 + Int(r() * 5)
+                c += inkLine(Array(crest[start...min(start + length, crest.count - 1)]),
+                    width: 0.55 + depth * 0.45, tone: 0.13 + depth * 0.12, dry: 0.72)
+                start += length + 2 + Int(r() * 6)
             }
-            c += inkLine(crest, width: 0.6 + depth * 0.7, tone: 0.20 + depth * 0.25, dry: 0.45)
             // Ripples on the windward slope, parallel to the crest.
             for j in 0..<(3 + Int(depth * 5)) {
                 let t = 0.2 + r() * 0.6, i = Int(t * 30)
@@ -117,11 +139,11 @@ extension ShanShuiEngine {
                 let t0 = Double(k) / Double(segments), t1 = Double(k + 1) / Double(segments)
                 let y0 = 130 - t0 * 130, y1 = 130 - t1 * 130
                 let w0 = 1.6 + 2.6 * t0, w1 = 1.6 + 2.6 * t1
-                let sway = 0.0
+                let sway = sin(t1 * 2.5) * 0.5
                 c.append(poly([P(30 - w0, y0), P(30 + sway - w1, y1), P(30 + sway + w1, y1), P(30 + w0, y0)],
-                    fil: .gray(0, 0.11 * (1 - t0 * 0.85)), str: nil))
+                    fil: .gray(0, 0.058 * (1 - t0 * 0.94)), str: nil))
             }
-            c += inkLine([P(30, 130), P(30, 70), P(30.4, 40)], width: 0.5, tone: 0.12, dry: 0.7)
+            c += inkLine([P(30, 130), P(30, 70), P(30.4, 40)], width: 0.45, tone: 0.09, dry: 0.75)
             return c
         }
         for k in 0..<4 {

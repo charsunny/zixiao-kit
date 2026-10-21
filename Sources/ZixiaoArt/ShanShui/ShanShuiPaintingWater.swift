@@ -24,8 +24,8 @@ struct PaintingWaterChannel {
 }
 
 extension ShanShuiEngine {
-    func paintingChannel(width: Double, height: Double, river: Bool = false) -> ZXArt.SSCanv {
-        let channel = PaintingWaterChannel(width: width, height: height, phase: r() * 1.2, broad: river)
+    func paintingChannel(width: Double, height: Double, river: Bool = false, phase: Double? = nil) -> ZXArt.SSCanv {
+        let channel = PaintingWaterChannel(width: width, height: height, phase: phase ?? r() * 1.2, broad: river)
         let left = channel.left, right = channel.right
         // The unpainted water cuts through the rock bed rather than becoming another rock contour.
         var c = [poly(left + right.reversed(), fil: .white, str: nil)]
@@ -84,6 +84,7 @@ extension ShanShuiEngine {
     }
 
     func paintingSurface(_ kind: PaintingWaterKind, width: Double = 320, height: Double = 140) -> ZXArt.SSCanv {
+        if kind == .sea { return paintingSea(width: width, height: height) }
         var c: ZXArt.SSCanv = []
         let rows = kind == .sea ? 12 : (kind == .pond ? 6 : 8)
         for row in 0..<rows {
@@ -134,6 +135,40 @@ extension ShanShuiEngine {
                     }
                     c += inkLine(arc, width: 0.7, tone: 0.30, dry: 0.5)
                 }
+            }
+        }
+        return c
+    }
+
+    /// Groups of linked crests and turning currents, separated by untouched water.
+    private func paintingSea(width: Double, height: Double) -> ZXArt.SSCanv {
+        var c: ZXArt.SSCanv = []
+        for group in 0..<9 {
+            let t = Double(group) / 8
+            let position = 0.08 + r() * 0.56
+            let y = height * (0.10 + 0.76 * pow(t, 1.4))
+            let span = width * (0.18 + 0.25 * t) * (0.7 + r() * 0.4)
+            let x = min(width - span - 1, width * position)
+            let rise = height * (0.012 + 0.065 * t)
+            let turn = 0.32 + r() * 0.35
+            for echo in 0..<(2 + Int(t * 3)) {
+                let offset = Double(echo) * min(1.2 + t * 1.6, height * 0.018)
+                let path = (0...28).map { i -> P in
+                    let u = Double(i) / 28
+                    let crest = exp(-pow((u - turn) / 0.19, 2))
+                    let wake = sin(u * .pi * 2.5) * 0.18
+                    return P(x + span * u - offset * 0.9,
+                        y - rise * (crest + wake) + offset * (0.3 + 0.7 * sin(u * .pi)))
+                }
+                c += inkLine(path, width: echo == 0 ? 0.9 + t * 0.7 : 0.55,
+                    tone: echo == 0 ? 0.20 + t * 0.24 : 0.14 + t * 0.12, dry: 0.57)
+            }
+            if t > 0.5 {
+                let curl = inkCurve([P(x + span * turn, y - rise),
+                    P(x + span * turn - rise * 0.40, y - rise * 1.16),
+                    P(x + span * turn - rise * 0.65, y - rise * 0.62),
+                    P(x + span * turn - rise * 0.2, y - rise * 0.5)])
+                c += inkLine(curl, width: 0.65, tone: 0.32, dry: 0.5)
             }
         }
         return c
