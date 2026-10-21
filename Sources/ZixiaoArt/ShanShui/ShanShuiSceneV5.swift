@@ -175,7 +175,7 @@ private final class PaintingStage {
             return CGRect(x: pad, y: top, width: w - 2 * pad, height: footer - top)
         }
         let top = art.minY + art.height * fraction
-        return CGRect(x: art.minX, y: top, width: art.width, height: max(20, min(footer, art.maxY) - top))
+        return CGRect(x: art.minX, y: top, width: art.width, height: max(20, footer - top))
     }
 
     private func slot(_ x: Double, _ y: Double, _ width: Double, _ height: Double, front: Bool = false) -> CGRect {
