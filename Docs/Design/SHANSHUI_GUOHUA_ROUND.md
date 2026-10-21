@@ -44,9 +44,9 @@ PR #9 和它的追加提交已经解决以下问题，详见 PR 说明。改动�
 ### 看图（必须看图，不要只读代码）
 VPS 不能渲染（Linux 没有 CoreGraphics），出图在 charsunny 的 Mac「xistudio」上，SSH 已经配好：
 - `ssh xistudio` 通过 VPS 上的用户态 Tailscale。连不上时，用 `crontab -l` 里 `@reboot` 那条命令重启 `tailscaled`，再用 `~/.local/bin/ts status` 检查。
-- 一轮出图：在 `/home/paseo/workspace/literature/zixiao-kit`（当前分支）里提交后，执行 `~/review/round.sh <轮次名>`。它会推送 HEAD 到 Mac 的 `incoming`，在 iPhone 17 模拟器上跑 `ZXArtSceneReviewTests`，导出 15 类 × 竖横 × 明暗的样张、总览 `overview-portrait-light.png` 和树谱 `trees.png`，再拉回 `~/review/<轮次名>/`。一轮大约 5–10 分钟。
-- 看图：查看拉回的 PNG（总览、单张、深色、横幅都要看）。需要局部放大时，在 Mac 上用 `sips -c <高> <宽> --cropOffset <y> <x>` 裁剪原图（Mac 上的原图在 `/tmp/zxart-review-<轮次名>/`）。
-- 改造前的基线：`~/review/r18/`（PR #9 的最终状态）。
+- 一轮出图：在 `/home/paseo/workspace/literature/zixiao-kit`（当前分支）提交后，执行 `~/review/round.sh <轮次名>`。它推送 HEAD 到 Mac 的 `incoming`，在 iPhone 17 模拟器上跑 `ZXArtSceneReviewTests`，导出 15 类 × 竖横 × 明暗的样张、总览 `overview-portrait-light.png` 和树谱 `trees.png`。**出图结果留在 Mac**：原图在 `/Volumes/XiPass/literature/taste/reviews/<轮次名>/`，900px 小样在其下的 `small/`。一轮大约 5–10 分钟。
+- 看图：VPS 不再整批保存样张。`~/review/view.sh <轮次名>` 列出文件；`~/review/view.sh <轮次名> <文件名...>` 把指定小样取到 `/tmp/review-view/<轮次名>/` 查看；局部放大用 `~/review/crop.sh <轮次名> <文件名> <高> <宽> <y> <x>`（在 Mac 上裁原图再取回）。看完执行 `~/review/view.sh --clean`。
+- 基线：Mac 上 `reviews/r18/`（PR #9 的最终状态）、`reviews/guohua-r15/`（PR #10 当前状态）、`reviews/base/`（改造前）。
 
 ### 测试
 - 在 Mac 上跑（通过 ssh），不要在 VPS 上编译：
