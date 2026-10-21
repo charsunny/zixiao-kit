@@ -774,7 +774,8 @@ private final class PaintingStage {
         // Only a portrait inscription sits above the bank. In wide layouts the verse
         // is beside it; using verse.maxY there reversed the stream's vertical extent.
         let waterTop = bandTop == nil ? art.minY : verse.maxY + 4
-        let startY = max(b.minY - b.height * 0.35, waterTop)
+        // The stream comes out of a gap between the stones (水口); it never climbs over the crest.
+        let startY = max(b.minY + b.height * 0.18, waterTop)
         let box = CGRect(x: b.minX + b.width * (river ? 0.36 : 0.025), y: startY,
                          width: width, height: min(b.maxY - startY + b.height * 0.12, footer - startY - 2))
         let phase = waterEngine.r() * 1.6 - 0.8

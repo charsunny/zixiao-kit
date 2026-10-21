@@ -46,12 +46,12 @@ extension ShanShuiEngine {
                 start += length + 2 + Int(r() * 3)
             }
         }
-        // Broken transverse water ripples open toward us, unlike longitudinal road ruts.
-        for i in 0..<(5 + Int(r() * 4)) {
-            let t = 0.15 + Double(i) * 0.09 + r() * 0.025
-            guard t < 0.95 else { continue }
-            let lane = -0.75 + r() * 0.35
-            let a = channel.point(t, across: lane), b = channel.point(t, across: min(0.80, lane + 0.65 + r() * 0.50))
+        // 远水无波: a few short, broken ripples gather near us. Evenly stacked full-width lines
+        // read as steps climbing the bank, so the far half of the channel stays bare paper.
+        for _ in 0..<(3 + Int(r() * 3)) {
+            let t = 0.48 + r() * 0.46
+            let lane = -0.70 + r() * 0.85
+            let a = channel.point(t, across: lane), b = channel.point(t, across: min(0.85, lane + 0.25 + r() * 0.30))
             c += inkLine([a, P((a.x + b.x) / 2, a.y + min(0.8, height * 0.009)), b],
                          width: 0.75 + t * 0.4, tone: 0.35 + t * 0.12, dry: 0.40)
         }

@@ -409,6 +409,19 @@ extension ShanShuiEngine {
                 c += inkLine(Array(reflected[start...start + 4]), width: 0.85, tone: 0.22, dry: 0.65)
             }
         }
+        if bridge.kind != .arch {
+            // Piles and piers continue as broken, wavering reflections, so they stand in water
+            // rather than ending on paper like table legs.
+            let piers = bridge.kind == .slab ? [0.19, 0.79] : [0.13, 0.86]
+            for u in piers {
+                let x = bridge.width * u
+                for k in 0..<3 {
+                    let y = 62 + Double(k) * 5.5
+                    c += inkLine([P(x - 0.8, y), P(x + 0.9, y + 2.2), P(x - 0.4, y + 3.6)],
+                        width: bridge.kind == .slab ? 2.4 : 1.4, tone: 0.30 - Double(k) * 0.07, dry: 0.5)
+                }
+            }
+        }
         for (x, y, length) in [(0.24, 65.0, 0.23), (0.44, 71, 0.30), (0.18, 82, 0.38)] {
             c += inkLine([P(bridge.width * x, y), P(bridge.width * (x + length * 0.5), y + 0.5),
                           P(bridge.width * (x + length), y)], width: 0.8, tone: 0.33, dry: 0.5)
