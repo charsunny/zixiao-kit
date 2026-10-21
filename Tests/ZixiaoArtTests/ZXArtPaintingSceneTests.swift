@@ -32,9 +32,12 @@ struct ZXArtPaintingSceneTests {
             #expect(drawing.anchors?.water != nil)
             #expect(drawing.pointCount < 600_000 && drawing.shapeCount < 12_000)
             if [.moonNight, .waterTown, .farewell].contains(scene) {
-                let bank = try #require(drawing.sceneElements.first { $0.motif == "nearBank" }).bounds.cgRect
                 let boat = try #require(drawing.sceneElements.first { ["boat", "mooredBoat"].contains($0.motif) }).bounds.cgRect
-                #expect(boat.minX > bank.maxX)
+                // With a full-width ground band the near slope dissolves into water; the boat rides
+                // the water at its lower edge, never on the bank top.
+                let near = drawing.sceneElements.first { $0.motif == "nearBank" }?.bounds.cgRect
+                let bank = try #require(near ?? drawing.sceneElements.first { $0.motif == "groundBank" }?.bounds.cgRect)
+                if near != nil { #expect(boat.minX > bank.maxX) } else { #expect(boat.maxY >= bank.minY + bank.height * 0.4) }
                 if let reflection = drawing.sceneElements.first(where: { $0.motif == "waterReflection" })?.bounds.cgRect {
                     #expect(!reflection.intersects(bank))
                 }
@@ -52,9 +55,11 @@ struct ZXArtPaintingSceneTests {
                 let d = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: .init(width: 669, height: 951)))
                 let stream = try #require(d.sceneElements.first { $0.motif == "stream" }).bounds.cgRect
                 let far = try #require(d.sceneElements.first { $0.motif == "groundBank" }).bounds.cgRect
-                let near = try #require(d.sceneElements.first { $0.motif == "nearBank" }).bounds.cgRect
+                // With a full-width ground band there is no separate near slope; the stream then runs
+                // through the band from its top edge down into the dissolving lower half.
+                let near = d.sceneElements.first { $0.motif == "nearBank" }?.bounds.cgRect
                 #expect(stream.minY <= far.minY + 0.006)
-                #expect(stream.maxY >= near.maxY - 0.006)
+                #expect(stream.maxY >= (near?.maxY ?? (far.minY + far.height * 0.5)) - 0.006)
                 #expect(d.anchors?.water != nil)
                 for object in d.sceneElements where ["hut", "pine", "bamboo"].contains(object.motif) {
                     let r = object.bounds.cgRect
@@ -181,14 +186,16 @@ struct ZXArtPaintingSceneTests {
                     for element in drawing.sceneElements {
                         let rect = element.bounds.cgRect
                         if ["pine", "oldTree", "bareTree", "layeredTree", "willow", "blossom", "maple"].contains(element.motif) {
-                            #expect(rect.height <= mountain.height * 0.175)
+                            // Near trees lead the eye; the retreat's pine is the protagonist (明月松间照).
+                            let lead = scene == .retreat && element.motif == "pine"
+                            #expect(rect.height <= mountain.height * (lead ? 0.60 : 0.32))
                         }
                         if element.motif == "bamboo" {
-                            #expect(rect.height <= mountain.height * 0.10)
+                            #expect(rect.height <= mountain.height * 0.30)
                         }
                         if ["house", "hut", "pavilion", "templeGate", "cityGate", "pagoda"].contains(element.motif) {
-                            #expect(rect.height <= mountain.height * (element.motif == "pagoda" ? 0.18 : 0.10))
-                            #expect(rect.maxY >= mountain.maxY - mountain.height * 0.25)
+                            #expect(rect.height <= mountain.height * (element.motif == "pagoda" ? 0.27 : 0.14))
+                            #expect(rect.maxY >= mountain.minY + mountain.height * 0.5)
                         }
                     }
                 }

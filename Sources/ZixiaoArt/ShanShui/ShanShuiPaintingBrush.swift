@@ -1,5 +1,6 @@
 // shanshui@5 painting path. Preserve this version when adding future painting styles.
 // Brush vocabulary for shanshui@5. Earlier generators never call these routines.
+import CoreGraphics
 import Foundation
 
 extension ShanShuiEngine {
@@ -91,11 +92,30 @@ extension ShanShuiEngine {
         }
     }
 
+    /// A low, staggered slope (坡陀): one taller rock as the host, flatter guests stepping down and
+    /// away, so the bank reads as ground receding into water rather than a pile of cushions.
     func paintingBank() -> ZXArt.SSCanv {
         var c: ZXArt.SSCanv = []
-        for (x, y, width, height) in [(112.0, 29.0, 140.0, 65.0), (10, 38, 120, 73), (58, 50, 110, 61), (215, 48, 95, 45)] {
+        let flip = r() < 0.5
+        let stones: [(Double, Double, Double, Double)] = [
+            (20, 20, 130, 52),      // host rock, highest
+            (120, 44, 120, 30),     // guest stepping down
+            (200, 58, 90, 20),      // low shelf into the water
+            (0, 52, 95, 26),        // foreground lip
+        ]
+        for (sx, y, width, height) in stones {
+            let x = flip ? 290 - sx - width : sx
             c += paintingRock(width: width, height: height, tone: 0.85).map { poly in
                 var p = poly; p.p = poly.p.map { P($0.x + x, $0.y + y) }; return p
+            }
+            // 坡脚: a dark, broken stroke where the stone meets ground or water anchors it.
+            let foot = y + height - 1
+            var fx = x + width * (0.08 + r() * 0.1)
+            while fx < x + width * 0.9 {
+                let run = width * (0.15 + r() * 0.25)
+                c += inkLine([P(fx, foot + r()), P(fx + run * 0.5, foot + 0.8), P(min(x + width * 0.95, fx + run), foot + r())],
+                    width: 1.6 + r() * 1.2, tone: 0.42 + r() * 0.2, dry: 0.5)
+                fx += run + width * (0.05 + r() * 0.1)
             }
         }
         return c
@@ -108,16 +128,109 @@ extension ShanShuiEngine {
             wid: profile.width, tex: 240, veg: false, architecture: false, profile: profile), textured: true)
     }
 
+    /// Cloud at the foot of a peak (山腰云锁), painted by leaving paper: stacked paper-coloured
+    /// bands with billowing upper edges, thin near the waist and solid at the foot, so the peak
+    /// rises out of cloud instead of standing on the bank.
+    func paintingCloud(over peak: CGRect) -> ZXArt.SSCanv {
+        var c: ZXArt.SSCanv = []
+        let top = peak.maxY - peak.height * (0.36 + r() * 0.08), bottom = peak.maxY + peak.height * 0.04
+        let x0 = peak.minX - peak.width * 0.08, x1 = peak.maxX + peak.width * 0.08
+        let bands = 6
+        for k in 0..<bands {
+            let t = Double(k) / Double(bands - 1)
+            let y = top + (bottom - top) * t * 0.82
+            let phase = r() * 6, freq = 0.035 + r() * 0.03
+            let edge = (0...60).map { i -> P in
+                let u = Double(i) / 60, x = x0 + (x1 - x0) * u
+                let billow = abs(sin(x * freq + phase)) * (5 + 6 * (1 - t))
+                // The band thins to nothing at both ends, so no straight edge cuts the hills behind.
+                let taper = pow(sin(u * .pi), 0.6)
+                let rise = (bottom - y) * (1 - taper)
+                return P(x, y + rise - billow * taper + 4 * (n(x * 0.02, Double(k)) - 0.5))
+            }
+            let alpha = k == bands - 1 ? 0.85 : 0.22 + 0.10 * t
+            c.append(poly(edge + [P(x1, bottom), P(x0, bottom)], fil: C(255, 255, 255, alpha), str: nil))
+        }
+        return c
+    }
+
+    /// The far bank (对岸) of a river scene, in the manner of Ni Zan: low rounded hills on one
+    /// side flattening into a level shore, distant trees as small upright dabs along the crest,
+    /// a broken shore line. Pale, because it sits across the water.
+    func paintingFarShore() -> ZXArt.SSCanv {
+        var c: ZXArt.SSCanv = []
+        let flip = r() < 0.5
+        let humps = 2 + Int(r() * 2)
+        var tops: [(x: Double, h: Double, w: Double)] = []
+        for k in 0..<humps {
+            tops.append((x: 0.10 + 0.16 * Double(k) + r() * 0.06, h: 18 + r() * 16 - Double(k) * 4, w: 0.10 + r() * 0.05))
+        }
+        let ridge = (0...100).map { i -> P in
+            let t = Double(i) / 100, u = flip ? 1 - t : t
+            var y = 0.0
+            for top in tops { y = max(y, top.h * exp(-pow(abs(u - top.x) / top.w, 2))) }
+            let shelf = 4 * (n(t * 7, 3) - 0.5)
+            return P(t * 300, 56 - y - (u < 0.75 ? 3 : 3 * (1 - (u - 0.75) / 0.25)) + shelf)
+        }
+        // The body thins to nothing at both ends, so the far bank fades out instead of being cut.
+        let base = ridge.enumerated().map { i, p in
+            let env = pow(sin(Double(i) / 100 * .pi), 0.45)
+            return P(p.x, p.y + max(0.3, (60 - p.y) * env))
+        }
+        c.append(poly(ridge + base.reversed(), fil: .white, str: nil))
+        c.append(poly(ridge + base.reversed(), fil: .gray(0, 0.10), str: nil))
+        c += inkLine(ridge, width: 0.8, tone: 0.30, dry: 0.5)
+        // Hemp-fibre texture, sparse, on the hill faces only.
+        for _ in 0..<26 {
+            let i = Int(r() * 100), p = ridge[i]
+            guard 56 - p.y > 10 else { continue }
+            let len = 4 + r() * (56 - p.y) * 0.5
+            c += inkLine([P(p.x, p.y + 2), P(p.x - 1, p.y + 2 + len)], width: 0.5, tone: 0.16, dry: 0.6)
+        }
+        // Distant trees: clustered upright dabs riding the crest (远树无枝).
+        for _ in 0..<(5 + Int(r() * 4)) {
+            let i = 5 + Int(r() * 90), p = ridge[i]
+            for k in 0..<(2 + Int(r() * 3)) {
+                let x = p.x + Double(k) * (2.2 + r()) - 2, height = 4 + r() * 5
+                c += inkBlot(x, p.y - height * 0.45, radius: height * 0.5, squash: 0.45, angle: 1.5708, tone: 0.30 + r() * 0.2)
+                c += inkLine([P(x, p.y), P(x, p.y - height * 0.3)], width: 0.45, tone: 0.4)
+            }
+        }
+        // Broken shore line at the water.
+        var x = 20 + r() * 20
+        while x < 260 {
+            let run = 18 + r() * 40
+            c += inkLine([P(x, 60), P(min(300, x + run), 60 + (r() - 0.5))], width: 0.6, tone: 0.22, dry: 0.55)
+            x += run + 8 + r() * 20
+        }
+        return c
+    }
+
+    /// Distant range: a few peaks of unequal height (one leads, the others fall away), with a
+    /// readable crest and a body that the mist layer dissolves downward. Not a full-width band.
     func paintingDistant(_ index: Int) -> ZXArt.SSCanv {
         let phase = r() * 12
-        let ridge = (0...100).map { i -> P in
-            let t = Double(i) / 100
-            let envelope = pow(max(0, sin(t * .pi)), 0.6)
-            let peak = 12 + 28 * n(t * 6 + phase, Double(index) * 2) + 13 * sin(t * 15 + phase)
-            return P(t * 360, 70 - max(3, peak) * envelope)
+        let peaks = 2 + Int(r() * 2.5)
+        var tops: [(x: Double, h: Double, w: Double)] = []
+        for k in 0..<peaks {
+            let lead = k == 0
+            tops.append((x: 0.18 + 0.64 * (Double(k) + r() * 0.6) / Double(peaks),
+                         h: lead ? 52 + r() * 18 : 22 + r() * 22,
+                         w: lead ? 0.16 + r() * 0.06 : 0.10 + r() * 0.08))
         }
-        var c = [poly(ridge + [P(360, 95), P(0, 95)], fil: .gray(0, 0.10 + Double(index) * 0.025), str: nil)]
-        c += inkLine(ridge, width: 0.8, tone: 0.15, dry: 0.6)
+        let ridge = (0...120).map { i -> P in
+            let t = Double(i) / 120
+            var y = 0.0
+            for top in tops {
+                let d = abs(t - top.x) / top.w
+                y = max(y, top.h * exp(-pow(d, 1.6)))
+            }
+            let foot = pow(max(0, sin(t * .pi)), 0.35)
+            let wobble = 4 * (n(t * 9 + phase, Double(index) * 2) - 0.5)
+            return P(t * 360, 80 - max(1.5, (y + wobble) * foot))
+        }
+        var c = [poly(ridge + [P(360, 95), P(0, 95)], fil: .gray(0, 0.11 + Double(index) * 0.04), str: nil)]
+        c += inkLine(ridge, width: 0.7, tone: 0.18 + Double(index) * 0.06, dry: 0.55)
         return c
     }
 }

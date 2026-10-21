@@ -2,6 +2,28 @@
 import Foundation
 
 public extension ZXArt {
+    /// A layer that dissolves downward into cloud (山腰云锁): full ink above `top`, none below
+    /// `bottom`, along a billowing edge. The ink itself thins, so the paper shows through; no
+    /// paper-coloured patch is painted over it.
+    struct LayerFade: Sendable, Hashable {
+        public var top: Double
+        public var bottom: Double
+        public var seed: UInt32
+
+        public init(top: Double, bottom: Double, seed: UInt32 = 0) {
+            self.top = top; self.bottom = bottom; self.seed = seed
+        }
+
+        func keep(x: Double, y: Double) -> Double {
+            guard x.isFinite, y.isFinite, bottom > top else { return 1 }
+            let span = bottom - top
+            let billow = (WashNoise.fbm(x * 0.9, 3.7, seed: seed) - 0.5) * span * 0.55
+                + abs(sin(x * 0.045 + Double(seed % 97))) * span * 0.18
+            let t = Brush.unit((y - (top + billow)) / (span * 0.75))
+            return 1 - t * t * (3 - 2 * t)
+        }
+    }
+
     struct LayerRim: Sendable, Hashable {
         public var width: Double
         public var power: Double

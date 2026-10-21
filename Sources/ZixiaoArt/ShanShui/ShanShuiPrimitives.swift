@@ -54,6 +54,8 @@ final class ShanShuiEngine {
     /// 意象锚点的记录开关 (@1 / @2 构图用, 见 ShanShuiAnchors.swift)。关掉时 `composeV2` 与 `mountain()` 的行为不变,
     /// 只是不记 —— 单测拿它对照「记录不改变出图」。
     var recordsAnchors = true
+    /// Winter scenes: rock texture is painted lighter so slope tops read as snow left in paper.
+    var snowLight = 1.0
     /// `mountain()` 生成时记下的树 / 屋 (山的原始坐标; composeV2 随山的平移换算后取走)。nil = 不记 (原作第一屏)。
     var anchorLog: [ZXArt.AnchorPiece]?
     /// 构图 (`compose` / `composeV2`) 记下的东西, 已是最终位置 (逻辑坐标)。
