@@ -386,8 +386,9 @@ private final class PaintingStage {
         guard rooted.contains(motif), let surface = bankSurface else { return requested }
         var requested = requested
         let building = [Motif.house, .hut, .pavilion, .pagoda, .templeGate, .cityGate, .terrace, .ruins].contains(motif)
+        let broadBase = building || motif == .bamboo
         let endX = surface.x0 + surface.step * Double(surface.heights.count - 1)
-        let radius = min((endX - surface.x0) * 0.45, building ? requested.width * 0.36 : min(8, requested.width * 0.1))
+        let radius = min((endX - surface.x0) * 0.45, broadBase ? requested.width * 0.36 : min(8, requested.width * 0.1))
         let low = max(surface.x0 + radius, art.minX + requested.width / 2)
         let high = min(endX - radius, art.maxX - requested.width / 2)
         let fraction = min(max((requested.midX - art.minX) / art.width, 0), 1)
@@ -402,8 +403,9 @@ private final class PaintingStage {
         guard position >= 0, position <= Double(surface.heights.count - 1) else { return requested }
         let lo = Int(position), hi = min(lo + 1, surface.heights.count - 1)
         var y = min(surface.heights[lo], surface.heights[hi])
-        if [.house, .hut, .pavilion, .pagoda, .templeGate, .cityGate, .terrace, .ruins].contains(motif) {
-            // A broad foundation must reach the lower bank under both walls, not perch on a single high stone.
+        if broadBase {
+            // A broad foundation or grove must reach the lower bank across its footprint,
+            // not balance its whole base on the highest point under the centre.
             let first = max(0, Int(floor((requested.midX - requested.width * 0.36 - surface.x0) / surface.step)))
             let last = min(surface.heights.count - 1, Int(ceil((requested.midX + requested.width * 0.36 - surface.x0) / surface.step)))
             if first <= last, let base = surface.heights[first...last].filter(\.isFinite).max() { y = base }
