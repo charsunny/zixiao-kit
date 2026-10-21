@@ -56,6 +56,7 @@ extension ShanShuiEngine {
     /// bare: crab-claw limbs whose tips hook down (蟹爪); willow: an arching trunk, hanging strands.
     func paintingTree(_ kind: ZXArt.SceneMotif) -> ZXArt.SSCanv {
         if kind == .oldTree || kind == .bareTree { return paintingWoodyTree(old: kind == .oldTree).canvas }
+        if kind == .blossom { return paintingFloweringTree() }
         let bare = kind == .bareTree, pine = kind == .pine, willow = kind == .willow
         let flowering = kind == .blossom
         let leaf: LeafStyle = kind == .layeredTree ? .flat : (kind == .maple ? .ge : .dots)
@@ -204,63 +205,5 @@ extension ShanShuiEngine {
         return c
     }
 
-    /// Lotus as ink-wash leaves (泼墨荷叶): broad, uneven discs seen in perspective, overlapping,
-    /// some lying on the water and some curling up with a dark rim; short stems; one pointed bud
-    /// rising above them (小荷才露尖尖角) and an open flower only when there is room.
-    func paintingLotus() -> ZXArt.SSCanv {
-        var c: ZXArt.SSCanv = []
-        let leaves: [(x: Double, y: Double, rx: Double, ry: Double, raised: Double)] = [
-            (46, 116, 34, 10, 0), (100, 122, 40, 11, 0), (16, 112, 22, 7, 0),
-            (132, 96, 28, 9, 30), (66, 92, 32, 10, 40),
-        ]
-        for leaf in leaves {
-            let seed = r() * 10, notch = r() * 2 * Double.pi
-            let cy = leaf.y - leaf.raised
-            // A raised leaf is seen side-on and tipped: a tilted, flattened bowl, not a flat plate.
-            let tilt = leaf.raised > 0 ? (r() < 0.5 ? -1.0 : 1.0) * (0.25 + r() * 0.2) : 0
-            let squash = leaf.raised > 0 ? 0.55 : 1.0
-            let edge = (0...56).map { i -> P in
-                let a = Double(i) / 56 * 2 * Double.pi
-                var v = 0.86 + 0.18 * n(a * 2.2 + seed)
-                let gap = abs(atan2(sin(a - notch), cos(a - notch)))
-                if gap < 0.22 { v *= 0.55 + gap * 2 }          // the notch where the stem joins
-                let ex = cos(a) * leaf.rx * v, ey = sin(a) * leaf.ry * v * squash
-                return P(leaf.x + ex * cos(tilt) - ey * sin(tilt), cy + ex * sin(tilt) + ey * cos(tilt))
-            }
-            // 泼墨: leaves are the darkest masses of the pond; raised ones darkest of all.
-            let tone = 0.32 + r() * 0.2 + (leaf.raised > 0 ? 0.12 : 0)
-            c.append(poly(edge, fil: .white, str: nil))
-            c.append(poly(edge, fil: .gray(0, tone), str: nil))
-            // A darker loaded stroke along the far rim gives the leaf its curl.
-            let rim = Array(edge[30...54])
-            c += inkLine(rim, width: 1.6 + r(), tone: min(0.85, tone + 0.3), dry: 0.35)
-            // Veins lifted out in paper white, radiating from the stem point.
-            for k in 0..<6 {
-                let a = Double(k) / 6 * 2 * Double.pi + seed
-                let ex = cos(a) * leaf.rx * 0.72, ey = sin(a) * leaf.ry * 0.72 * squash
-                c.append(poly([P(leaf.x, cy), P(leaf.x + ex * cos(tilt) - ey * sin(tilt) + 0.9, cy + ex * sin(tilt) + ey * cos(tilt)),
-                               P(leaf.x + ex * cos(tilt) - ey * sin(tilt), cy + ex * sin(tilt) + ey * cos(tilt) + 0.9)],
-                    fil: C(255, 255, 255, 0.45), str: nil))
-            }
-            if leaf.raised > 0 {
-                c += inkLine(inkCurve([P(leaf.x + 2, cy + leaf.ry * 0.6), P(leaf.x - 1, leaf.y - leaf.raised * 0.4),
-                    P(leaf.x + 1, leaf.y + 4)]), width: 1.0, tone: 0.55, dry: 0.4)
-            }
-        }
-        // The bud: pointed, pale, on a slender stem rising above the leaves.
-        let stem = inkCurve([P(84, 108), P(86, 86), P(84, 62)])
-        c += inkLine(stem, width: 1.1, tone: 0.55, dry: 0.4)
-        let bud = inkCurve([P(84, 60), P(78, 52), P(81, 40), P(84, 32), P(88, 41), P(90, 52), P(84, 60)])
-        c.append(poly(bud, fil: .white, str: nil))
-        c.append(poly(bud, fil: .gray(0, 0.06), str: nil))
-        c += inkLine(Array(bud.prefix(bud.count / 2 + 1)), width: 0.8, tone: 0.55, dry: 0.4)
-        c += inkLine(Array(bud.suffix(bud.count / 2)), width: 0.6, tone: 0.40, dry: 0.5)
-        c += inkBlot(84, 33, radius: 1.2, squash: 0.7, tone: 0.5)
-        // Water line under the leaves.
-        for k in 0..<3 {
-            let y = 126 + Double(k) * 4, x = 10 + r() * 30
-            c += inkLine([P(x, y), P(x + 60 + r() * 50, y + 0.6)], width: 0.6, tone: 0.12, dry: 0.6)
-        }
-        return c
-    }
+    func paintingLotus() -> ZXArt.SSCanv { paintingLotusDrawing().canvas }
 }

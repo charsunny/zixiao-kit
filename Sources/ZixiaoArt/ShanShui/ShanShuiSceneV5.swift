@@ -106,6 +106,7 @@ private final class PaintingStage {
     var mountainRidges: [[ZXArt.P]] = []
     var summitLedge: CGRect?
     var houseWindowFrame: CGRect?
+    var lotusFlowerTip: ZXArt.P?
     var historicGroundNeeded = false
     enum Structure { case high, deep, level, corner }
     var structure: Structure = .level
@@ -202,12 +203,17 @@ private final class PaintingStage {
         guard repeatable || !placed.contains(motif) else { return false }
         let raw: ZXArt.SSCanv
         var woodyTree: ShanShuiEngine.PaintedWoodyTree?
+        var lotus: ShanShuiEngine.PaintedLotus?
         let reserveWindow = motif == .house && currentScene == .moonNight && selectedMotifs.contains(.window)
         if let source { raw = source }
         else if motif == .oldTree || motif == .bareTree {
             let tree = engine.paintingWoodyTree(old: motif == .oldTree)
             woodyTree = tree
             raw = tree.canvas
+        }
+        else if motif == .lotus {
+            let drawing = engine.paintingLotusDrawing()
+            lotus = drawing; raw = drawing.canvas
         }
         else if reserveWindow { raw = engine.paintingHouse(reservingWindow: true) }
         else if motif == .mooredBoat { raw = engine.paintingBoat(.mooredBoat, mooring: false) }
@@ -298,6 +304,13 @@ private final class PaintingStage {
             treeVines[motif] = tree.vine.map { polygon in
                 var p = polygon; p.p = p.p.map(moved); p.wid *= scale; return p
             }
+        }
+        if let lotus {
+            let points = raw.flatMap(\.p)
+            let x0 = points.map(\.x).min()!, x1 = points.map(\.x).max()!, y0 = points.map(\.y).min()!
+            let scale = actual.width / (x1 - x0)
+            lotusFlowerTip = .init(actual.minX + (lotus.flowerTip.x - x0) * scale,
+                actual.minY + (lotus.flowerTip.y - y0) * scale)
         }
         if motif == .stream { engine.noted(.water, object.canv) }
         support(motif, bounds: actual, root: plantedRoot)
@@ -1208,15 +1221,16 @@ private final class PaintingStage {
                     in: inlet, motif: "stream")
                 placed.insert(.stream)
             }
-            // 早有蜻蜓立上头: the dragonfly perches on the bud's tip (bud sits ~55% across the asset).
-            if chosen.contains(.dragonfly), let lotus = elements.first(where: { $0.motif == "lotus" })?.bounds.cgRect {
-                let size = lotus.width * w * 0.16
-                add(.dragonfly, CGRect(x: (lotus.minX + lotus.width * 0.55) * w - size / 2,
-                    y: lotus.minY * h - size * 0.45, width: size, height: size * 0.5))
+            // The flower/bud supplies its own tip; the leaf arrangement may vary freely.
+            if chosen.contains(.dragonfly), let tip = lotusFlowerTip,
+               let lotus = elements.first(where: { $0.motif == "lotus" })?.bounds.cgRect {
+                let size = lotus.width * w * 0.12
+                add(.dragonfly, CGRect(x: tip.x - size / 2, y: tip.y - size * 0.48,
+                    width: size, height: size * 0.5))
             }
         case .autumnTravel:
             if chosen.contains(.bridge) { crossing(river: false) }
-            include(chosen.contains(.oldTree) ? .oldTree : .bareTree, slot(0.0, 0.08, 0.76, 0.72))
+            add(.oldTree, slot(0.0, 0.08, 0.76, 0.72))
             if chosen.contains(.vine), let vine = treeVines[.oldTree] ?? treeVines[.bareTree],
                let x0 = vine.flatMap(\.p).map(\.x).min(), let x1 = vine.flatMap(\.p).map(\.x).max(),
                let y0 = vine.flatMap(\.p).map(\.y).min(), let y1 = vine.flatMap(\.p).map(\.y).max() {
