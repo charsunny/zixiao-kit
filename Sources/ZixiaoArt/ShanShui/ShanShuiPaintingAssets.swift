@@ -8,7 +8,8 @@ extension ShanShuiEngine {
         case .bamboo: return paintingBamboo()
         case .lotus: return paintingLotus()
         case .bridge: return paintingBridge()
-        case .house, .hut: return paintingHouse()
+        case .house: return paintingHouse()
+        case .hut: return paintingHut()
         case .pavilion: return paintingPavilion()
         case .templeGate: return paintingTempleGate()
         case .pagoda: return paintingPagoda()
@@ -236,7 +237,7 @@ extension ShanShuiEngine {
     /// with deep eaves and a ridge whose ends lift slightly, short walls in shadow under the eaves,
     /// an open bay on the right (the left bay is left for a window), on a low stone plinth.
     /// Everything is symmetric about the vertical; nothing in the drawing leans.
-    func paintingHouse() -> ZXArt.SSCanv {
+    func paintingOldGateBase() -> ZXArt.SSCanv {
         let ridge = [P(30, 22), P(42, 26), P(122, 26), P(134, 22)]
         let eave = [P(0, 55), P(10, 58), P(154, 58), P(164, 55)]
         let roof = [P(42, 26), P(122, 26), P(154, 58), P(10, 58)]

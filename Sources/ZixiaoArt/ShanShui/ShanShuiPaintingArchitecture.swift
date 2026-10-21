@@ -30,7 +30,7 @@ extension ShanShuiEngine {
     }
 
     func paintingTempleGate() -> ZXArt.SSCanv {
-        var c = paintingHouse()
+        var c = paintingOldGateBase()
         // Three dark bays beneath a long roof; no Western arch or ornamental tower.
         for x in [36.0, 72, 108] {
             c.append(poly([P(x, 66), P(x + 19, 66), P(x + 19, 92), P(x, 92)], fil: .gray(0, 0.70), str: nil))
