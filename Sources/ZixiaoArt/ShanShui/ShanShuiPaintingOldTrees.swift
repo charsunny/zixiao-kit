@@ -20,33 +20,87 @@ extension ShanShuiEngine {
             root + P(lean * 0.78, -height * 0.84), root + P(lean, -height)]
         let spine = inkCurve(joints, steps: 10)
         func at(_ t: Double) -> P { spine[min(spine.count - 1, Int(t * Double(spine.count - 1)))] }
-        var c: ZXArt.SSCanv = [], perches: [P] = []
-        let branches = form == 2 ? 6 : 4
-        for k in 0..<branches {
-            let t = 0.34 + Double(k) * 0.56 / Double(branches - 1)
-            let from = at(t), side = k % 2 == 0 ? -direction : direction
-            let length = (31 + r() * 22) * (1.15 - t * 0.45)
-            let elbow = from + P(side * length * 0.55, -11 - r() * 11)
-            let tip = elbow + P(side * length * 0.45, form == 0 ? -3 + r() * 8 : -17 - r() * 11)
-            c += inkLine(inkCurve([from, from + P(side * 8, -5), elbow, tip]),
-                width: (old ? 7.5 : 4.3) * (1 - t * 0.6), tone: 0.85, dry: 0.34, profile: .cone)
-            perches.append(elbow)
-            for j in 0..<2 {
-                let origin = j == 0 ? elbow : tip
-                let reach = 8 + r() * 10
-                let end = origin + P(side * reach, form == 0 ? 6 + r() * 9 : -13 - r() * 8)
-                let bend = origin + P(side * reach * 0.72, form == 0 ? 1 - r() * 4 : -6 - r() * 5)
-                c += inkLine(inkCurve([origin, bend, end]), width: 1.2 + r() * 0.7,
-                    tone: 0.73, dry: 0.38, profile: .cone)
+        // Keep long limbs angular and ascending. Only the terminal twigs make crab claws.
+        // Fine strokes are filled tapers, so no constant-width bristle survives the lifted tip.
+        func branchStroke(_ path: [P], width: Double, tone: Double) -> ZXArt.SSCanv {
+            var left: [P] = [], right: [P] = []
+            for i in path.indices {
+                let t = Double(i) / Double(path.count - 1)
+                let delta = path[min(i + 1, path.count - 1)] - path[max(0, i - 1)]
+                let length = max(0.001, hypot(delta.x, delta.y))
+                let pressure = pow(1 - t, 0.85) * (0.94 + 0.06 * sin(t * 19))
+                let offset = P(-delta.y, delta.x) * (width * pressure * 0.5 / length)
+                left.append(path[i] + offset); right.append(path[i] - offset)
             }
+            var marks = [poly(left + right.reversed(), fil: .gray(0, tone), str: nil)]
+            if width > 2.5 {
+                // A dry split stays inside the broad base and ends before the fine tip.
+                let split = Array(path.dropFirst(2).prefix(path.count / 2))
+                marks += inkLine(split, width: width * 0.13, tone: 0.22, dry: 0.65, profile: .cone)
+            }
+            return marks
         }
-        if form == 2 {
-            let fork = at(0.23), end = root + P(-direction * (32 + r() * 15), -height * 0.83)
-            let limb = inkCurve([fork, fork + P(-direction * 18, -29), end + P(direction * 7, 23), end])
-            c += inkLine(limb, width: old ? 8 : 4, tone: 0.78, dry: 0.4, profile: .cone)
-            c += inkLine([end + P(direction * 6, 20), end + P(-direction * 17, -8)],
-                width: 1.7, tone: 0.72, dry: 0.35, profile: .cone)
-            perches.append(limb[limb.count * 2 / 3])
+        func terminals(_ tip: P, side: Double, pale: Double) -> ZXArt.SSCanv {
+            var tips: ZXArt.SSCanv = []
+            let count = 3 + Int(r() * 3)
+            for j in 0..<count {
+                let spread = Double(j) / Double(count - 1)
+                let origin = tip + P(-side * spread * 3.5, spread * 1.2)
+                let reach = 3 + r() * 3.5 + spread * 2
+                let end: P
+                let bend: P
+                if form == 0 {
+                    bend = origin + P(side * reach * (0.5 + spread * 0.5), -1.5 + spread)
+                    end = bend + P(-side * (0.5 + r() * 1.5), 3 + r() * 4)
+                } else {
+                    bend = origin + P(side * (spread - 0.15) * reach, -reach * 0.55)
+                    end = bend + P(side * (spread - 0.4) * 3, -2 - r() * 3)
+                }
+                tips += branchStroke(inkCurve([origin, bend, end]), width: 0.45 + r() * 0.25, tone: pale)
+            }
+            return tips
+        }
+        var c: ZXArt.SSCanv = [], frontBranches: ZXArt.SSCanv = [], perches: [P] = []
+        let branches = form == 2 ? 6 : 5
+        for k in 0..<branches {
+            let t = 0.30 + Double(k) * 0.60 / Double(branches - 1)
+            let from = at(t)
+            let side = (k == 1 || k == 4) ? -direction : direction
+            let sparse = side != direction
+            let reach = (32 + r() * 20) * (sparse ? 0.66 : 1.0) * (1.14 - t * 0.42)
+            let rise = (form == 0 ? 14.0 : 26.0) + r() * 13
+            let elbow = from + P(side * reach * 0.55, -rise * 0.55)
+            let tip = from + P(side * reach, -rise)
+            let limb = inkCurve([from, from + P(side * reach * 0.22, -rise * 0.12), elbow, tip])
+            let foreground = k == 0 || k == 3
+            var branch = branchStroke(limb, width: (old ? 6.5 : 3.8) * (1 - t * 0.55),
+                tone: foreground ? 0.77 : 0.61)
+            perches.append(elbow)
+            let forks = sparse ? 2 : 3
+            for j in 0..<forks {
+                let u = 0.40 + Double(j) * 0.23
+                let origin = limb[Int(u * Double(limb.count - 1))]
+                let length = 12 + r() * 10
+                let end = origin + P(side * length * (j % 2 == 0 ? 0.60 : 0.95),
+                    -length * (j % 2 == 0 ? 1.05 : 0.30))
+                let secondary = inkCurve([origin, origin + (end - origin) * 0.48 + P(-side * 2, 1), end])
+                branch += branchStroke(secondary, width: 1.5 + r() * 0.7, tone: foreground ? 0.61 : 0.50)
+                // Each secondary carries an offset fine twig and its own continuing tip.
+                let twigRoot = secondary[secondary.count / 2]
+                let twigEnd = twigRoot + P(side * (5 + r() * 6), -4 - r() * 7)
+                branch += branchStroke(inkCurve([twigRoot, (twigRoot + twigEnd) / 2 + P(side * 1.5, 1), twigEnd]),
+                    width: 0.8 + r() * 0.3, tone: 0.46)
+                branch += terminals(twigEnd, side: side, pale: 0.37)
+                branch += terminals(end, side: side, pale: 0.43)
+            }
+            branch += terminals(tip, side: side, pale: 0.43)
+            if foreground { frontBranches += branch } else { c += branch }
+        }
+        let crown = at(1)
+        for side in [-direction, direction] {
+            let end = crown + P(side * (7 + r() * 6), -6 - r() * 5)
+            c += branchStroke(inkCurve([at(0.92), crown, end]), width: 1.4, tone: 0.50)
+            c += terminals(end, side: side, pale: 0.39)
         }
         // A tapered, outlined trunk keeps paper in its lit side; knots interrupt the bark.
         let left = spine.enumerated().map { i, p -> P in
@@ -83,6 +137,7 @@ extension ShanShuiEngine {
             c += inkLine(inkCurve([root + P(dx * 0.15, -13), root + P(dx * 0.5, -1), root + P(dx, 3)]),
                 width: old ? 3.4 : 2.0, tone: 0.76, dry: 0.42, profile: .cone)
         }
+        c += frontBranches
         // The vine alternates exposed crossings around the same twisting trunk, then drops
         // from a real branch. Gaps stand for the hidden back of each turn.
         var vine: ZXArt.SSCanv = []
