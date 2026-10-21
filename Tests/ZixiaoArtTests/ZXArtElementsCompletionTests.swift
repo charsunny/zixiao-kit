@@ -4,6 +4,23 @@ import Testing
 @testable import ZixiaoArt
 
 struct ZXArtElementsCompletionTests {
+    @Test func selectedPoemObjectsAreActuallyDrawnAcrossFormats() throws {
+        let poems = ZXArtSceneReviewTests.poems
+        for poem in poems {
+            let selection = ZXArt.poetryScene(text: poem.text, title: poem.title)
+            for index in 0..<4 {
+                for size in [CGSize(width: 750, height: 1000), CGSize(width: 1200, height: 675)] {
+                    let recipe = selection.paintingProcedural(seed: "variety-\(index)-\(poem.id)")
+                    let drawing = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: size))
+                    let actual = Set(drawing.sceneElements.map(\.motif))
+                    for motif in try #require(recipe.params.scene).canonicalMotifs {
+                        #expect(actual.contains(motif.rawValue), "\(poem.id) seed=\(index) \(size): missing \(motif)")
+                    }
+                }
+            }
+        }
+    }
+
     @Test func wordsSelectConcreteObjectsWithoutTitleFalseFriends() {
         let autumn = ZXArt.poetryScene(text: "枯藤老树昏鸦，小桥流水人家，古道西风瘦马。夕阳西下。", title: "天净沙·秋思")
         #expect(Set(autumn.options.motifs).isSuperset(of: [.oldTree, .house, .stream, .bridge, .vine, .crow, .horse, .traveler, .sunset]))

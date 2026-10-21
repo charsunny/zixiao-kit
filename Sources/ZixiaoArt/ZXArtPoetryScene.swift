@@ -49,6 +49,11 @@ public extension ZXArt {
         func resolvedForPainting(scene: PoetryScene, seed: String) -> Self {
             var result = self
             result.purpose = purpose ?? .inscription
+            // Explicit precedence for incompatible sky states, before selection reaches the painter.
+            if result.motifs.contains(.crescent) { result.motifs.removeAll { $0 == .moon } }
+            if result.motifs.contains(.moon) || result.motifs.contains(.crescent) {
+                result.motifs.removeAll { $0 == .sunrise || $0 == .sunset }
+            } else if result.motifs.contains(.sunset) { result.motifs.removeAll { $0 == .sunrise } }
             if composition == nil {
                 var hash: UInt32 = 2_166_136_261
                 for byte in seed.utf8 { hash = (hash ^ UInt32(byte)) &* 16_777_619 }

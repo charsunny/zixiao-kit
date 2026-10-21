@@ -1309,6 +1309,19 @@ private final class PaintingStage {
                 add(.vine, CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0), source: vine)
             }
             if chosen.contains(.crow) { treeCrows() }
+            if chosen.contains(.house), let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect {
+                let tree = elements.first(where: { $0.motif == "oldTree" })?.bounds.cgRect
+                let personH = min(bank.width * w * 0.078, (tree?.height ?? 0.16) * h * 0.20)
+                let height = personH * 2.3, width = height * 1.8
+                let bridge = elements.first(where: { $0.motif == "bridge" })?.bounds.cgRect
+                let desired = min((bank.minX + bank.width * 0.48) * w,
+                    (bridge?.maxX ?? (bank.minX + bank.width * 0.26)) * w + width * 0.58)
+                if let foot = bankFoot(desired - width * 0.36, desired + width * 0.36) {
+                    pinned = true
+                    add(.house, CGRect(x: desired - width / 2, y: foot - height, width: width, height: height))
+                    pinned = false
+                }
+            }
             // The accepted pair now belongs to the nearer bend of its own bounded road.
             if chosen.contains(.horse), chosen.contains(.traveler) { journey() }
             else {
@@ -1476,7 +1489,8 @@ private final class PaintingStage {
             case .sunset where chosen.contains(.moon) || chosen.contains(.crescent): continue
             case .moon, .crescent, .sunrise, .sunset: add(motif, celestialSlot(motif))
             case .stars: add(motif, slot(0.05, 0.0, 0.85, 0.18))
-            case .cookingSmoke: add(motif, slot(0.56, 0.25, 0.15, 0.24))
+            case .boat, .angler, .mooredBoat, .sail: placeBoatOnWater(motif)
+            case .cookingSmoke: roofSmoke()
             case .beaconSmoke: add(motif, slot(0.28, 0.22, 0.06, 0.4))
             case .egret: add(motif, slot(0.72, 0.60, 0.06, 0.08))
             case .butterfly:
@@ -1501,6 +1515,88 @@ private final class PaintingStage {
             default: add(motif, slot(0.01, 0.23, 0.48, 0.59))
             }
         }
+        completeSelection(options.canonicalMotifs)
         waterDetails()
+    }
+
+    private func placeBoatOnWater(_ motif: Motif) {
+        if let stream = elements.first(where: { $0.motif == "stream" })?.bounds.cgRect, currentScene == .retreat {
+            let width = min(art.width * 0.32, stream.width * w * 0.9)
+            let height = motif == .sail ? width * 0.85 : width * 0.40
+            add(motif, CGRect(x: stream.midX * w - width / 2, y: stream.maxY * h - height,
+                width: width, height: height))
+        } else {
+            if !elements.contains(where: { ["riverWater", "lakeWater", "pondWater", "waves"].contains($0.motif) }) { water() }
+            let band = lowerBand()
+            let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect
+            let width = min(art.width * 0.40, band.width * 0.22)
+            let height = motif == .sail ? width * 0.85 : width * 0.40
+            let bottom = min(footer - 3, (bank?.maxY ?? 0.8) * h + height * 0.50)
+            add(motif, CGRect(x: band.minX + band.width * 0.65, y: bottom - height, width: width, height: height))
+        }
+    }
+
+    private func roofSmoke() {
+        if !elements.contains(where: { ["house", "hut"].contains($0.motif) }) {
+            add(.hut, slot(0.35, 0.55, 0.4, 0.20))
+        }
+        guard let home = elements.first(where: { ["house", "hut"].contains($0.motif) })?.bounds.cgRect else { return }
+        let height = min(home.height * h * 1.8, art.height * 0.25)
+        add(.cookingSmoke, CGRect(x: (home.midX - home.width * 0.08) * w,
+            y: (home.minY + home.height * 0.16) * h - height,
+            width: home.width * w * 0.25, height: height))
+    }
+
+    /// Explicit dependencies and graceful fitting: attached motifs use their host, then independent
+    /// objects try alternate grounded slots and finally a modest size reduction. Never mark a failed
+    /// placement as painted. Composite boats and water channels expose their real component bounds.
+    private func completeSelection(_ motifs: [Motif]) {
+        for motif in motifs {
+            if elements.contains(where: { $0.motif == motif.rawValue }) { continue }
+            let alias: [String]
+            switch motif {
+            case .boat: alias = ["angler", "mooredBoat", "sail"]
+            case .stream: alias = ["riverChannel"]
+            case .bareTree where currentScene == .autumnTravel: alias = ["oldTree"]
+            default: alias = []
+            }
+            if let host = elements.first(where: { alias.contains($0.motif) }) {
+                elements.append(.init(motif: motif.rawValue, bounds: host.bounds))
+                placed.insert(motif)
+                continue
+            }
+            if motif == .cookingSmoke { roofSmoke(); continue }
+            if motif == .vine {
+                if treeVines.isEmpty { add(.oldTree, slot(0, 0.12, 0.65, 0.70)) }
+                if let vine = treeVines[.oldTree] ?? treeVines[.bareTree],
+                   let x0 = vine.flatMap(\.p).map(\.x).min(), let x1 = vine.flatMap(\.p).map(\.x).max(),
+                   let y0 = vine.flatMap(\.p).map(\.y).min(), let y1 = vine.flatMap(\.p).map(\.y).max() {
+                    pinned = true
+                    add(.vine, CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0), source: vine)
+                    pinned = false
+                }
+                continue
+            }
+            if [.boat, .angler, .mooredBoat, .sail].contains(motif) { placeBoatOnWater(motif); continue }
+            if motif == .waterfall { mountainWaterfall(); continue }
+            if motif == .bridge { crossing(river: false); continue }
+            // Conflicting sky states have already been resolved in the recipe.
+            if [.moon, .crescent, .sunrise, .sunset].contains(motif) {
+                for factor in [1.0, 0.8, 0.6] {
+                    let box = celestialSlot(motif)
+                    if add(motif, CGRect(x: box.minX, y: box.minY, width: box.width * factor, height: box.height * factor)) { break }
+                }
+                continue
+            }
+            placed.remove(motif)
+            for factor in [1.0, 0.82, 0.65] {
+                var done = false
+                for x in [0.48, 0.06, 0.68] {
+                    let box = slot(x, 0.38, 0.30 * factor, 0.40 * factor)
+                    if add(motif, box) { done = true; break }
+                }
+                if done { break }
+            }
+        }
     }
 }
