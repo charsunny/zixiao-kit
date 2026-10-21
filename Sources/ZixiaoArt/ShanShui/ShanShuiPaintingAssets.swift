@@ -496,8 +496,8 @@ extension ShanShuiEngine {
     }
 
     /// A flock of crows or a pair of swallows. Each wing has its own beat, body and tail.
-    func paintingBird(swallow: Bool) -> ZXArt.SSCanv {
-        let count = swallow ? (r() < 0.25 ? 1 : 2) : 2 + Int(r() * 4)
+    func paintingBird(swallow: Bool, count requested: Int? = nil) -> ZXArt.SSCanv {
+        let count = requested ?? (swallow ? (r() < 0.25 ? 1 : 2) : 2 + Int(r() * 4))
         var c: ZXArt.SSCanv = []
         for i in 0..<count {
             let x = Double(i) * (swallow ? 37 : 23) + r() * 8

@@ -98,6 +98,7 @@ private final class PaintingStage {
     var parts: [ShanShuiEngine.Part] = []
     var elements: [ZXArt.SceneElement] = []
     var placed = Set<Motif>()
+    var paintedTrees: [Motif: ZXArt.SSCanv] = [:]
     var celestialLayers: [(layer: Int, motif: Motif)] = []
     var boats: [ZXArt.Anchors.Boat] = []
     var mountainRidges: [[ZXArt.P]] = []
@@ -257,6 +258,7 @@ private final class PaintingStage {
         if accents.contains(motif) { object.canv = engine.paintingInk(object.canv, depth: .near) }
         // Each object gets its own layer, retaining stable ordering and inspection metadata.
         let actual = object.bounds
+        if trees.contains(motif) { paintedTrees[motif] = object.canv }
         if motif == .stream { engine.noted(.water, object.canv) }
         support(motif, bounds: actual, root: plantedRoot)
         if [.mist, .afterRain, .dunes].contains(motif) {
@@ -658,16 +660,16 @@ private final class PaintingStage {
         let minX = Double(b.minX), maxX = Double(b.maxX)
         let minY = Double(b.minY + b.height * 0.22), maxY = Double(b.minY + b.height * 0.55)
         var candidates: [ZXArt.P] = []
-        for part in parts {
-            for polygon in part.canv {
-                for point in polygon.p {
-                    if point.x >= minX && point.x <= maxX && point.y > minY && point.y < maxY {
-                        candidates.append(point)
-                    }
+        let treeMotif: Motif = paintedTrees[.oldTree] == nil ? .bareTree : .oldTree
+        for polygon in paintedTrees[treeMotif] ?? [] {
+            for point in polygon.p {
+                if point.x >= minX && point.x <= maxX && point.y > minY && point.y < maxY {
+                    candidates.append(point)
                 }
             }
         }
-        for fraction in [0.23, 0.77] {
+        let perches = engine.r() < 0.5 ? [0.23] : [0.23, 0.77]
+        for fraction in perches {
             let target = ZXArt.P(b.minX + b.width * fraction, b.minY + b.height * 0.38)
             func distance(_ point: ZXArt.P) -> Double {
                 let dx = point.x - target.x, dy = point.y - target.y
@@ -682,7 +684,8 @@ private final class PaintingStage {
             parts.append(.near(bird))
         }
         add(.crow, CGRect(x: max(1, b.minX - b.width * 0.2), y: b.minY - b.height * 0.12,
-            width: b.width * 0.9, height: b.height * 0.15))
+            width: b.width * 0.9, height: b.height * 0.15),
+            source: engine.paintingBird(swallow: false, count: 2 + Int(engine.r() * 2)))
     }
 
     /// A shared scale and a rein connect the traveler and horse; their feet follow the same road.

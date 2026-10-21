@@ -126,6 +126,7 @@ final class ZXArtSceneReviewTests: XCTestCase {
                 }
             })
         }
+        entries.append(("crow.perched", { $0.paintingPerchedCrow() }))
         for style in [ShanShuiEngine.BankStyle.shoal, .cliff, .headland] {
             entries.append(("slope.\(style)", { $0.paintingSlope(style) }))
         }
