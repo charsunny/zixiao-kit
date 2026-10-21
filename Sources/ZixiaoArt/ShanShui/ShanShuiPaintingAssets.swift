@@ -157,27 +157,48 @@ extension ShanShuiEngine {
         return c
     }
 
-    /// A lean, tired horse (瘦马): one wash for the body, the neck falling forward and the head
-    /// low, thin legs with a slight bend, a hanging tail. A few strokes, not an outline drawing.
-    func paintingHorse() -> ZXArt.SSCanv {
-        let body = inkCurve([P(22, 46), P(34, 38), P(56, 37), P(74, 40), P(80, 48), P(76, 58),
-                             P(56, 62), P(34, 61), P(22, 55), P(22, 46)])
-        var c = [poly(body, fil: .gray(0, 0.55), str: nil)]
-        // Neck and head: a loaded stroke sweeping down and forward.
-        let neck = inkCurve([P(74, 42), P(84, 40), P(93, 48), P(99, 60)])
-        c += inkLine(neck, width: 7.5, tone: 0.55, dry: 0.25, profile: .cone)
-        c += inkBlot(100, 62, radius: 4.2, squash: 0.62, angle: 0.9, tone: 0.62)
-        c += inkLine([P(82, 39), P(87, 37), P(91, 41)], width: 1.4, tone: 0.8, dry: 0.4) // mane
-        // Spine and belly accents.
-        c += inkLine(inkCurve([P(24, 46), P(40, 38), P(62, 38), P(76, 42)]), width: 1.4, tone: 0.72, dry: 0.4)
-        c += inkLine(inkCurve([P(30, 60), P(52, 63), P(72, 58)]), width: 0.9, tone: 0.5, dry: 0.5)
-        // Legs: thin, slightly bent, hooves dotted.
-        for (x0, dx, lean) in [(30.0, -2.0, -1.0), (38, 1, 1), (66, -1, 1), (73, 3, -1)] {
-            let knee = P(x0 + dx + lean * 2, 76), hoof = P(x0 + dx * 2 + lean, 92)
-            c += inkLine([P(x0, 58), knee, hoof], width: 1.6, tone: 0.72, dry: 0.35)
-            c += inkBlot(hoof.x + 1, hoof.y, radius: 1.3, squash: 0.6, tone: 0.75)
+    /// 白描瘦马: hip, withers and tucked belly remain legible through a very dilute coat.
+    /// Three anatomical poses, with knees forward and hocks behind the hind legs.
+    func paintingHorse(pose requested: Int? = nil, facingLeft: Bool? = nil) -> ZXArt.SSCanv {
+        let pose = requested ?? Int(r() * 3), flip = facingLeft ?? (r() < 0.5)
+        let tone = 0.48 + r() * 0.23
+        let headY = pose == 2 ? 62.0 : (pose == 1 ? 21.0 : 36.0)
+        let outline = inkCurve([P(23, 35), P(27, 28), P(35, 25), P(48, 29), P(65, 28),
+            P(73, 25), P(83, headY - 12), P(92, headY - 7), P(101, headY + 4),
+            P(99, headY + 9), P(94, headY + 9), P(86, headY + 1),
+            P(81, 44), P(73, 48), P(59, 51), P(43, 48), P(29, 47), P(23, 35)])
+        var c = [poly(outline, fil: .white, str: nil)]
+        c.append(poly(outline, fil: .gray(0, 0.025 + r() * 0.055), str: nil))
+        c += inkLine(outline, width: 1.05, tone: tone, dry: 0.43)
+        // Hip and shoulder planes, ribs and mane: a few strokes, never a filled oval.
+        for line in [[P(29, 30), P(35, 33), P(32, 43)], [P(73, 29), P(69, 36), P(73, 45)],
+                     [P(48, 35), P(51, 43)], [P(55, 35), P(58, 44)]] {
+            c += inkLine(inkCurve(line), width: 0.65, tone: tone * 0.55, dry: 0.55)
         }
-        c += inkLine(inkCurve([P(23, 47), P(16, 54), P(14, 66), P(12, 74)]), width: 2.2, tone: 0.6, dry: 0.5)
+        c += inkLine(inkCurve([P(73, 25), P(81, headY - 12), P(87, headY - 9)]),
+                     width: 2.1, tone: tone, dry: 0.60)
+        c += inkLine([P(86, headY - 9), P(84, headY - 17), P(89, headY - 10)], width: 1, tone: 0.8)
+        c += inkLine([P(91, headY - 6), P(92, headY - 13)], width: 0.8, tone: 0.7)
+        c += inkBlot(94, headY, radius: 0.7, squash: 0.65, tone: 0.8)
+        // Far legs first; a walking foreleg lifts at the knee, while the other carries the weight.
+        let legs: [[P]] = [
+            [P(36, 46), P(42, 57), P(37, 66), P(42, 80)],
+            [P(76, 45), P(79, 62), P(77, 80)],
+            [P(29, 44), P(34, 55), P(27, 65), P(pose == 1 ? 18 : 26, 80)],
+            pose == 1 ? [P(70, 46), P(78, 59), P(88, 63), P(84, 70)]
+                      : [P(70, 46), P(72, 62), P(pose == 2 ? 65 : 71, 80)]
+        ]
+        for (i, leg) in legs.enumerated() {
+            c += inkLine(leg, width: i < 2 ? 1 : 1.5, tone: i < 2 ? tone * 0.6 : tone, dry: 0.37)
+            let foot = leg.last!
+            c += inkLine([P(foot.x - 1, foot.y), P(foot.x + 2, foot.y)], width: 1.6, tone: tone)
+        }
+        c += inkLine(inkCurve([P(24, 31), P(18, 39), P(17, 56), P(13, 67)]), width: 2.3, tone: tone, dry: 0.6)
+        if pose == 1 || r() < 0.45 {
+            c += inkLine([P(43, 28), P(44, 34), P(61, 35), P(64, 28)], width: 1.6, tone: tone)
+            c += inkLine([P(51, 35), P(50, 50)], width: 0.7, tone: tone * 0.8)
+        }
+        if flip { c = c.map { var p = $0; p.p = p.p.map { P(112 - $0.x, $0.y) }; return p } }
         return c
     }
 
@@ -337,20 +358,38 @@ extension ShanShuiEngine {
         return c
     }
 
-    func paintingPerson(hat: Bool = false) -> ZXArt.SSCanv {
-        var c = inkBlot(44, 8, radius: 2.7, squash: 0.8, tone: 0.85)
-        if hat {
-            c += inkLine([P(35, 9), P(44, 2), P(54, 10), P(35, 9)], width: 1.3, tone: 0.85)
+    /// 点景人物: seven heads tall, with walking, folded sleeves, carrying and seated poses.
+    func paintingPerson(hat: Bool = false, pose requested: Int? = nil, facingLeft: Bool? = nil) -> ZXArt.SSCanv {
+        let pose = requested ?? Int(r() * 4), flip = facingLeft ?? (r() < 0.5)
+        let tone = 0.58 + r() * 0.22
+        let hx = pose == 0 ? 46.0 : 43.0
+        var c = inkBlot(hx, 7, radius: 2.6, squash: 0.90, tone: tone)
+        if hat || r() < 0.45 {
+            c += inkLine([P(hx - 7, 7), P(hx, 2), P(hx + 7, 8), P(hx - 7, 7)], width: 0.85, tone: tone)
         }
-        let robe = inkCurve([P(43, 13), P(39, 22), P(31, 35), P(27, 38), P(45, 39), P(50, 34), P(46, 19)])
-        c.append(poly(robe, fil: .white, str: nil))
-        c.append(poly(robe, fil: .gray(0, 0.13), str: nil))
-        c += inkLine(Array(robe.prefix(robe.count / 2)), width: 1.2, tone: 0.72)
-        c += inkLine([P(41, 23), P(35, 34), P(43, 36)], width: 0.85, tone: 0.66, dry: 0.45)
-        c += inkLine([P(43, 15), P(46, 25), P(54, 27)], width: 1.6, tone: 0.75)
-        c += inkLine([P(52, 25), P(57, 46)], width: 0.7, tone: 0.7)
-        c += inkLine([P(40, 38), P(36, 44), P(31, 45)], width: 1.2, tone: 0.8)
-        c += inkLine([P(47, 36), P(48, 44), P(52, 45)], width: 1.2, tone: 0.8)
+        let seated = pose == 3
+        let hem = seated ? 29.0 : 37.0
+        let back = inkCurve([P(hx - 1, 12), P(39, 19), P(seated ? 36 : 34, hem - 3), P(43, hem)])
+        let front = inkCurve([P(hx + 1, 12), P(48, 20), P(seated ? 56 : 49, hem - 3), P(seated ? 55 : 46, hem)])
+        c.append(poly(back + front.reversed(), fil: .white, str: nil))
+        c += inkLine(back, width: 1.25, tone: tone, profile: .cone)
+        c += inkLine(front, width: 1.0, tone: tone * 0.8, profile: .cone)
+        c += inkLine([P(42, 22), P(39, hem - 3), P(46, hem)], width: 0.8, tone: tone * 0.7, profile: .cone)
+        let sleeve: [P] = pose == 1 ? [P(40, 17), P(43, 24), P(51, 22), P(46, 18)]
+            : [P(45, 16), P(48, 23), P(55, 24)]
+        c += inkLine(sleeve, width: 1.5, tone: tone, profile: .cone)
+        if pose == 0 {
+            c += inkLine([P(54, 23), P(58, 44)], width: 0.65, tone: tone)
+        } else if pose == 2 {
+            c += inkLine([P(28, 18), P(59, 13)], width: 0.9, tone: tone)
+            c += inkLine([P(29, 18), P(28, 29)], width: 0.55, tone: tone)
+            c += inkLine([P(24, 28), P(23, 35), P(33, 35), P(32, 28), P(24, 28)], width: 1.2, tone: tone)
+        }
+        let feet: [[P]] = seated ? [[P(51, 27), P(59, 30), P(59, 34), P(63, 34)]]
+            : [[P(40, 36), P(pose == 0 ? 34 : 41, 43), P(pose == 0 ? 30 : 38, 44)],
+               [P(47, 36), P(49, 43), P(53, 44)]]
+        for foot in feet { c += inkLine(foot, width: 1.1, tone: tone, dry: 0.4) }
+        if flip { c = c.map { var p = $0; p.p = p.p.map { P(88 - $0.x, $0.y) }; return p } }
         return c
     }
 
@@ -359,8 +398,8 @@ extension ShanShuiEngine {
         var c = [poly(hull, fil: .gray(0, 0.48), str: nil)] // first shape is the hull anchor
         c += inkLine([P(0, 87), P(36, 94), P(86, 94), P(130, 85)], width: 1.0, tone: 0.8)
         if kind == .angler {
-            let person = paintingPerson(hat: true).map { p -> ZXArt.SSPoly in
-                var q = p; q.p = p.p.map { P($0.x * 0.75 + 10, $0.y * 0.75 + 56) }; q.wid *= 0.75; return q
+            let person = paintingPerson(hat: true, pose: 3, facingLeft: false).map { p -> ZXArt.SSPoly in
+                var q = p; q.p = p.p.map { P($0.x * 0.75 + 10, $0.y * 0.75 + 64) }; q.wid *= 0.75; return q
             }
             c += person
             for k in 0..<5 { // 蓑衣: a few dry slashes, never a detailed portrait.

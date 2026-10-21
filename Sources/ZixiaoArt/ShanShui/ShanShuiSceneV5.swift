@@ -192,10 +192,11 @@ private final class PaintingStage {
     }
 
     @discardableResult
-    private func add(_ motif: Motif, _ box: CGRect, repeatable: Bool = false) -> Bool {
+    private func add(_ motif: Motif, _ box: CGRect, repeatable: Bool = false, source: ZXArt.SSCanv? = nil) -> Bool {
         guard repeatable || !placed.contains(motif) else { return false }
         let raw: ZXArt.SSCanv
-        if motif == .stream {
+        if let source { raw = source }
+        else if motif == .stream {
             raw = currentScene == .desert ? waterEngine.paintingLongRiver()
                 : waterEngine.paintingChannel(width: box.width, height: box.height)
         } else if motif == .window, currentScene == .courtyard {
@@ -650,6 +651,36 @@ private final class PaintingStage {
             width: r.width / w, height: r.height / h)))
     }
 
+    /// A shared scale and a rein connect the traveler and horse; their feet follow the same road.
+    private func journey() {
+        guard let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect else { return }
+        let personH = art.width * 0.052, horseH = personH * 1.18
+        let x = (bank.minX + bank.width * 0.59) * w
+        let pose = Int(engine.r() * 2) // Grazing is reserved for the standalone animal.
+        let horse = engine.paintingHorse(pose: pose, facingLeft: false)
+        let person = engine.paintingPerson(pose: 0, facingLeft: false)
+        let horseW = personH * 1.7, personW = personH * 0.75
+        guard let foot = bankFoot(x, x + horseW + personW) else { return }
+        pinned = true
+        let horsePlaced = add(.horse, CGRect(x: x, y: foot - horseH, width: horseW, height: horseH), source: horse)
+        let personPlaced = add(.traveler, CGRect(x: x + horseW + personH * 0.24, y: foot - personH,
+            width: personW, height: personH), source: person)
+        pinned = false
+        guard horsePlaced, personPlaced,
+              let hb = elements.last(where: { $0.motif == "horse" })?.bounds.cgRect,
+              let pb = elements.last(where: { $0.motif == "traveler" })?.bounds.cgRect else { return }
+        func anchor(_ raw: ZXArt.SSCanv, _ b: CGRect, _ p: ZXArt.P) -> ZXArt.P {
+            let points = raw.flatMap(\.p), x0 = points.map(\.x).min()!, x1 = points.map(\.x).max()!
+            let y0 = points.map(\.y).min()!
+            let scale = b.width * w / (x1 - x0)
+            return .init(b.minX * w + (p.x - x0) * scale, b.minY * h + (p.y - y0) * scale)
+        }
+        let muzzle = anchor(horse, hb, .init(99, pose == 1 ? 28 : 43))
+        let hand = anchor(person, pb, .init(54, 24))
+        let rein = engine.inkCurve([muzzle, .init((muzzle.x + hand.x) / 2, max(muzzle.y, hand.y) + personH * 0.22), hand])
+        parts.append(.near(engine.inkLine(rein, width: 0.32, tone: 0.58, dry: 0.4)))
+    }
+
     /// The bridge and its channel share a coordinate frame: the feet straddle the water.
     private func crossing(river: Bool) {
         guard let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect else { return }
@@ -985,8 +1016,11 @@ private final class PaintingStage {
             include(.crow, slot(0.12, 0.23, 0.13, 0.08))
             include(.path, slot(0.05, 0, 0.52, 0.95, front: true))
             // Rider and horse share one ground plane and one scale (马与人同高): a small pair on the road.
-            include(.traveler, slot(0.50, 0.30, 0.045, 0.16, front: true))
-            include(.horse, slot(0.555, 0.33, 0.10, 0.13, front: true))
+            if chosen.contains(.horse), chosen.contains(.traveler) { journey() }
+            else {
+                include(.traveler, slot(0.50, 0.30, 0.045, 0.16, front: true))
+                include(.horse, slot(0.555, 0.33, 0.10, 0.13, front: true))
+            }
             if chosen.contains(.bridge) { crossing(river: false) }
             else { include(.stream, mountainStreamSlot()) }
         case .winterForest:
