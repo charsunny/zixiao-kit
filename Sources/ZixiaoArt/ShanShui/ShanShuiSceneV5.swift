@@ -1020,7 +1020,7 @@ private final class PaintingStage {
         guard let bank = elements.first(where: { $0.motif == "groundBank" })?.bounds.cgRect else {
             return slot(0.27, 0.67, 0.30, 0.30)
         }
-        let obstacles = elements.filter { ["pine", "bamboo", "hut"].contains($0.motif) }
+        let obstacles = elements.filter { ["pine", "bamboo", "hut", "pavilion"].contains($0.motif) }
             .map { $0.bounds.cgRect }.sorted { $0.minX < $1.minX }
         var gaps: [(Double, Double)] = [], cursor = bank.minX + 0.002
         for obstacle in obstacles {
@@ -1253,6 +1253,9 @@ private final class PaintingStage {
             include(.pine, leadTreeSlot())
             include(.bamboo, slot(0.70, 0.55, 0.28, 0.29))
             if chosen.contains(.hut) { placeAtFoot(.hut, along: 0.72, height: 0.10, aspect: 1.7) }
+            if chosen.contains(.pavilion) {
+                placeAtFoot(.pavilion, along: [0.36, 0.68, 0.30, 0.62][layoutVariant], height: 0.20, aspect: 1.16)
+            }
             include(.stream, mountainStreamSlot())
         case .fishing:
             if chosen.contains(.angler) {
@@ -1283,6 +1286,7 @@ private final class PaintingStage {
                 }
                 pinned = false
             }
+            include(.pavilion, slot(0.62, 0.54, 0.32, 0.25))
             include(.willow, slot(0.0, 0.20, 0.62, 0.55))
             include(.mooredBoat, slot(0.78, 0.55, 0.20, 0.17, front: true))
         case .farewell:
@@ -1424,6 +1428,20 @@ private final class PaintingStage {
                 include(.willow, CGRect(x: x, y: art.minY, width: willowW, height: rootY - art.minY))
                 pinned = false
                 let r = wall.bounds
+                if chosen.contains(.pavilion) {
+                    // The pavilion stands inside the court. Draw it before the near wall so
+                    // masonry hides its feet, not its roof; use the actual wall's ground plane.
+                    let width = min(art.width * 0.42, r.width * 0.32)
+                    let height = width / 1.16
+                    let low = max(r.minX, art.minX) + width / 2
+                    let high = min(r.maxX, art.maxX) - width / 2
+                    let preferred = r.minX + r.width * (x + willowW / 2 < r.midX ? 0.72 : 0.28)
+                    let center = high >= low ? min(max(preferred, low), high) : r.midX
+                    let base = r.minY + r.height * 0.28
+                    pinned = true
+                    add(.pavilion, CGRect(x: center - width / 2, y: base - height, width: width, height: height))
+                    pinned = false
+                }
                 parts.append(.init(canv: wall.canv, near: true,
                     fade: .init(top: r.minY + r.height * 0.76, bottom: r.maxY, seed: engine.inkSeed())))
                 elements.append(.init(motif: Motif.courtyard.rawValue, bounds: .init(x: r.minX / w, y: r.minY / h,

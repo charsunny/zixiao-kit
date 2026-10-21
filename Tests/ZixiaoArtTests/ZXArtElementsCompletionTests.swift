@@ -60,6 +60,37 @@ struct ZXArtElementsCompletionTests {
         }
     }
 
+    @Test func pavilionsStandInTheirMountainWaterbankAndCourt() throws {
+        for (name, scene, motifs) in ZXArtSceneReviewTests.pavilionSamples {
+            let selection = ZXArt.SceneSelection(scene: scene, options: .init(motifs: motifs), matched: [])
+            for index in 0..<6 {
+                for size in [CGSize(width: 750, height: 1000), CGSize(width: 1200, height: 675)] {
+                    let recipe = selection.paintingProcedural(seed: "\(name)-\(index)")
+                    let drawing = try #require(ZXArt.drawing(procedural: recipe, palette: .paperInk, pixelSize: size))
+                    let elements = drawing.sceneElements
+                    let pavilion = try #require(elements.first { $0.motif == "pavilion" }).bounds.cgRect
+                    #expect(pavilion.width * size.width > 25, "\(name) \(index): readable columns")
+                    #expect(!elements.contains { ["house", "hut"].contains($0.motif) })
+                    if scene == .courtyard {
+                        let wall = try #require(elements.first { $0.motif == "courtyard" }).bounds.cgRect
+                        #expect(pavilion.minY < wall.minY)
+                        #expect(pavilion.maxY > wall.minY && pavilion.maxY < wall.maxY)
+                        #expect(pavilion.minX >= wall.minX && pavilion.maxX <= wall.maxX)
+                        #expect(try #require(elements.firstIndex { $0.motif == "pavilion" }) < #require(elements.firstIndex { $0.motif == "courtyard" }))
+                    } else if scene == .retreat {
+                        let mountain = try #require(elements.first { $0.motif == "mainMountain" }).bounds.cgRect
+                        #expect((0.12...0.24).contains(pavilion.height / mountain.height))
+                        #expect(pavilion.maxY >= mountain.midY)
+                    } else {
+                        let bank = try #require(elements.first { $0.motif == "groundBank" }).bounds.cgRect
+                        #expect(pavilion.midX >= bank.minX && pavilion.midX <= bank.maxX)
+                        #expect(pavilion.maxY >= bank.minY && pavilion.maxY <= bank.maxY + 0.01)
+                    }
+                }
+            }
+        }
+    }
+
     @Test func wordsSelectConcreteObjectsWithoutTitleFalseFriends() {
         let autumn = ZXArt.poetryScene(text: "枯藤老树昏鸦，小桥流水人家，古道西风瘦马。夕阳西下。", title: "天净沙·秋思")
         #expect(Set(autumn.options.motifs).isSuperset(of: [.oldTree, .house, .stream, .bridge, .vine, .crow, .horse, .traveler, .sunset]))
