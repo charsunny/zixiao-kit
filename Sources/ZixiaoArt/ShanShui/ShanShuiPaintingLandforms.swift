@@ -306,18 +306,46 @@ extension ShanShuiEngine {
             c += slopeStroke(Array(rib.prefix(rib.count * 3 / 4)).map(inside), width: 1.6,
                 tone: 0.49, pressures: [0.25, 0.75, 0.5, 0.65, 0.05], dry: 0.56)
             // Bundles follow the same rib tangent; omit the lit side and the clouded foot.
-            for bundle in 0..<(3 + k % 2) {
-                let start = 2 + bundle * 6
+            for bundle in 0..<(2 + k % 2) {
+                let start = 3 + bundle * 8
                 guard start + 7 < rib.count else { continue }
                 for strand in 0..<(4 + Int(r() * 3)) {
-                    let offset = 2.5 + Double(strand) * (1.6 + r())
-                    let length = 5 + Int(r() * 5)
+                    let offset = 3.5 + Double(strand) * (2.2 + r() * 1.6)
+                    let length = 3 + Int(r() * 4)
                     let line = (0...length).map { j -> P in
                         let p = rib[min(rib.count - 1, start + j)]
-                        return inside(p + P(offset + sin(Double(j) * 0.3) * 1.2, Double(strand) * 0.6))
+                        return inside(p + P(offset + Double(j) * (1.5 + Double(strand) * 0.15), Double(strand) * 1.6))
                     }
                     c += slopeStroke(line, width: strand == 0 ? 3.4 : 0.8 + r() * 0.5,
                         tone: 0.32 + r() * 0.16, pressures: [0.4, 0.85, 0.6, 0.3, 0.03], dry: 0.66)
+                }
+            }
+            // Smaller shoulders turn each broad face. Their short fibres descend into the
+            // parent valley, while the top of each shoulder remains lit paper.
+            for j in 0..<2 {
+                let center = rib[8 + j * 10] + P(-width * (0.07 + r() * 0.04), 0)
+                let rx = width * (0.055 + r() * 0.025), ry = height * (0.025 + r() * 0.02)
+                let cap = inkCurve([center + P(-rx, ry), center + P(-rx * 0.45, 0),
+                    center + P(rx * 0.15, -ry * 0.15), center + P(rx, ry * 0.5)]) .map(inside)
+                c += slopeStroke(cap, width: 1.5, tone: 0.52,
+                    pressures: [0.15, 0.7, 0.5, 0.8, 0.08], dry: 0.48)
+                for band in 0..<9 {
+                    func edge(_ t: Double) -> [P] {
+                        cap.enumerated().map { i, p in
+                            let u = Double(i) / Double(cap.count - 1)
+                            return inside(p + P(rx * t * 0.45, ry * 2.5 * t * sin(u * .pi)))
+                        }
+                    }
+                    let t = Double(band) / 9
+                    c.append(poly(edge(t) + edge(Double(band + 1) / 9).reversed(),
+                        fil: .gray(0, 0.08 * pow(1 - t, 1.5)), str: nil))
+                }
+                for strand in 0..<(4 + Int(r() * 3)) {
+                    let p = cap[cap.count / 2 + strand] + P(0, 2)
+                    let reach = available * (0.10 + r() * 0.13)
+                    let path = inkCurve([p, p + P(reach * 0.10, reach * 0.45), p + P(reach * 0.40, reach)])
+                    c += slopeStroke(path.map(inside), width: strand == 0 ? 3 : 0.85,
+                        tone: 0.34 + r() * 0.1, pressures: [0.5, 0.85, 0.55, 0.3, 0.03], dry: 0.64)
                 }
             }
             // One side ridge forks from this rib, so texture reads as a mountain's veins.
