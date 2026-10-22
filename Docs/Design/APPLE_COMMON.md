@@ -20,6 +20,8 @@
 
 身份色从产品资源或编成读取。正文中的章法、留白、字体和编辑内容承担主要特色；导航栏、标签栏与系统控件使用系统形态。网站保留宽屏侧边栏、链接、浏览器历史等桌面交互，共享视觉语义；网页布局尺寸不直接作为原生点数规范。
 
+**内容层级原则：**“Avoid unnecessary secondary labels and descriptions. Let the layout do the explaining.” 避免为了说明界面而堆叠次级标签、栏目名、副标题和解释文字；优先通过空间、对齐、分组、顺序与控件形态表达关系。只保留用户完成任务所需的信息，以及无法从布局中可靠理解的状态、来源、风险和操作结果。本原则针对可见界面文案，不得据此删减 VoiceOver 标签、替代文本或其他无障碍语义。
+
 ## 3. 排版与阅读
 
 **官方依据：**文字须清楚、层级明确，定制字体同样需要响应可访问性设置。HIG 的 iOS / iPadOS 表列出默认 17pt、最低 11pt；最低值不是长篇阅读的目标字号。[Typography](https://developer.apple.com/design/human-interface-guidelines/typography)
